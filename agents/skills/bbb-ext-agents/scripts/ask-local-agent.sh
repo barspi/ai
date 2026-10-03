@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot review or implement call against the locally installed
+# One-shot review, plan, or implement call against the locally installed
 # Claude Code or Codex CLI, using the subscription login on this machine.
 # Stdout is the CLI's JSON (Claude) or JSONL (Codex). Metadata goes to stderr.
 #
@@ -30,7 +30,7 @@ echo "bash=$BASH version=$BASH_VERSION" >&2
 usage() {
   cat <<'EOF' >&2
 Usage: ask-local-agent.sh --agent claude|codex --project DIR --prompt-file FILE \
-  [--model NAME] [--effort LEVEL] [--mode review|implement] \
+  [--model NAME] [--effort LEVEL] [--mode review|plan|implement] \
   [--schema-file FILE | --no-schema] [--resume ID | --fresh] [--extra-dir DIR]... \
   [--dry-run]
 
@@ -45,7 +45,9 @@ Omit --effort to use the CLI account default.
 Models, when set: codex accepts astra, sol, luna, terra or a full id
 (gpt-6-astra). Claude accepts opus, sonnet, fable or a full model id.
 Effort, when set: low, medium, high, xhigh, max. Codex also accepts ultra.
-Default mode is review (read-only). implement is only for an explicit edit request.
+Default mode is review. review and plan may write at most a couple of
+files and must not change product code. implement is for an explicit
+implementation request.
 EOF
   exit 2
 }
@@ -85,7 +87,7 @@ done
 
 [[ -n "$agent" && -n "$project" && -n "$prompt_file" ]] || usage
 [[ "$agent" == "claude" || "$agent" == "codex" ]] || usage
-[[ "$mode" == "review" || "$mode" == "implement" ]] || usage
+[[ "$mode" == "review" || "$mode" == "plan" || "$mode" == "implement" ]] || usage
 [[ -d "$project" ]] || { echo "Project directory not found: $project" >&2; exit 2; }
 [[ -f "$prompt_file" ]] || { echo "Prompt file not found: $prompt_file" >&2; exit 2; }
 [[ "$no_schema" -eq 0 || -z "$schema_file" ]] || { echo "Pass either --schema-file or --no-schema" >&2; exit 2; }
@@ -167,7 +169,7 @@ if [[ -n "$model" ]]; then
 fi
 session_slot="${agent}|${model:-default}|${project_key}"
 
-if [[ "$no_schema" -eq 0 && -z "$schema_file" ]]; then
+if [[ "$mode" == "review" && "$no_schema" -eq 0 && -z "$schema_file" ]]; then
   schema_tmp="$(mktemp "${TMPDIR:-/tmp}/local-agent-schema.XXXXXX")"
   schema_file="${schema_tmp}.json"
   mv "$schema_tmp" "$schema_file"
@@ -280,10 +282,10 @@ if [[ "$agent" == "claude" ]]; then
   for dir in "${extra_dirs[@]}"; do
     args+=(--add-dir "$dir")
   done
-  if [[ "$mode" == "review" ]]; then
-    args+=(--permission-mode plan --permission-prompts none --tools Read,Grep,Glob)
+  if [[ "$mode" == "implement" ]]; then
+    args+=(--permission-mode acceptEdits --permission-prompts none --allowedTools "Read,Write,Edit,Grep,Glob,Bash")
   else
-    args+=(--permission-mode acceptEdits --permission-prompts none --allowedTools "Read,Edit,Grep,Glob,Bash")
+    args+=(--permission-mode acceptEdits --permission-prompts none --tools Read,Write,Edit,Grep,Glob)
   fi
   if [[ -n "$schema_file" ]]; then
     args+=(--json-schema "$(cat "$schema_file")")
@@ -322,7 +324,7 @@ done
 last_message="$(mktemp "${TMPDIR:-/tmp}/local-agent-last.XXXXXX")"
 echo "agent=codex model=${model:-default} effort=${effort:-default} mode=$mode bin=$bin last_message_file=$last_message" >&2
 
-base=("$bin" exec --cd "$project" --sandbox "$([[ "$mode" == "review" ]] && printf '%s' read-only || printf '%s' workspace-write)" -c "approval_policy=\"never\"")
+base=("$bin" exec --cd "$project" --sandbox workspace-write -c "approval_policy=\"never\"")
 [[ -n "$effort" ]] && base+=(-c "model_reasoning_effort=\"${effort}\"")
 if [[ "$mode" == "implement" ]]; then
   base+=(--approve-for-me)
