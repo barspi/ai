@@ -1,0 +1,13 @@
+{
+  "name": "barspi-mods",
+  "owner": {
+    "name": "Barzilai Spinak"
+  },
+  "description": "Personal Claude Code mods (UI and hook plugins).",
+  "plugins": [
+    {
+      "name": "token-totals",
+      "source": "./token-totals"
+    }
+  ]
+}

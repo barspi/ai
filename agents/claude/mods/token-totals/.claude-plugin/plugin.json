@@ -1,0 +1,6 @@
+{
+  "name": "token-totals",
+  "version": "0.3.0",
+  "description": "Status line under the prompt with this chat's running input, cached and output token counts. One counter per chat, kept across app restarts.",
+  "author": { "name": "Barzilai Spinak" }
+}
