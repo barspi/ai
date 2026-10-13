@@ -7,9 +7,11 @@ description: >-
   ("claude subagent", "codex subagent", "use my codex subagent"), or a model
   nickname used as that agent ("my astra", "astra in high effort", "my opus",
   "my sonnet", "my fable", "my sol", "my luna", "my terra"). Also use when
-  the user lists a series of review, plan, or implement steps for those
-  CLIs. If the handoff is doubtful, stop and confirm before running
-  anything. Never use Cursor-hosted models, Task subagents, or API keys.
+  the user says "our session", "our XYZ session", "our external agent", or
+  "our external agent sessions" to continue a local CLI already used in this
+  chat. Also use when the user lists a series of review, plan, or implement
+  steps for those CLIs. If the handoff is doubtful, stop and confirm before
+  running anything. Never use Cursor-hosted models, Task subagents, or API keys.
 ---
 
 # Local subscription agents
@@ -25,12 +27,28 @@ Run only when the user is handing work to that local CLI. Strong signals, in any
 - "my" next to the agent: "my claude", "my codex"
 - "subagent" next to the agent: "use my claude subagent", "codex subagent"
 - a model nickname used as the agent: "my astra", "astra in high effort", "my opus", "my sonnet", "my fable", "my sol", "my luna", "my terra"
+- "our" beside a session this chat already opened: "our opus session", "ask our sol", "the session we were using"
+- "our external agent" or "our agent" when this chat has used one of these CLIs, and the plural "our external agents" or "our sessions" when it has used more than one
 
-"astra", "sol", "luna", or "terra" means Codex. "opus", "sonnet", or "fable" means Claude. Combine that with whatever effort they named.
+"astra", "sol", "luna", or "terra" means Codex. "opus", "sonnet", or "fable" means Claude. Combine that with whatever effort they named. A version glued to the nickname ("opus 5.5", "sol 6.1") is still that nickname. Do not invent a model id from the version.
 
 If the handoff is doubtful, stop and ask before running the script. A factual question is not a handoff. The bare names "Claude Code", "Codex CLI", and "codex astra" are not a handoff.
 
 Verified once against Claude Code 2.1.284 and Codex CLI 0.157.1. The script checks that the flags it needs are still in `--help`. If a flag is missing, stop, read that `--help`, and update the script. Do not redo a web research pass first, and do not invent a replacement flag.
+
+## Our session
+
+"Our" means a session this chat has already opened with one of these CLIs. It is not a new conversation, and it is not a session from some other chat. Resume it. Do not pass `--fresh`.
+
+The nicknames are the ones in "When to run": opus, sonnet, fable, astra, sol, luna, terra, claude, codex. "External agent" means one of those, not a Cursor-hosted model.
+
+- **"our XYZ session"**, in any word order ("ask our opus session", "our sol session", "the opus session we were using"): XYZ is one nickname. Resume the session of that agent and model most recently used in this chat. Pass the same `--agent`, `--model`, and `--effort` this chat last used for it, unless they name a different effort in this message. The session id is the `session_id=` the script printed for that trio the last time this chat called it. The script stores that id and resumes it when you do not pass `--fresh`.
+- **"our external agent"**, **"our agent"**, **"our external agent session"**, or **"our session"**, with no nickname: this chat has used exactly one of these CLIs. Resume that one, with the model and effort last used. If this chat has used more than one, stop and ask which. Do not guess, and do not start a fresh session.
+- **"our external agents"**, **"our agents"**, **"our external agent sessions"**, or **"our sessions"**: every external agent this chat has already used. One resumed call each, in the order they were first used in this chat. Send each the same new question. Wait for one to finish before you start the next. Each prompt is only the new step for that session.
+
+If this chat has not used the named agent yet, "our" has nothing to point at. Stop and ask. Do not open a fresh session to satisfy it.
+
+After the call, tell the user the `session_id=` as in Resume.
 
 ## Command
 
