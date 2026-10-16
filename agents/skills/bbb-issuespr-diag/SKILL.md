@@ -25,6 +25,7 @@ Each box shows:
 - the title
 - opened date, and closed or merged date when it has one
 - the merge commit, short, on a pull request
+- on a merged pull request, right after the merge commit and in parentheses, the GitHub usernames of the pull request's commit authors, in first-commit order: `merge 3229bfa45 (barspi, ar)`. With more than two authors, write the first username and `et al.`: `(barspi et al.)`. Read them with `gh api repos/OWNER/REPO/pulls/N/commits` (`.author.login`). The account that opened the pull request is a different fact; do not substitute it. A pull request that is not merged shows its branch commits and no authors.
 - a design document or memo when one is the source of that item
 
 A status pill sits in the upper right. The word is `open`, `closed`, `merged`, or `waiting`.
@@ -51,12 +52,29 @@ If the user asks for a PDF, those same numbers are links there too. A PNG cannot
 The picture is a directed acyclic graph. Arrows point forward, from the earlier item to the later one.
 
 - A source has no arrow pointing into it. `#1752` is that kind of node for the acquirer-fee lineage.
-- A child, a follow-up, or work that exists because X required it: arrow from X to that item. Label it `child`, `follow-up`, `led to`, `spawned`, or `found`, using the word that matches the fact.
-- A pull request that closed an issue: arrow from the issue to the pull request, labeled `closed by`. Say the pull request number on the box as well.
-- A pull request that did the work but did not close the issue: dashed arrow, labeled `did the work`.
-- A reference that is not parentage (`references`, `mentioned`, `uses`, `related`, `implements`): dashed.
+- Read every arrow as a sentence from tail to head: A, label, B. `#1891 closed by #1965`. When the later item acts on the earlier one, the label is passive (`closed by`, `revised by`, `work done by`). A noun label (`child`, `follow-up`) names what B is to A.
+- Use only the labels in the vocabulary below. If no label fits, add one to this table first, with its definition. Do not invent a label in the picture. Do not use two labels for one meaning.
+- When a pull request closed an issue, say the pull request number on the issue box as well.
 - If two items both come from the same item, draw two arrows out of that item. Do not draw an arrow between the two siblings. Parallel is not a chain.
 - A node may have no outgoing arrow. An open issue with no pull request is that kind of node. It still has its incoming arrow.
+
+### Arrow vocabulary
+
+| Label | Line | `A → B` means |
+|---|---|---|
+| `child` | solid, ink | B is a formal child of umbrella A: A lists B, or B names A as its parent. |
+| `follow-up` | solid, brown | B was filed to finish something that A left out. |
+| `led to` | solid, brown | Work on A produced B. |
+| `found` | solid, brown | Work on A exposed the defect that B reports. |
+| `spawned` | solid, brown | A caused B to be filed as a new umbrella or work stream. |
+| `revised by` | solid, brown | B is a later pull request that changes what pull request A delivered. |
+| `closed by` | solid, blue | B is the pull request that closed issue A. |
+| `work done by` | dashed, blue | B did work for A but did not close it. A was closed by hand, or stays open. |
+| `evidence, does not close` | dashed, amber | B gives evidence for A. A stays open. |
+| `uses` | dashed, gray | A depends on the result of B. |
+| `references` | dashed, gray | A's text points to B as relevant prior work. |
+| `mentioned` | dashed, gray | A names B in passing. B is not part of this lineage. |
+| `related` | dashed, gray | A and B are related work. Neither is the parent of the other. |
 
 A dotted frame may name an area (`ss-visa`, `ss-mastercard`, `jCard`). The frame does not replace an arrow. Do not put the parentage only in a section title.
 
@@ -71,6 +89,19 @@ Use the plane. Rows and columns are for alignment, not a substitute for edges.
 - Do not route an arrow through a box. If a box sits between two ends, go around it in a gutter.
 - Prefer a wider picture to a crossing.
 
+### Compactness
+
+Make the picture as compact as clarity allows, so it fits a screen or a page better. The order of priority is: clarity first, then no unintended overlap and no crossing, then compactness.
+
+- Use both directions. Do not let the picture grow only down a long column or only across a long row.
+- Keep gaps tight. Between stacked boxes, about 25–30px. Between dotted frames, about 35px of visible space. Frame padding, about 40px above (room for the frame title) and 20px below. A horizontal gap is as wide as its longest label plus about 50px of visible shaft, and no wider.
+- Look for large blank areas. Where one exists, consider moving a node, or a whole framed group, into it. Do this only if the arrows stay easy to follow: no new crossing, no arrow that doubles back across the picture, and no box that hides the flow from earlier to later.
+- A column that holds a single box at the end of a chain can often fold under its neighbor, with a vertical arrow. Keep the vertical gap long enough for the label and a visible tail and head (about 100px for `closed by`).
+- Good groups to move are those with few incoming arrows and none leaving the group, such as a separate umbrella linked to the source only by dashed references. In the acquirer-fee lineage, moving the jCard fees frame from below the left column to the blank area under the on-us frame cut the height by 20%.
+- When a moved group's incoming arrows must cross a column of boxes, give them a corridor. Leave a horizontal gap between two frames (about 30px per arrow), run each arrow along its own line in that gap, then turn toward the target in the gutter before the target's frame. Treat the corridor height as the arrow's target height when you order the trunks, so its trunk nests with the others and nothing crosses. Put the label on the last segment, which enters the box. One corridor is fine. Each additional long corridor makes the source's fan harder to read, so weigh it against the height it saves.
+- Keep an arrow at least about 30px from a frame's dotted border when it runs parallel to it. A dashed arrow next to a dotted border reads as one line.
+- When a change makes the picture smaller, compare the before and after rasters. If following an arrow is harder after the change, undo it.
+
 ## Files
 
 Small corrections edit the current SVG. Write a new `_v2`, `_v3`, … file only when the user asks for a new revision or the layout is being replaced. Do not emit a PDF unless the user asks for one. When they do, keep the issue and pull-request numbers as links.
@@ -83,5 +114,8 @@ Rasterize and look. Confirm:
 - every `closed` box has a visible `closed by` arrow to a pull request, or the box says why it has none
 - no sibling is drawn as the parent of the other
 - labels do not cover the tail or the head
+- every label is in the vocabulary, and reads correctly as "A, label, B"
+- every merged pull request shows its commit authors after the merge commit
+- no large blank area remains that a node or framed group could fill without making the arrows harder to follow
 - pill text is the box color, not black
 - each issue number and each pull-request number is a link to its GitHub page
