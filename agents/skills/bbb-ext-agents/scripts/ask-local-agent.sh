@@ -31,12 +31,17 @@ usage() {
   cat <<'EOF' >&2
 Usage: ask-local-agent.sh --agent claude|codex --project DIR --prompt-file FILE \
   [--model NAME] [--effort LEVEL] [--mode review|plan|implement] \
-  [--schema-file FILE | --no-schema] [--resume ID | --fresh] [--extra-dir DIR]... \
-  [--dry-run]
+  [--schema-file FILE | --no-schema] [--resume ID | --fresh | --keep-session] \
+  [--extra-dir DIR]... [--dry-run]
 
 A later call to the same agent, model, and project resumes the last
-session automatically, so the CLI can reuse that conversation. Pass
---fresh to start a new one. An explicit --resume ID overrides the stored one.
+session when it was used within the last hour. Claude Code and Codex
+both resend that local transcript. Pass --fresh to start a new one.
+A stored session older than that hour is cold: the script refuses it
+(resume=cold) until the prompt stands alone and you pass --fresh.
+Pass --keep-session to resume a cold session anyway. An explicit
+--resume ID also resumes that id. ASK_LOCAL_AGENT_COLD_SEC overrides
+the cutoff in seconds. It is not a vendor cache lifetime.
 
 Omit --model to use the CLI account default. Do not pass a model the
 account cannot use.
@@ -62,6 +67,7 @@ schema_file=""
 no_schema=0
 resume_id=""
 fresh=0
+keep_session=0
 dry_run=0
 created_schema=0
 extra_dirs=()
@@ -78,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --no-schema) no_schema=1; shift ;;
     --resume) resume_id="${2:-}"; shift 2 ;;
     --fresh) fresh=1; shift ;;
+    --keep-session) keep_session=1; shift ;;
     --extra-dir) extra_dirs+=("${2:-}"); shift 2 ;;
     --dry-run) dry_run=1; shift ;;
     -h|--help) usage ;;
@@ -92,6 +99,7 @@ done
 [[ -f "$prompt_file" ]] || { echo "Prompt file not found: $prompt_file" >&2; exit 2; }
 [[ "$no_schema" -eq 0 || -z "$schema_file" ]] || { echo "Pass either --schema-file or --no-schema" >&2; exit 2; }
 [[ "$fresh" -eq 0 || -z "$resume_id" ]] || { echo "Pass either --resume or --fresh" >&2; exit 2; }
+[[ "$fresh" -eq 0 || "$keep_session" -eq 0 ]] || { echo "Pass either --keep-session or --fresh" >&2; exit 2; }
 
 state_file="$(cd "$(dirname "$0")" && pwd)/sessions.json"
 project_key="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$project")"
@@ -109,6 +117,36 @@ row = data.get(slot) or {}
 sid = row.get("session_id") if isinstance(row, dict) else None
 if isinstance(sid, str) and len(sid) > 8:
     print(sid)
+PY
+}
+
+# Seconds since sessions.json "updated", or "missing" when the row has an id
+# but no timestamp. Empty when this slot has no session.
+session_age_sec() {
+  python3 - "$state_file" "$session_slot" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, slot = sys.argv[1], sys.argv[2]
+try:
+    data = json.load(open(path, encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    data = {}
+row = data.get(slot) or {}
+if not isinstance(row, dict):
+    raise SystemExit(0)
+sid = row.get("session_id")
+if not isinstance(sid, str) or len(sid) <= 8:
+    raise SystemExit(0)
+updated = row.get("updated")
+if not isinstance(updated, str) or not updated:
+    print("missing")
+    raise SystemExit(0)
+try:
+    then = datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+except ValueError:
+    print("missing")
+    raise SystemExit(0)
+print(int((datetime.now(timezone.utc) - then).total_seconds()))
 PY
 }
 
@@ -265,8 +303,19 @@ elif [[ -n "$resume_id" ]]; then
   echo "resume=explicit id=$resume_id" >&2
 else
   resume_id="$(lookup_session || true)"
+  age="$(session_age_sec || true)"
+  cold_sec="${ASK_LOCAL_AGENT_COLD_SEC:-3600}"
+  if [[ -n "$resume_id" && "$keep_session" -eq 0 && ( "$age" == "missing" || ( -n "$age" && "$age" -gt "$cold_sec" ) ) ]]; then
+    echo "resume=cold age=${age}s cutoff=${cold_sec}s slot=$session_slot" >&2
+    echo "Claude Code and Codex resend the local transcript on resume. This session is past the cutoff, so it was not resumed. Rewrite the prompt so it carries the task memory (the memory file path when the task has one), any extra file this step needs, and the new question. Do not paste the old chat. Rerun the same command with --fresh. Pass --keep-session to resume this id anyway." >&2
+    exit 4
+  fi
   if [[ -n "$resume_id" ]]; then
-    echo "resume=stored id=$resume_id" >&2
+    if [[ "$keep_session" -eq 1 && -n "$age" && "$age" != "missing" && "$age" -gt "$cold_sec" ]]; then
+      echo "resume=stored id=$resume_id cold-kept age=${age}s" >&2
+    else
+      echo "resume=stored id=$resume_id" >&2
+    fi
   else
     echo "resume=none slot=$session_slot" >&2
   fi

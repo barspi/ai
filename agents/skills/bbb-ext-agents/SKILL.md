@@ -38,13 +38,13 @@ Verified once against Claude Code 2.1.284 and Codex CLI 0.157.1. The script chec
 
 ## Our session
 
-"Our" means a session this chat has already opened with one of these CLIs. It is not a new conversation, and it is not a session from some other chat. Resume it. Do not pass `--fresh`.
+"Our" means a session this chat has already opened with one of these CLIs. It is not a new conversation, and it is not a session from some other chat. Resume it when that session is still warm. Do not pass `--fresh` for a warm session. If it is cold, follow Resume.
 
 The nicknames are the ones in "When to run": opus, sonnet, fable, astra, sol, luna, terra, claude, codex. "External agent" means one of those, not a Cursor-hosted model.
 
-- **"our XYZ session"**, in any word order ("ask our opus session", "our sol session", "the opus session we were using"): XYZ is one nickname. Resume the session of that agent and model most recently used in this chat. Pass the same `--agent`, `--model`, and `--effort` this chat last used for it, unless they name a different effort in this message. The session id is the `session_id=` the script printed for that trio the last time this chat called it. The script stores that id and resumes it when you do not pass `--fresh`.
-- **"our external agent"**, **"our agent"**, **"our external agent session"**, or **"our session"**, with no nickname: this chat has used exactly one of these CLIs. Resume that one, with the model and effort last used. If this chat has used more than one, stop and ask which. Do not guess, and do not start a fresh session.
-- **"our external agents"**, **"our agents"**, **"our external agent sessions"**, or **"our sessions"**: every external agent this chat has already used. One resumed call each, in the order they were first used in this chat. Send each the same new question. Wait for one to finish before you start the next. Each prompt is only the new step for that session.
+- **"our XYZ session"**, in any word order ("ask our opus session", "our sol session", "the opus session we were using"): XYZ is one nickname. Resume the session of that agent and model most recently used in this chat when it is warm. Pass the same `--agent`, `--model`, and `--effort` this chat last used for it, unless they name a different effort in this message. The session id is the `session_id=` the script printed for that trio the last time this chat called it. The script stores that id and resumes it when the session is warm and you do not pass `--fresh`.
+- **"our external agent"**, **"our agent"**, **"our external agent session"**, or **"our session"**, with no nickname: this chat has used exactly one of these CLIs. Resume that one when it is warm, with the model and effort last used. If this chat has used more than one, stop and ask which. Do not guess, and do not start a fresh session to pick one.
+- **"our external agents"**, **"our agents"**, **"our external agent sessions"**, or **"our sessions"**: every external agent this chat has already used. One call each, in the order they were first used in this chat. A warm session is resumed. A cold one gets a self-contained prompt and `--fresh`. Send each the same new question. Wait for one to finish before you start the next. On a warm resume the prompt is only the new step.
 
 If this chat has not used the named agent yet, "our" has nothing to point at. Stop and ask. Do not open a fresh session to satisfy it.
 
@@ -96,7 +96,7 @@ One invocation uses one mode. "Ask <agent> to review / plan / implement …" is 
 
 A message that lists more than one handoff is a series. Run it in order. One script call per step. Wait until that call finishes before you send the next step. Do not skip a step that failed. The script ends every call by printing one normalized id on stderr as `session_id=…`, whether the CLI's own payload called it `session_id`, `sessionId`, `thread_id`, or `threadId`. That line is from the script, not from Claude Code or Codex.
 
-Same agent and same model as the previous step: do not pass `--fresh` or `--resume`. The script resumes the stored session. The prompt is only the new step. Do not paste the earlier result back in.
+Same agent and same model as the previous step: resume the stored session when it is warm. Do not pass `--fresh` or `--resume` for a warm session. The prompt is only the new step. Do not paste the earlier result back in. If the session is cold, write a self-contained prompt and pass `--fresh`, as in Resume.
 
 A different agent, or the same CLI with a different model: that pair has its own session. Resume that pair's stored session the same way. Its prompt must carry the decisions, file paths, and constraints the new step needs from earlier steps. Do not paste the whole chat. Do not pass `--fresh` unless the user asked for a new conversation with that agent.
 
@@ -104,11 +104,15 @@ A different agent, or the same CLI with a different model: that pair has its own
 
 ## Resume
 
-The script remembers the last session for each agent, model, and project in `scripts/sessions.json`. The next call to that same trio resumes it. Do not pass `--resume` yourself unless you are correcting a stored id. Pass `--fresh` only when the user asks for a new conversation.
+The script remembers the last session for each agent, model, and project in `scripts/sessions.json`, including `updated`. Claude Code (`--resume`) and Codex (`exec resume`) both send that local transcript again. A vendor cache may make a recent resend cheap. This script does not read those caches. One hour is the prudential cutoff for both CLIs, not a statement of either vendor's cache lifetime. `ASK_LOCAL_AGENT_COLD_SEC` overrides it, in seconds.
 
-On a resumed call the prompt is only the new question. Do not paste the earlier session back in. The CLI already has it, and that is what keeps the context cache warm.
+A session is warm when `updated` is within that cutoff. Resume it. Do not pass `--resume` yourself unless you are correcting a stored id. Pass `--fresh` when the user asks for a new conversation.
 
-Stderr prints `resume=stored id=...`, `resume=explicit`, `resume=fresh`, or `resume=none`. After the call the script prints `session_id=` with the id it scraped from that CLI's payload. That is the id stored for the next call. Tell the user the id. If resume fails because the session is gone, rerun the same command with `--fresh`.
+A session is cold when `updated` is older than the cutoff, or missing. Do not resume it. Before you call the script, write a prompt that stands alone: the path of the task's memory file when one exists, any extra file this step needs, and the new question. Do not paste the old chat. Pass `--fresh`. If you call without `--fresh`, the script exits before either CLI runs and prints `resume=cold`. Rewrite the prompt and rerun with `--fresh`. Pass `--keep-session` only when the old transcript itself is required.
+
+On a warm resume the prompt is only the new question. Do not paste the earlier session back in.
+
+Stderr prints `resume=stored id=...`, `resume=explicit`, `resume=fresh`, `resume=none`, or `resume=cold age=...s cutoff=...s`. After the call the script prints `session_id=` with the id it scraped from that CLI's payload. That is the id stored for the next call. Tell the user the id. If resume fails because the session is gone, rerun the same command with `--fresh`.
 
 ## Canonical openings
 
