@@ -82,16 +82,19 @@ logical conflicts:
 1. Load that repo's agent instructions (`AGENTS.md`, `CLAUDE.md`, and any
    project skill the task hits). Read only what the overlapping modules
    need: in-repo documentation, ADRs, the GitHub issue or ticket for the
-   branches, and external specifications (protocol PDFs such as ISO 8583,
-   OpenAPI/AsyncAPI, vendor API docs, RFCs, requirement docs). Do not
+   branches, and external specifications: OpenAPI/AsyncAPI, protobuf or
+   other IDL files, vendor API docs, RFCs, requirement docs; in payments
+   (jPOS, ISO 8583) work, the message specs and card-scheme manuals. Do not
    ingest an entire documentation tree "to be sure."
 2. Treat **source, tests, CI, infrastructure-as-code, and deployment
    manifests** as the source of truth for what the software does. Treat
    design docs, ADRs, comments, and the GitHub issue (or ticket) as the
    high-level or task goals; they can lag. When they disagree, name the
    drift.
-3. Name the **contract** the two sides share (message shape, schema, SPI,
-   NEED/hold formula, API field). A file-disjoint change can still break it.
+3. Name the **contract** the two sides share: message or event shape,
+   database schema, SPI or plugin interface, API field, configuration key,
+   a business formula (in payments work, for example, the funds-check or
+   hold formula). A file-disjoint change can still break it.
 
 ## Git (read-only)
 
@@ -176,12 +179,13 @@ Even when implementation-file lists do not intersect:
 
 1. What **incoming contract** did ours change (wire fields, DTO, schema,
    template variables, seed data)?
-2. What **consumer** did theirs add or change (pricing, posting, tests,
-   another station)?
-3. After compose: does the money/API/schema invariant still hold in one
-   unit (one currency, one id space, one on-the-wire shape)? Did ours
-   rewrite a field theirs now reads? Did a test or suite still send the
-   pre-change payload?
+2. What **consumer** did theirs add or change: a caller, a UI screen, a
+   generated client, a batch job, a report, a test, another service (in
+   payments work: pricing, ledger posting, another gateway or station)?
+3. After compose: does the shared invariant still hold in one unit: one id
+   space, one schema version, one on-the-wire shape, one unit of measure
+   (one currency, one time zone, one encoding)? Did ours rewrite a field
+   theirs now reads? Did a test or suite still send the pre-change payload?
 
 Look at tests and suites that **exercise the boundary**, not only files in
 the name intersection. A new case on theirs that never carries the field
@@ -198,7 +202,9 @@ section.
 Only when the user asks for it together with this skill (for example "and
 summarize what main brought", "summary table of the new commits"). It
 answers "what happened on the other line, and does it touch us?" before the
-file-level analysis.
+file-level analysis. When the user did not ask for it, do not build it;
+offer it in one line at the end of the report instead (for example: "Want a
+thematic summary of the N commits on theirs?").
 
 1. List every commit in `M..THEIRS` with subject and body
    (`git log --reverse --format='%h %ad %an | %s' --date=short M..THEIRS`).
@@ -227,7 +233,8 @@ If the table is long, write it to a file and summarize in chat.
 ## Report shape
 
 Lead with refs: ours SHA, theirs SHA, merge-base SHA, commit lists (short).
-If the thematic summary was requested, it comes right after the refs.
+If the thematic summary was requested, it comes right after the refs. If
+it was not, end the report with a one-line offer of it.
 
 ### 1. Potential files
 
@@ -259,17 +266,42 @@ inspection rather than dumping them all in chat.
 
 Detection is the default. If they want a rebase plan: stash unrelated dirty
 tracked files; rebase onto theirs; expect stops only on TEXTUAL files; take
-theirs then re-insert; leave Java alone unless a cross-file bug requires it;
-name the tests on the boundary.
+theirs then re-insert; leave source code alone unless a cross-file bug
+requires it; name the tests on the boundary.
 
 Do not start that rebase in this skill unless they asked.
 
-## Pattern from a prior run
+## Patterns from prior runs
 
-Branch vs `origin/main`: two or four overlapping docs/YAML; `git merge-tree`
-clean, or one design-note rewrite vs a small insert (TEXTUAL: take theirs,
-re-home the sentence). No Java overlap. Cross-file: station peeled a fee
-out of the principal; issuer `need = amount + issuerFee + acquirerFee` still
-composed; a later FX reader of the billing amount is a watch. Auto-merged
-YAML kept a CIS-inclusive case next to exclusive cases neither side edited
-in that window—that is **LOGICAL within a file**, not textual.
+Short shapes to recognize. The first comes from real payments work; the
+others are common in any codebase.
+
+**Payments (jPOS, ISO 8583).** Branch vs `origin/main`: two to four
+overlapping docs/YAML; `git merge-tree` clean, or one design-note rewrite
+vs a small insert (TEXTUAL: take theirs, re-home the sentence). No source
+overlap. Cross-file: the gateway peeled a fee out of the principal; the
+issuer's `need = amount + issuerFee + acquirerFee` still composed; a later
+FX reader of the billing amount is a watch. Auto-merged YAML kept a
+fee-inclusive test case next to fee-exclusive cases neither side edited in
+that window—that is **LOGICAL within a file**, not textual.
+
+**Web API and client.** Ours renames a response field in the OpenAPI spec
+and the server. Theirs adds a new UI screen, or regenerates the client,
+that reads the old name. No file in common; `merge-tree` clean; the break
+shows only in the end-to-end test or at runtime. **LOGICAL across files**:
+API contract.
+
+**Database migrations.** Both sides add the next migration version (two
+files named for version 42). Different filenames, so Git merges cleanly,
+but the migration tool refuses a duplicate version, or applies them in an
+order neither side tested. **LOGICAL across files**: schema history.
+
+**Configuration default.** Theirs flips a feature-flag or config default.
+Ours adds code that assumes the old default and a test that never sets it.
+Both pass alone; together the test exercises the other branch. **LOGICAL
+across files**: configuration contract.
+
+**Rename vs modify.** Theirs moves a module or file (a package split, a
+directory rename); ours edits the old path. Git usually follows the rename;
+check that the edit landed in the new path and that no stale copy of the
+old path survived.
