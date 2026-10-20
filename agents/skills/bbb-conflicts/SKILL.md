@@ -11,6 +11,8 @@ description: >-
   /bbb-conflicts, names this skill, or asks to check merge conflicts /
   overlap / rebase safety between two SHAs or refs such as HEAD and
   origin/main). Do not run it automatically because remotes advanced.
+  On request, also a thematic summary table of what the other side's
+  commits brought.
 ---
 
 # BBB conflicts
@@ -191,9 +193,41 @@ unless the auto-merge would resurrect a stale sentence on top of a rewrite.
 Prefer **their** rewritten doc and re-home **our** fact in the current
 section.
 
+## Optional: thematic summary of theirs
+
+Only when the user asks for it together with this skill (for example "and
+summarize what main brought", "summary table of the new commits"). It
+answers "what happened on the other line, and does it touch us?" before the
+file-level analysis.
+
+1. List every commit in `M..THEIRS` with subject and body
+   (`git log --reverse --format='%h %ad %an | %s' --date=short M..THEIRS`).
+   Read the body of any commit whose subject is vague or that touches a
+   path, contract or concept ours depends on.
+2. Group the commits into **themes**: commits that serve one purpose (one
+   feature, one fix series, one subsystem, one ticket family, one tooling
+   change). Not one row per commit. A merge commit belongs to the theme of
+   the work it merges. Aim for a handful of rows, even for a long history.
+3. Take PR, merge-request and issue references from the subjects and bodies,
+   in the form the host uses (`#123`, `!45`, `PROJ-123`). Do not invent one;
+   leave the cell without a reference when the commit names none.
+4. Account for every commit exactly once. Before reporting, check that the
+   commits in the table add up to the count of `M..THEIRS`.
+
+| Theme | Commits (short SHA, with their references) | Effect on ours |
+|---|---|---|
+| What the group does, in a few words | `abc1234` (#123), `def5678` (#124 / #120) | **None**, **textual** (name the file), **logical** (name the contract or decision that moved), or a **watch** for later work |
+
+Put the themes with an effect on ours first and say why, concretely: which
+file, which shared contract, which earlier decision or document is now out
+of date. A theme with no effect still gets a row, with "None", so the reader
+sees the whole picture. Keep each row short; the detail belongs in §2 to §4.
+If the table is long, write it to a file and summarize in chat.
+
 ## Report shape
 
 Lead with refs: ours SHA, theirs SHA, merge-base SHA, commit lists (short).
+If the thematic summary was requested, it comes right after the refs.
 
 ### 1. Potential files
 
