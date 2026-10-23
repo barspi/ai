@@ -8,6 +8,14 @@
     {
       "name": "token-totals",
       "source": "./token-totals"
+    },
+    {
+      "name": "blast-radius",
+      "source": "./blast-radius"
+    },
+    {
+      "name": "task-timer",
+      "source": "./task-timer"
     }
   ]
 }

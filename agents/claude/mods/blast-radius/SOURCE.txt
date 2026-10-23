@@ -1,0 +1,3 @@
+Source: https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/blast-radius
+Commit: 569c5283d9a0a7ee7938df85bb32e4f48cbb8c86 (copied 2026-10-08, reviewed before install, unmodified)
+License: Apache-2.0 (see SPDX header in hooks/blast-radius.mjs)

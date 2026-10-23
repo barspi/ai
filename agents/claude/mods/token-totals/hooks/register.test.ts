@@ -30,7 +30,7 @@ test('counts this chat only, under its own session id', async ($, on) => {
   on('ui.status', (_$, e) => {
     shown.push(e.text)
 
-    return null as never
+    return { value: undefined } as never
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_$, e) => ({ text: e.answer, usage: e.usage }))

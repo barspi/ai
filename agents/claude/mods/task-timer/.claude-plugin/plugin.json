@@ -1,0 +1,6 @@
+{
+  "name": "task-timer",
+  "version": "0.1.0",
+  "description": "At the end of every task, adds a transcript line with how long the whole task took, and keeps the last task's time in the status line.",
+  "author": { "name": "Barzilai Spinak" }
+}
