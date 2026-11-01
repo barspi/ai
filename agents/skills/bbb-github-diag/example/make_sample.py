@@ -2,6 +2,8 @@
 """Draws sample-lineage.svg: an invented repository (acme/shop, invented numbers, titles and people) that uses
 every box state, every pill, the `new` mark and the main arrow words of the skill. It is both the picture to
 copy the look from and a small build script to copy the code from (box, edge, legend, find box).
+The people shown on each box are read from `assignees.tsv` and `prauthors.tsv` next to this file: the same two
+files that `refresh_meta.py --tsv-dir` writes for a real diagram, so nobody types them by hand.
 
 usage: python3 make_sample.py [out.svg]      (default: sample-lineage.svg next to this file)
 then:  python3 ../check_diag.py sample-lineage.svg
@@ -42,32 +44,43 @@ MEANS = [('child', 'B is a formal child of umbrella A'), ('closed by', 'B is the
          ('blocked by', 'A cannot finish until B is done'), ('related', 'related work, no parent')]
 
 # ------------------------------------------------------------------ the invented facts
-# (number, column, row, state, title, meta line, merge line, notes, assignee or submitter, new?)
+# (number, column, row, state, title, meta line, merge line, notes)
 CX = [80, 545, 1010, 1475]          # column x; boxes are 260 wide, gaps are 205
 ITEMS = [
     (100, 0, 1, 'umbrella', 'Checkout rework: cart, coupons and guest retry', 'opened 2026-03-02 · still open', None,
-     ['Lists #101, #102 and #103 as children.', '**Blocked by #102.**'], 'alice'),
+     ['Lists #101, #102 and #103 as children.', '**Blocked by #102.**']),
     (101, 1, 0, 'closed', 'Cart totals round half up instead of half even', 'opened 2026-03-04 · closed 2026-03-11', None,
-     ['Closed by PR #110.'], 'bob'),
+     ['Closed by PR #110.']),
     (110, 2, 0, 'merged', 'cart: round totals half even (#101)', 'opened 2026-03-09 · merged 2026-03-11', 'merge 9f3c2ab41 (bob)',
-     ['Closes #101.', 'Shipping is rounded the old way: #120.'], 'bob'),
+     ['Closes #101.', 'Shipping is rounded the old way: #120.']),
     (120, 3, 0, 'open', 'cart: round shipping half even too', 'opened 2026-03-11 · still open', None,
-     ['Follow-up of PR #110.', '**Blocks #121.**'], None),
+     ['Follow-up of PR #110.', '**Blocks #121.**']),
     (102, 1, 1, 'open', 'Coupon stacking: allow one percent coupon and one fixed coupon', 'opened 2026-03-05 · still open', None,
-     ['Fix in PR #111 (open).', '**Blocks #100.**'], 'carol'),
+     ['Fix in PR #111 (open).', '**Blocks #100.**']),
     (111, 2, 1, 'waiting', 'checkout: stack one percent and one fixed coupon (#102)', 'opened 2026-03-20 · waiting for review', None,
-     ['Closes #102. Related: PR #112.', 'Review found #121.'], 'carol'),
+     ['Closes #102. Related: PR #112.', 'Review found #121.']),
     (121, 3, 1, 'open', 'coupon line shows the old total after stacking', 'opened 2026-03-21 · still open', None,
-     ['**Found in review of PR #111.**', '**Blocked by #120.**', 'Fix in PR #122 (draft).'], 'bob'),
+     ['**Found in review of PR #111.**', '**Blocked by #120.**', 'Fix in PR #122 (draft).']),
     (122, 3, 2, 'draft', 'checkout: show the stacked total on the coupon line (#121)', 'opened 2026-03-22 \u00b7 draft', None,
-     ['Closes #121.'], 'bob'),
+     ['Closes #121.']),
     (103, 1, 2, 'closed', 'Guest checkout fails on payment retry', 'opened 2026-03-10 · closed 2026-03-18', None,
-     ['Work started in PR #112,', 'finished in PR #113.'], 'alice'),
+     ['Work started in PR #112,', 'finished in PR #113.']),
     (112, 2, 2, 'prclosed', 'checkout: keep the guest cart on retry (#103)', 'opened 2026-03-12 · closed 2026-03-17', None,
-     ['**Not merged: superseded by PR #113.**'], 'alice'),
+     ['**Not merged: superseded by PR #113.**']),
     (113, 2, 3, 'merged', 'checkout: retry reuses the guest cart and the payment key (#103)', 'opened 2026-03-16 · merged 2026-03-18',
-     'merge 4d1e7c0a2 (alice, bob)', ['Closes #103. Supersedes PR #112.'], 'alice'),
+     'merge 4d1e7c0a2 (alice, bob)', ['Closes #103. Supersedes PR #112.']),
 ]
+def read_tsv(name):
+    path = os.path.join(HERE, name)
+    rows = {}
+    for line in open(path, encoding='utf-8') if os.path.exists(path) else []:
+        a = line.rstrip('\n').split('\t')
+        if len(a) == 2 and a[1]:
+            rows[int(a[0])] = a[1].split(',')
+    return rows
+
+
+ASSIGNEES, PRAUTH = read_tsv('assignees.tsv'), read_tsv('prauthors.tsv')     # written by refresh_meta.py --tsv-dir
 NEW = {120, 121}                     # the boxes added in the latest revision of this sample
 PRS = {n for n, _c, _r, st, *_ in ITEMS if STY[st]['kind'] == 'PR'}
 
@@ -102,7 +115,7 @@ _kind_font = load('bold', 54)      # 13.5px bold, measured at 4x
 _who_font = load('bold', 46)       # 11.5px bold
 
 
-def node(num, x, y, state, title, meta, mono, notes, who, new):
+def node(num, x, y, state, title, meta, mono, notes, new):
     st = STY[state]
     lines = textwrap.wrap(title, 33)
     t = len(lines)
@@ -116,20 +129,29 @@ def node(num, x, y, state, title, meta, mono, notes, who, new):
          '<rect x="%s" y="%s" width="260" height="%s" rx="10" fill="%s" stroke="%s" stroke-width="1.6"%s/>' % (
              x, y, h, st['fill'], st['stroke'], ' stroke-dasharray="6 4"' if st.get('dashed') else ''),
          '<text class="kind" x="%s" y="%s" style="fill:%s">%s %s</text>' % (x + 14, y + 28, st['stroke'], st['kind'], link(num))]
-    # assignee (issue: tiny arrow and name, or `?`) or submitter (pull request: `by` name), after the number
+    # assignee (issue: tiny arrow and name, or `?`) or submitter (pull request: `by` name), after the number.
+    # It must end before the pill (and before the red cross): 11.5px, else 9px, else a second line. Never truncated.
+    if pr:
+        text = 'by ' + (PRAUTH.get(num) or ['?'])[0]
+    else:
+        names = ASSIGNEES.get(num)
+        text = '?' if not names else names[0] + (' +%d' % (len(names) - 1) if len(names) > 1 else '')
     label = '%s #%d' % (st['kind'], num)
     w = _kind_font.getlength(label) / 4 + 0.3 * len(label)
-    if pr:
-        tx, text, arrow = x + 14 + w + 8, 'by ' + who, None
+    limit = x + 248 - st['pw'] - (25 if st.get('cross') else 6)        # the cross's left edge is 19px left of the pill
+    for size, line_y, x0 in ((11.5, y + 28, x + 14 + w), (9, y + 28, x + 14 + w), (11.5, y + 41, x - w)):
+        ax = x0 + 6                                                    # where the tiny arrow starts
+        tx = x0 + 8 if pr else ax + 15
+        end = tx + load('bold', int(size * 4)).getlength(text) / 4
+        if end <= (limit if line_y == y + 28 else x + 246):
+            break
     else:
-        ax, ay = x + 14 + w + 6, y + 28 - 4.6
-        tx, text = ax + 15, who or '?'
-        arrow = '<polyline points="%.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="none" stroke="%s" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>' % (
-            ax, ay, ax + 10, ay, ax + 7, ay - 2.6, ax + 10, ay, ax + 7, ay + 2.6, st['stroke'])
-    assert tx + _who_font.getlength(text) / 4 < x + 248 - st['pw'] - 6, 'name runs into the pill of #%d' % num
-    if arrow:
-        o.append(arrow)
-    o.append('<text class="meta" x="%.1f" y="%s" style="fill:%s;font-size:11.5px;font-weight:600">%s</text>' % (tx, y + 28, st['stroke'], esc(text)))
+        raise SystemExit('name of #%d does not fit even on a second line' % num)
+    if not pr:
+        ay = line_y - 4.6
+        o.append('<polyline points="%.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="none" stroke="%s" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>' % (
+            ax, ay, ax + 10, ay, ax + 7, ay - 2.6, ax + 10, ay, ax + 7, ay + 2.6, st['stroke']))
+    o.append('<text class="meta" x="%.1f" y="%s" style="fill:%s;font-size:%gpx;font-weight:600">%s</text>' % (tx, line_y, st['stroke'], size, esc(text)))
     o.append('<rect x="%.1f" y="%s" width="%s" height="20" rx="10" fill="%s"/>' % (x + 248 - st['pw'], y + 13, st['pw'], st['pill']))
     o.append('<text class="pill" x="%.1f" y="%s" text-anchor="middle" style="fill:%s">%s</text>' % (x + 248 - st['pw'] / 2, y + 27, st['fill'], st['word']))
     if st.get('stripes'):                              # a pull request closed without merging: soft red stripes under the text
@@ -162,8 +184,8 @@ def node(num, x, y, state, title, meta, mono, notes, who, new):
 ROW_GAP = 130                       # room for a vertical arrow with its label between two rows
 Y0 = 190
 heights, rendered = {}, {}
-for num, c, r, st, title, meta, mono, notes, who in ITEMS:
-    heights[num], _ = node(num, CX[c], 0, st, title, meta, mono, notes, who, num in NEW)
+for num, c, r, st, title, meta, mono, notes in ITEMS:
+    heights[num], _ = node(num, CX[c], 0, st, title, meta, mono, notes, num in NEW)
 row_h = {}
 for num, c, r, *_ in ITEMS:
     row_h[r] = max(row_h.get(r, 0), heights[num])
@@ -171,12 +193,12 @@ row_y = {0: Y0}
 for r in (1, 2, 3):
     row_y[r] = row_y[r - 1] + row_h[r - 1] + ROW_GAP
 BOX = {}
-for num, c, r, st, title, meta, mono, notes, who in ITEMS:
+for num, c, r, st, title, meta, mono, notes in ITEMS:
     y = row_y[r]
     if num == 100:                  # the umbrella starts at the row of its middle child, so that arrow is straight
         y = row_y[1]
     BOX[num] = (CX[c], y, 260, heights[num])
-    _, rendered[num] = node(num, CX[c], y, st, title, meta, mono, notes, who, num in NEW)
+    _, rendered[num] = node(num, CX[c], y, st, title, meta, mono, notes, num in NEW)
 
 PATHS, LABELS = [], []
 

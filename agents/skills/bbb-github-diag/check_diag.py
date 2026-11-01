@@ -70,6 +70,24 @@ for n, (bx, by, bw, bh) in boxes.items():
             if x + w > bx + bw - 12:
                 fail(f'text too wide in #{n}: "{txt[:40]}" {w:.0f}px')
 
+# ---- the assignee or submitter name must not run into the pill or the red cross, and must be at least 9px
+for n, (bx, by, bw, bh) in boxes.items():
+    g = re.search(r'<g id="n%d">(.*?)</g>' % n, new, re.S).group(1)
+    k = re.search(r'<text class="kind" x="([\d.]+)" y="([\d.]+)"', g)
+    nm = re.search(r'<text class="meta" x="([\d.]+)" y="([\d.]+)" style="[^"]*font-size:([\d.]+)px[^"]*">([^<]*)</text>', g)
+    pill = re.search(r'<rect x="([\d.]+)" y="[\d.]+" width="[\d.]+" height="20" rx="10"', g)
+    if not (k and nm and pill):
+        continue
+    x, y, size, text = float(nm.group(1)), float(nm.group(2)), float(nm.group(3)), nm.group(4)
+    if size < 9 - 0.01:
+        fail(f'name in #{n} is {size}px (minimum 9px; use a second line)')
+    w = load('bold', int(size * 4)).getlength(text.replace('&amp;', '&')) / 4
+    on_label_line = abs(y - float(k.group(2))) < 1
+    cross = re.search(r'<line x1="([\d.]+)"[^>]*stroke="#ff2a2a"', g)
+    limit = (float(cross.group(1)) - 6 - 6 if cross else float(pill.group(1)) - 6) if on_label_line else bx + bw - 12
+    if x + w > limit + 0.5:
+        fail(f'name "{text}" in #{n} ends at {x + w:.0f}, past {limit:.0f} (pill or cross): shrink to 9px or use a second line')
+
 # ---- segments
 segs = []
 for i, (pts, arcs) in enumerate(paths):
