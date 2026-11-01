@@ -1,3 +1,16 @@
 Source: https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/blast-radius
-Commit: 569c5283d9a0a7ee7938df85bb32e4f48cbb8c86 (copied 2026-10-08, reviewed before install, unmodified)
+Commit: 569c5283d9a0a7ee7938df85bb32e4f48cbb8c86 (copied 2026-10-08 and reviewed before install)
 License: Apache-2.0 (see SPDX header in hooks/blast-radius.mjs)
+
+Local changes (version 0.2.0, 2026-10-30), by Barzilai Spinak with Claude:
+- File-changing commands (rm -r/-f, git reset --hard, git clean, git checkout/restore .)
+  are held only when they reach OUTSIDE the project folder and its git worktrees.
+  Inside them they run with no question. An rm whose paths do not exist is not held.
+- Force push and migrations are not about the filesystem: they hold as before.
+- Any doubt holds: an rm path with $VAR, $(...), `...`, {a,b} or ~user; a cd target
+  that cannot be found; a failed scope check; no project root.
+- Removing a root itself (the project folder, or a worktree folder) is held.
+- New files: hooks/scope.sh (works out the real paths), hooks/scope.mjs (the decision),
+  hooks/scope.test.ts (8 tests). Changed: hooks/blast-radius.mjs (one import,
+  one check at the top of the Bash hook, one helper function).
+The rest of hooks/blast-radius.mjs is the upstream code.

@@ -15,6 +15,8 @@
 // The host reads `on(...)` and `$.noun.method(...)` from source, so they are
 // spelled literally, and helpers that take `$` are top-level functions.
 
+import { FILESYSTEM_KINDS, hasShellSyntax, parseScope, staysInside } from "./scope.mjs";
+
 const PANE_ID = "blast-radius";
 const POLL_SECONDS = "0.25";
 const HOLD_LIMIT_MS = 10 * 60 * 1000;
@@ -27,6 +29,13 @@ export function register(on) {
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
     const risk = classify(String(e.command ?? ""));
     if (risk === null) {
+      return next(e);
+    }
+    // Local change: a command that changes files is held only when it reaches
+    // outside the project and its git worktrees. Inside them it is the agent's
+    // own work and runs without a question. Force push and migrations are not
+    // about the filesystem, so they still hold wherever they run.
+    if (FILESYSTEM_KINDS.has(risk.kind) && (await staysInsideProject($, risk))) {
       return next(e);
     }
     // One hold at a time. If another risky call is already held (a subagent's,
@@ -265,6 +274,38 @@ function classifySegment(segment, dir, pushed) {
     }
   }
   return null;
+}
+
+/**
+ * Local addition. True when a filesystem-changing command acts only inside the
+ * project folder or one of its git worktrees (or on nothing: `rm` of paths
+ * that don't exist). Any doubt answers false, so the command is held.
+ */
+async function staysInsideProject($, risk) {
+  try {
+    const sessionCwd = await $.session.cwd();
+    const project = await $.session.root();
+    const cwd = risk.dir ? await resolveDir($, sessionCwd, risk.dir) : sessionCwd;
+    if (cwd === null) {
+      return false; // can't tell where it runs
+    }
+    if (risk.kind === "rm" && risk.targets.some(hasShellSyntax)) {
+      return false; // $VAR, $(...), {a,b}: can't tell what it names
+    }
+    const mode = risk.kind === "rm" ? "rm" : "dir";
+    const targets = risk.kind === "rm" ? risk.targets : [];
+    const run = await $.process.run(
+      ["bash", `${$.plugin.root}/hooks/scope.sh`, project, mode, ...targets],
+      { cwd, timeoutMs: 15000 },
+    );
+    if (run.exitCode !== 0) {
+      return false;
+    }
+    const { roots, paths } = parseScope(run.stdout);
+    return staysInside(risk, roots, paths);
+  } catch {
+    return false;
+  }
 }
 
 // Resolves a `cd` target to an absolute folder, or null if it doesn't exist.
