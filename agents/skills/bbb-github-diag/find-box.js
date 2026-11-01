@@ -1,0 +1,174 @@
+/* Find box for the lineage diagram: type a number (120, #120) to jump to that issue or pull request,
+   or any text (a username, a title word, merged) to light up every matching box. */
+(function () {
+  var SVGNS = 'http://www.w3.org/2000/svg', HTMLNS = 'http://www.w3.org/1999/xhtml';
+  var svg = document.documentElement;
+  var info = [].slice.call(document.querySelectorAll('g[id]')).filter(function (g) { return /^n\d+$/.test(g.id); })
+    .map(function (g) { return { g: g, num: g.id.slice(1), text: (g.textContent || '').replace(/\s+/g, ' ').toLowerCase() }; });
+  if (!info.length) return;
+
+  var css = document.createElementNS(SVGNS, 'style');
+  css.textContent =
+    '.q-on g[id^="n"]{opacity:.2;transition:opacity .15s}' +
+    '.q-on g[id^="n"].hit{opacity:1;filter:drop-shadow(0 0 7px #ff7a00)}' +
+    '.q-on g[id^="n"].hit>rect:first-child{stroke:#ff7a00;stroke-width:5}' +
+    '.q-on g[id^="n"].cur>rect:first-child{stroke:#e6007a;stroke-width:6}' +
+    '.q-on path[marker-end]{opacity:.35}';
+  svg.insertBefore(css, svg.firstChild);
+
+  /* Host: move the drawing into a scrollable HTML container that fills the window, and put the find box
+     OUTSIDE the scrolling area, so it stays at the bottom-left whatever is scrolled, focused or zoomed. */
+  var W = 330;
+  var inner = document.createElementNS(SVGNS, 'svg');
+  ['width', 'height', 'viewBox', 'font-family'].forEach(function (a) { if (svg.hasAttribute(a)) inner.setAttribute(a, svg.getAttribute(a)); });
+  inner.setAttribute('style', 'display:block');
+  [].slice.call(svg.childNodes).forEach(function (n) {
+    if (n.nodeType === 1 && (n.localName === 'script' || n === css)) return;
+    inner.appendChild(n);
+  });
+  svg.removeAttribute('viewBox'); svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
+  var fo = document.createElementNS(SVGNS, 'foreignObject');
+  fo.setAttribute('x', 0); fo.setAttribute('y', 0); fo.setAttribute('width', '100%'); fo.setAttribute('height', '100%');
+  var host = document.createElementNS(HTMLNS, 'div');
+  host.setAttribute('style', 'position:relative;width:100%;height:100%;overflow:hidden;background:#f3f0e8');
+  var scroller = document.createElementNS(HTMLNS, 'div');
+  scroller.setAttribute('style', 'position:absolute;left:0;top:0;right:0;bottom:0;overflow:auto');
+  scroller.appendChild(inner); host.appendChild(scroller);
+
+  var box = document.createElementNS(HTMLNS, 'div');
+  box.setAttribute('style', 'position:absolute;left:12px;bottom:30px;z-index:10;box-sizing:border-box;width:' + W + 'px;padding:8px 10px;background:#163e73;border:2px solid #0e2b52;border-radius:10px;box-shadow:0 3px 12px rgba(14,43,82,.45);font:12px Helvetica,Arial,sans-serif;color:#fff');
+  var row = document.createElementNS(HTMLNS, 'div');
+  row.setAttribute('style', 'display:flex;gap:6px;align-items:center');
+  var input = document.createElementNS(HTMLNS, 'input');
+  input.setAttribute('type', 'text');
+  input.setAttribute('placeholder', 'number or name');
+  input.setAttribute('style', 'flex:1;min-width:0;font:13px Helvetica,Arial,sans-serif;padding:4px 8px;border:1px solid #0e2b52;border-radius:6px;background:#fff;color:#1c2430');
+  function btn(label, title) {
+    var b = document.createElementNS(HTMLNS, 'button');
+    b.textContent = label; b.setAttribute('title', title);
+    b.setAttribute('style', 'font:12px Helvetica,Arial,sans-serif;padding:3px 7px;border:1px solid #6f93c4;border-radius:6px;background:#1d4e89;color:#fff;cursor:pointer');
+    return b;
+  }
+  var prev = btn('◀', 'previous match (Shift+Enter)'), next = btn('▶', 'next match (Enter)'), clear = btn('✕', 'clear (Esc)');
+  var note = document.createElementNS(HTMLNS, 'div');
+  note.setAttribute('style', 'margin-top:4px;font-size:11px;color:#cfe0f5');
+  note.textContent = 'press / to search';
+  row.appendChild(input); row.appendChild(prev); row.appendChild(next); row.appendChild(clear);
+  box.appendChild(row); box.appendChild(note); host.appendChild(box);
+  fo.appendChild(host); svg.appendChild(fo);
+  svg.style.overflow = 'hidden';
+  /* Size everything in explicit pixels from the window size. Percentages are not re-resolved by every browser
+     after the window or the zoom changes, which left part of the screen undrawn. */
+  function fit() {
+    var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+    svg.setAttribute('width', w); svg.setAttribute('height', h);
+    fo.setAttribute('width', w); fo.setAttribute('height', h);
+    host.style.width = w + 'px'; host.style.height = h + 'px';
+    comp();
+  }
+  /* Keep the find box about the same size on screen when the browser zoom changes. The zoom is read as the
+     absolute zoom (devicePixelRatio over the native ratio, found below). The box is
+     scaled by the inverse, from its bottom-left corner, and its offsets are scaled with it. */
+  /* A reload keeps the zoom the page had, so the zoom at load is not 1 and cannot be read from the change since
+     load. The absolute zoom is devicePixelRatio / nativeDpr, where nativeDpr is the ratio at 100% (1 on a plain
+     screen, 2 on a retina one, 1.25, 1.5 ... with a Windows scale). nativeDpr is chosen among those values: the one
+     whose implied zoom is closest to outerWidth/innerWidth (outerWidth does not scale with the page zoom in Chrome
+     and Safari, innerWidth does). A docked devtools panel or a sidebar spoils the ratio, so the match must be
+     within 20%, else the page is taken to be at 100% at load. */
+  function nativeDpr() {
+    var d = window.devicePixelRatio || 1, r = window.outerWidth / window.innerWidth, best = d, bd = 0.2;
+    if (!isFinite(r) || r <= 0 || window.innerWidth < 200) return d;
+    [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 4].forEach(function (n) {
+      var e = Math.abs(Math.log((d / n) / r));
+      if (e < bd) { bd = e; best = n; }
+    });
+    return best;
+  }
+  var ndpr = nativeDpr(), zoomNow = 1;
+  function comp() {
+    var z = (window.devicePixelRatio || 1) / ndpr;
+    z = Math.min(5, Math.max(0.1, z));
+    if (Math.abs(z - zoomNow) < 0.005) return;
+    zoomNow = z;
+    box.style.transformOrigin = 'left bottom';
+    box.style.transform = 'scale(' + (1 / z) + ')';
+    box.style.left = (12 / z) + 'px'; box.style.bottom = (30 / z) + 'px';
+  }
+  window.lineageZoom = function () { return { dpr: window.devicePixelRatio, outer: window.outerWidth, inner: window.innerWidth, native: ndpr, zoom: zoomNow }; };
+  fit();
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', fit);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+  setInterval(function () {   /* safety net for a zoom that fires no resize event */
+    comp();
+    if (+fo.getAttribute('width') !== Math.max(1, window.innerWidth) || +fo.getAttribute('height') !== Math.max(1, window.innerHeight)) fit();
+  }, 300);
+  if (window.innerWidth < 50 || window.innerHeight < 50 || !scroller.clientWidth || !scroller.clientHeight) {      /* no real window (for example a thumbnail): keep the plain picture */
+    while (inner.firstChild) svg.insertBefore(inner.firstChild, fo);
+    svg.removeChild(fo);
+    ['width', 'height', 'viewBox'].forEach(function (a) { if (inner.hasAttribute(a)) svg.setAttribute(a, inner.getAttribute(a)); });
+    return;
+  }
+
+  var hits = [], cur = 0;
+  function reset() {
+    svg.classList.remove('q-on');
+    info.forEach(function (i) { i.g.classList.remove('hit'); i.g.classList.remove('cur'); });
+    hits = []; cur = 0;
+  }
+  function find(q) {
+    q = q.trim().toLowerCase().replace(/^#/, '');
+    if (!q) return [];
+    if (/^\d+$/.test(q)) {
+      var exact = info.filter(function (i) { return i.num === q; });
+      return exact.length ? exact : info.filter(function (i) { return i.num.indexOf(q) === 0; });
+    }
+    var toks = q.split(/\s+/);
+    return info.filter(function (i) { return toks.every(function (t) { return i.text.indexOf(t) >= 0; }); });
+  }
+  function show(jump) {
+    info.forEach(function (i) { i.g.classList.remove('cur'); });
+    if (!hits.length) return;
+    hits[cur].g.classList.add('cur');
+    note.textContent = hits.length + (hits.length === 1 ? ' match: #' : ' matches, showing #') + hits[cur].num + (hits.length > 1 ? ' (' + (cur + 1) + '/' + hits.length + ')' : '');
+    if (jump) {
+      var r = hits[cur].g.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+      scroller.scrollTo({ left: Math.max(0, scroller.scrollLeft + (r.left - sr.left) + r.width / 2 - scroller.clientWidth / 2),
+                          top: Math.max(0, scroller.scrollTop + (r.top - sr.top) + r.height / 2 - scroller.clientHeight / 2), behavior: jump === 'instant' ? 'auto' : 'smooth' });
+    }
+  }
+  function run(q, jump) {
+    reset();
+    hits = find(q);
+    if (!q.trim()) { note.textContent = 'press / to search'; return; }
+    if (!hits.length) { note.textContent = 'no match'; return; }
+    svg.classList.add('q-on');
+    hits.forEach(function (i) { i.g.classList.add('hit'); });
+    show(jump);
+  }
+  function step(d) { if (hits.length) { cur = (cur + d + hits.length) % hits.length; show(true); } }
+
+  input.addEventListener('input', function () { run(input.value, true); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { input.value = ''; run('', false); input.blur(); }
+    e.stopPropagation();
+  });
+  prev.addEventListener('click', function () { step(-1); });
+  next.addEventListener('click', function () { step(1); });
+  clear.addEventListener('click', function () { input.value = ''; run('', false); });
+  function clearAll() { input.value = ''; run('', false); input.blur(); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== input) { e.preventDefault(); input.focus(); }
+    else if (e.key === 'Escape') { clearAll(); }
+  });
+  document.addEventListener('dblclick', function (e) {
+    if (box.contains(e.target)) return;
+    clearAll();
+    if (window.getSelection) window.getSelection().removeAllRanges();
+  });
+
+  var h = decodeURIComponent((location.hash || '').replace(/^#(find=)?/, ''));
+  if (h) { input.value = h; setTimeout(function () { run(h, 'instant'); }, 50); }
+  window.lineageFind = function (q) { input.value = q; run(q, true); return hits.map(function (i) { return i.num; }); };
+})();

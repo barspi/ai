@@ -1,0 +1,439 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2420" height="1233" viewBox="0 0 2420 1233" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<title>Sample lineage of a checkout rework (acme/shop)</title>
+<desc>Example for the bbb-github-diag skill: an umbrella with three children, the pull requests that closed or replaced them, follow-ups, a block and a related pair.</desc>
+<defs>
+<marker id="h-child" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#1c2430"/></marker>
+<marker id="h-closed" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#1d4e89"/></marker>
+<marker id="h-work" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#1d4e89"/></marker>
+<marker id="h-led" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#8a4b12"/></marker>
+<marker id="h-blocked" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#8a3030"/></marker>
+<marker id="h-ref" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#6e6a64"/></marker>
+<marker id="h-cross" overflow="visible" viewBox="0 0 16 16" refX="8" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M2.5,2.5 L13.5,13.5 M13.5,2.5 L2.5,13.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/></marker>
+<style>.kind{font-size:13.5px;font-weight:700;letter-spacing:.3px}.ttl{font-size:12.5px;fill:#1c2430}.meta{font-size:11px;fill:#3b4350}.mono{font-size:11px;font-family:Menlo,Consolas,monospace;fill:#1c2430}.note{font-size:11px;font-style:italic;fill:#3b4350}.pill{font-size:10.5px;font-weight:700;letter-spacing:.6px}.lbl{font-size:11.5px;font-weight:600}.ftl{font-size:15px;font-style:italic;fill:#6e6a64;letter-spacing:.4px}.h1{font-size:30px;font-weight:700;fill:#1c2430}.h2{font-size:15px;fill:#3b4350}.lg{font-size:13px;fill:#1c2430}.lgb{font-size:13px;font-weight:700;fill:#1c2430}</style>
+</defs>
+<rect x="0" y="0" width="2420" height="1233" fill="#f3f0e8"/>
+<text class="h1" x="80" y="70">Checkout rework: what grew out of umbrella <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a></text>
+<text class="h2" x="80" y="100"><tspan style="font-weight:700">Repository: acme/shop</tspan></text>
+<text class="h2" x="80" y="124">Arrows point from the earlier item to the item it produced, or from an issue to the pull request that closed it. Read left to right.</text>
+<text class="h2" x="80" y="148">Facts as of 2026-03-22. Dotted frames name an area of work only; the arrows carry the relationships.</text>
+<rect x="485" y="705" width="815" height="472" rx="18" fill="#ffffff" fill-opacity="0.22" stroke="#8d877e" stroke-width="1.6" stroke-dasharray="2 6" stroke-linecap="round"/>
+<text class="ftl" x="501" y="729">guest checkout</text>
+<path d="M340.0,500.0 L400.0,500.0 L400.0,250.0 L545.0,250.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<path d="M340.0,530.0 L545.0,530.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<path d="M340.0,560.0 L400.0,560.0 L400.0,811.0 L545.0,811.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<path d="M805.0,250.0 L1010.0,250.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M1270.0,250.0 L1475.0,250.0" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
+<path d="M805.0,530.0 L1010.0,530.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M1270.0,530.0 L1475.0,530.0" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
+<path d="M1605.0,470.0 L1605.0,326.0" fill="none" stroke="#8a3030" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-blocked)"/>
+<path d="M1605.0,620.0 L1605.0,751.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M805.0,811.0 L1010.0,811.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-work)"/>
+<path d="M805.0,857.0 L835.0,857.0 L835.0,1077.0 L1010.0,1077.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M1140.0,1017.0 L1140.0,873.0" fill="none" stroke="#b02a2a" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-cross)"/>
+<path d="M1140.0,606.0 L1140.0,751.0" fill="none" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-ref)"/>
+<g id="n100">
+<rect x="80" y="470" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="94" y="498" style="fill:#8a3030">UMBRELLA <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a></text>
+<polyline points="212.9,493.4 222.9,493.4 219.9,490.8 222.9,493.4 219.9,496.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="227.9" y="498" style="fill:#8a3030;font-size:11.5px;font-weight:600">alice</text>
+<rect x="280.4" y="483" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="304.2" y="497" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="94" y="525">Checkout rework: cart, coupons</text>
+<text class="ttl" x="94" y="540">and guest retry</text>
+<line x1="94" y1="552" x2="326" y2="552" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="94" y="565">opened 2026-03-02 &#183; still open</text>
+<text class="note" x="94" y="579">Lists <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>, <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a> and <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a> as children.</text>
+<text class="note" x="94" y="593"><tspan style="font-weight:700">Blocked by <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>.</tspan></text>
+</g>
+<g id="n101">
+<rect x="545" y="190" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
+<text class="kind" x="559" y="218" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a></text>
+<polyline points="642.3,213.4 652.3,213.4 649.3,210.8 652.3,213.4 649.3,216.0" fill="none" stroke="#6e6a64" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="657.3" y="218" style="fill:#6e6a64;font-size:11.5px;font-weight:600">bob</text>
+<rect x="730.6" y="203" width="62.4" height="20" rx="10" fill="#4e4b48"/>
+<text class="pill" x="761.8" y="217" text-anchor="middle" style="fill:#eceae6">closed</text>
+<text class="ttl" x="559" y="245">Cart totals round half up instead</text>
+<text class="ttl" x="559" y="260">of half even</text>
+<line x1="559" y1="272" x2="791" y2="272" stroke="#6e6a64" stroke-opacity="0.35"/>
+<text class="meta" x="559" y="285">opened 2026-03-04 &#183; closed 2026-03-11</text>
+<text class="note" x="559" y="299">Closed by PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a>.</text>
+</g>
+<g id="n102">
+<rect x="545" y="470" width="260" height="151" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="559" y="498" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a></text>
+<polyline points="642.3,493.4 652.3,493.4 649.3,490.8 652.3,493.4 649.3,496.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="657.3" y="498" style="fill:#8a3030;font-size:11.5px;font-weight:600">carol</text>
+<rect x="745.4" y="483" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="769.2" y="497" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="559" y="525">Coupon stacking: allow one</text>
+<text class="ttl" x="559" y="540">percent coupon and one fixed</text>
+<text class="ttl" x="559" y="555">coupon</text>
+<line x1="559" y1="567" x2="791" y2="567" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="559" y="580">opened 2026-03-05 &#183; still open</text>
+<text class="note" x="559" y="594">Fix in PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a> (open).</text>
+<text class="note" x="559" y="608"><tspan style="font-weight:700">Blocks <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a>.</tspan></text>
+</g>
+<g id="n103">
+<rect x="545" y="751" width="260" height="136" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
+<text class="kind" x="559" y="779" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a></text>
+<polyline points="642.3,774.4 652.3,774.4 649.3,771.8 652.3,774.4 649.3,777.0" fill="none" stroke="#6e6a64" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="657.3" y="779" style="fill:#6e6a64;font-size:11.5px;font-weight:600">alice</text>
+<rect x="730.6" y="764" width="62.4" height="20" rx="10" fill="#4e4b48"/>
+<text class="pill" x="761.8" y="778" text-anchor="middle" style="fill:#eceae6">closed</text>
+<text class="ttl" x="559" y="806">Guest checkout fails on payment</text>
+<text class="ttl" x="559" y="821">retry</text>
+<line x1="559" y1="833" x2="791" y2="833" stroke="#6e6a64" stroke-opacity="0.35"/>
+<text class="meta" x="559" y="846">opened 2026-03-10 &#183; closed 2026-03-18</text>
+<text class="note" x="559" y="860">Work started in PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>,</text>
+<text class="note" x="559" y="874">finished in PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</text>
+</g>
+<g id="n110">
+<rect x="1010" y="190" width="260" height="150" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
+<text class="kind" x="1024" y="218" style="fill:#1d4e89">PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a></text>
+<text class="meta" x="1085.9" y="218" style="fill:#1d4e89;font-size:11.5px;font-weight:600">by bob</text>
+<rect x="1195.6" y="203" width="62.4" height="20" rx="10" fill="#163e73"/>
+<text class="pill" x="1226.8" y="217" text-anchor="middle" style="fill:#e7f0fb">merged</text>
+<text class="ttl" x="1024" y="245">cart: round totals half even</text>
+<text class="ttl" x="1024" y="260">(<a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>)</text>
+<line x1="1024" y1="272" x2="1256" y2="272" stroke="#1d4e89" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="285">opened 2026-03-09 &#183; merged 2026-03-11</text>
+<text class="mono" x="1024" y="299">merge 9f3c2ab41 (bob)</text>
+<text class="note" x="1024" y="313">Closes <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>.</text>
+<text class="note" x="1024" y="327">Shipping is rounded the old way: <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a>.</text>
+</g>
+<g id="n111">
+<rect x="1010" y="470" width="260" height="136" rx="10" fill="#ffeb85" stroke="#8f6400" stroke-width="1.6"/>
+<text class="kind" x="1024" y="498" style="fill:#8f6400">PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a></text>
+<text class="meta" x="1085.2" y="498" style="fill:#8f6400;font-size:11.5px;font-weight:600">by carol</text>
+<rect x="1188.2" y="483" width="69.8" height="20" rx="10" fill="#9a6700"/>
+<text class="pill" x="1223.1" y="497" text-anchor="middle" style="fill:#ffeb85">waiting</text>
+<text class="ttl" x="1024" y="525">checkout: stack one percent and</text>
+<text class="ttl" x="1024" y="540">one fixed coupon (<a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>)</text>
+<line x1="1024" y1="552" x2="1256" y2="552" stroke="#8f6400" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="565">opened 2026-03-20 &#183; waiting for review</text>
+<text class="note" x="1024" y="579">Closes <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>. Related: PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>.</text>
+<text class="note" x="1024" y="593">Review found <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
+</g>
+<g id="n112">
+<rect x="1010" y="751" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
+<text class="kind" x="1024" y="779" style="fill:#6e6a64">PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a></text>
+<text class="meta" x="1085.9" y="779" style="fill:#6e6a64;font-size:11.5px;font-weight:600">by alice</text>
+<rect x="1195.6" y="764" width="62.4" height="20" rx="10" fill="#4e4b48"/>
+<text class="pill" x="1226.8" y="778" text-anchor="middle" style="fill:#eceae6">closed</text>
+<defs><pattern id="stripes112" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="22" fill="#b84a4a" fill-opacity=".10"/></pattern></defs>
+<rect x="1010" y="751" width="260" height="122" rx="10" fill="url(#stripes112)"/>
+<line x1="1176.6" y1="768" x2="1188.6" y2="780" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
+<line x1="1188.6" y1="768" x2="1176.6" y2="780" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
+<text class="ttl" x="1024" y="806">checkout: keep the guest cart on</text>
+<text class="ttl" x="1024" y="821">retry (<a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>)</text>
+<line x1="1024" y1="833" x2="1256" y2="833" stroke="#6e6a64" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="846">opened 2026-03-12 &#183; closed 2026-03-17</text>
+<text class="note" x="1024" y="860"><tspan style="font-weight:700">Not merged: superseded by PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</tspan></text>
+</g>
+<g id="n113">
+<rect x="1010" y="1017" width="260" height="136" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
+<text class="kind" x="1024" y="1045" style="fill:#1d4e89">PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a></text>
+<text class="meta" x="1085.9" y="1045" style="fill:#1d4e89;font-size:11.5px;font-weight:600">by alice</text>
+<rect x="1195.6" y="1030" width="62.4" height="20" rx="10" fill="#163e73"/>
+<text class="pill" x="1226.8" y="1044" text-anchor="middle" style="fill:#e7f0fb">merged</text>
+<text class="ttl" x="1024" y="1072">checkout: retry reuses the guest</text>
+<text class="ttl" x="1024" y="1087">cart and the payment key (<a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>)</text>
+<line x1="1024" y1="1099" x2="1256" y2="1099" stroke="#1d4e89" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="1112">opened 2026-03-16 &#183; merged 2026-03-18</text>
+<text class="mono" x="1024" y="1126">merge 4d1e7c0a2 (alice, bob)</text>
+<text class="note" x="1024" y="1140">Closes <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>. Supersedes PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>.</text>
+</g>
+<g id="n120">
+<rect x="1475" y="190" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="1489" y="218" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a></text>
+<polyline points="1572.3,213.4 1582.3,213.4 1579.3,210.8 1582.3,213.4 1579.3,216.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="1587.3" y="218" style="fill:#8a3030;font-size:11.5px;font-weight:600">?</text>
+<rect x="1675.4" y="203" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="1699.2" y="217" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="1489" y="245">cart: round shipping half even</text>
+<text class="ttl" x="1489" y="260">too</text>
+<line x1="1489" y1="272" x2="1721" y2="272" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="1489" y="285">opened 2026-03-11 &#183; still open</text>
+<text class="note" x="1489" y="299">Follow-up of PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a>.</text>
+<text class="note" x="1489" y="313"><tspan style="font-weight:700">Blocks <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</tspan></text>
+<g transform="rotate(-45 1478 193)">
+<rect x="1454.5" y="182.15" width="47.0" height="21.7" rx="10.85" fill="#ff2a2a" stroke="#f3f0e8" stroke-width="1.2"/>
+<text class="pill" x="1478.45" y="197.2" text-anchor="middle" style="fill:#ffffff;font-size:15.75px;letter-spacing:.9px">new</text>
+</g>
+</g>
+<g id="n121">
+<rect x="1475" y="470" width="260" height="150" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="1489" y="498" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a></text>
+<polyline points="1572.3,493.4 1582.3,493.4 1579.3,490.8 1582.3,493.4 1579.3,496.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="1587.3" y="498" style="fill:#8a3030;font-size:11.5px;font-weight:600">bob</text>
+<rect x="1675.4" y="483" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="1699.2" y="497" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="1489" y="525">coupon line shows the old total</text>
+<text class="ttl" x="1489" y="540">after stacking</text>
+<line x1="1489" y1="552" x2="1721" y2="552" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="1489" y="565">opened 2026-03-21 &#183; still open</text>
+<text class="note" x="1489" y="579"><tspan style="font-weight:700">Found in review of PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a>.</tspan></text>
+<text class="note" x="1489" y="593"><tspan style="font-weight:700">Blocked by <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a>.</tspan></text>
+<text class="note" x="1489" y="607">Fix in PR <a href="https://github.com/acme/shop/pull/122" xlink:href="https://github.com/acme/shop/pull/122" target="_blank"><title>checkout: show the stacked total on the coupon line (#121)</title><tspan style="text-decoration:underline">#122</tspan></a> (draft).</text>
+<g transform="rotate(-45 1478 473)">
+<rect x="1454.5" y="462.15" width="47.0" height="21.7" rx="10.85" fill="#ff2a2a" stroke="#f3f0e8" stroke-width="1.2"/>
+<text class="pill" x="1478.45" y="477.2" text-anchor="middle" style="fill:#ffffff;font-size:15.75px;letter-spacing:.9px">new</text>
+</g>
+</g>
+<g id="n122">
+<rect x="1475" y="751" width="260" height="122" rx="10" fill="#fff6c9" stroke="#8f6400" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="kind" x="1489" y="779" style="fill:#8f6400">PR <a href="https://github.com/acme/shop/pull/122" xlink:href="https://github.com/acme/shop/pull/122" target="_blank"><title>checkout: show the stacked total on the coupon line (#121)</title><tspan style="text-decoration:underline">#122</tspan></a></text>
+<text class="meta" x="1551.6" y="779" style="fill:#8f6400;font-size:11.5px;font-weight:600">by bob</text>
+<rect x="1668.0" y="764" width="55.0" height="20" rx="10" fill="#9a6700"/>
+<text class="pill" x="1695.5" y="778" text-anchor="middle" style="fill:#fff6c9">draft</text>
+<text class="ttl" x="1489" y="806">checkout: show the stacked total</text>
+<text class="ttl" x="1489" y="821">on the coupon line (<a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>)</text>
+<line x1="1489" y1="833" x2="1721" y2="833" stroke="#8f6400" stroke-opacity="0.35"/>
+<text class="meta" x="1489" y="846">opened 2026-03-22 &#183; draft</text>
+<text class="note" x="1489" y="860">Closes <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
+</g>
+<rect x="449.0" y="241.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="472.0" y="254.0" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="417.0" y="521.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="440.0" y="534.0" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="449.0" y="802.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="472.0" y="815.0" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="871.7" y="241.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="907.5" y="254.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="1336.7" y="241.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#8a4b12" stroke-width="0.9"/>
+<text class="lbl" x="1372.5" y="254.0" text-anchor="middle" style="fill:#8a4b12">follow-up</text>
+<rect x="871.7" y="521.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="907.5" y="534.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="1346.3" y="521.0" width="52.4" height="18.0" rx="4" fill="#fffdf7" stroke="#8a4b12" stroke-width="0.9"/>
+<text class="lbl" x="1372.5" y="534.0" text-anchor="middle" style="fill:#8a4b12">led to</text>
+<rect x="1572.0" y="389.0" width="66.0" height="18.0" rx="4" fill="#fffdf7" stroke="#8a3030" stroke-width="0.9"/>
+<text class="lbl" x="1605.0" y="402.0" text-anchor="middle" style="fill:#8a3030">blocked by</text>
+<rect x="1569.2" y="676.5" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="1605.0" y="689.5" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="862.1" y="802.0" width="90.8" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="907.5" y="815.0" text-anchor="middle" style="fill:#1d4e89">work done by</text>
+<rect x="886.7" y="1068.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="922.5" y="1081.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="1107.0" y="936.0" width="66.0" height="18.0" rx="4" fill="#fffdf7" stroke="#b02a2a" stroke-width="0.9"/>
+<text class="lbl" x="1140.0" y="949.0" text-anchor="middle" style="fill:#b02a2a">supersedes</text>
+<rect x="1110.6" y="669.5" width="58.8" height="18.0" rx="4" fill="#fffdf7" stroke="#6e6a64" stroke-width="0.9"/>
+<text class="lbl" x="1140.0" y="682.5" text-anchor="middle" style="fill:#6e6a64">related</text>
+<rect x="1860" y="190" width="500" height="448" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
+<text class="lgb" x="1876" y="220" style="font-size:16px">How to read this graph</text>
+<text class="lg" x="1876" y="244">Arrows run from the earlier item to the later one;</text>
+<text class="lg" x="1876" y="262">blocked by, supersedes and related may point back.</text>
+<rect x="1876" y="288" width="88" height="30" rx="7" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.4"/>
+<text class="pill" x="1920" y="307" text-anchor="middle" style="fill:#8a3030">open</text>
+<rect x="1972" y="288" width="88" height="30" rx="7" fill="#eceae6" stroke="#6e6a64" stroke-width="1.4"/>
+<text class="pill" x="2016" y="307" text-anchor="middle" style="fill:#6e6a64">closed</text>
+<rect x="2068" y="288" width="88" height="30" rx="7" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.4"/>
+<text class="pill" x="2112" y="307" text-anchor="middle" style="fill:#1d4e89">merged</text>
+<rect x="2164" y="288" width="88" height="30" rx="7" fill="#ffeb85" stroke="#8f6400" stroke-width="1.4"/>
+<text class="pill" x="2208" y="307" text-anchor="middle" style="fill:#8f6400">waiting</text>
+<rect x="2260" y="288" width="88" height="30" rx="7" fill="#fff6c9" stroke="#8f6400" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text class="pill" x="2304" y="307" text-anchor="middle" style="fill:#8f6400">draft</text>
+<text class="lg" x="1876" y="338">Closed without merging: gray, red stripes, red cross.</text>
+<text class="lg" x="1876" y="358">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
+<text class="lg" x="1876" y="378"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
+<line x1="1876" y1="416" x2="1922" y2="416" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
+<text class="lgb" x="1934" y="420" style="font-size:12.5px">child</text>
+<text class="lg" x="2030" y="420" style="font-size:12px">B is a formal child of umbrella A</text>
+<line x1="1876" y1="444" x2="1922" y2="444" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
+<text class="lgb" x="1934" y="448" style="font-size:12.5px">closed by</text>
+<text class="lg" x="2030" y="448" style="font-size:12px">B is the pull request that closed issue A</text>
+<line x1="1876" y1="472" x2="1922" y2="472" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
+<text class="lgb" x="1934" y="476" style="font-size:12.5px">work done by</text>
+<text class="lg" x="2030" y="476" style="font-size:12px">B worked on A without closing it</text>
+<line x1="1876" y1="500" x2="1922" y2="500" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="1934" y="504" style="font-size:12.5px">follow-up</text>
+<text class="lg" x="2030" y="504" style="font-size:12px">B was filed for what A left out</text>
+<line x1="1876" y1="528" x2="1922" y2="528" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="1934" y="532" style="font-size:12.5px">led to</text>
+<text class="lg" x="2030" y="532" style="font-size:12px">work on A produced B</text>
+<line x1="1876" y1="556" x2="1922" y2="556" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
+<text class="lgb" x="1934" y="560" style="font-size:12.5px">supersedes</text>
+<text class="lg" x="2030" y="560" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
+<line x1="1876" y1="584" x2="1922" y2="584" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
+<text class="lgb" x="1934" y="588" style="font-size:12.5px">blocked by</text>
+<text class="lg" x="2030" y="588" style="font-size:12px">A cannot finish until B is done</text>
+<line x1="1876" y1="612" x2="1922" y2="612" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
+<text class="lgb" x="1934" y="616" style="font-size:12.5px">related</text>
+<text class="lg" x="2030" y="616" style="font-size:12px">related work, no parent</text>
+<script type="text/javascript"><![CDATA[
+/* Find box for the lineage diagram: type a number (120, #120) to jump to that issue or pull request,
+   or any text (a username, a title word, merged) to light up every matching box. */
+(function () {
+  var SVGNS = 'http://www.w3.org/2000/svg', HTMLNS = 'http://www.w3.org/1999/xhtml';
+  var svg = document.documentElement;
+  var info = [].slice.call(document.querySelectorAll('g[id]')).filter(function (g) { return /^n\d+$/.test(g.id); })
+    .map(function (g) { return { g: g, num: g.id.slice(1), text: (g.textContent || '').replace(/\s+/g, ' ').toLowerCase() }; });
+  if (!info.length) return;
+
+  var css = document.createElementNS(SVGNS, 'style');
+  css.textContent =
+    '.q-on g[id^="n"]{opacity:.2;transition:opacity .15s}' +
+    '.q-on g[id^="n"].hit{opacity:1;filter:drop-shadow(0 0 7px #ff7a00)}' +
+    '.q-on g[id^="n"].hit>rect:first-child{stroke:#ff7a00;stroke-width:5}' +
+    '.q-on g[id^="n"].cur>rect:first-child{stroke:#e6007a;stroke-width:6}' +
+    '.q-on path[marker-end]{opacity:.35}';
+  svg.insertBefore(css, svg.firstChild);
+
+  /* Host: move the drawing into a scrollable HTML container that fills the window, and put the find box
+     OUTSIDE the scrolling area, so it stays at the bottom-left whatever is scrolled, focused or zoomed. */
+  var W = 330;
+  var inner = document.createElementNS(SVGNS, 'svg');
+  ['width', 'height', 'viewBox', 'font-family'].forEach(function (a) { if (svg.hasAttribute(a)) inner.setAttribute(a, svg.getAttribute(a)); });
+  inner.setAttribute('style', 'display:block');
+  [].slice.call(svg.childNodes).forEach(function (n) {
+    if (n.nodeType === 1 && (n.localName === 'script' || n === css)) return;
+    inner.appendChild(n);
+  });
+  svg.removeAttribute('viewBox'); svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
+  var fo = document.createElementNS(SVGNS, 'foreignObject');
+  fo.setAttribute('x', 0); fo.setAttribute('y', 0); fo.setAttribute('width', '100%'); fo.setAttribute('height', '100%');
+  var host = document.createElementNS(HTMLNS, 'div');
+  host.setAttribute('style', 'position:relative;width:100%;height:100%;overflow:hidden;background:#f3f0e8');
+  var scroller = document.createElementNS(HTMLNS, 'div');
+  scroller.setAttribute('style', 'position:absolute;left:0;top:0;right:0;bottom:0;overflow:auto');
+  scroller.appendChild(inner); host.appendChild(scroller);
+
+  var box = document.createElementNS(HTMLNS, 'div');
+  box.setAttribute('style', 'position:absolute;left:12px;bottom:30px;z-index:10;box-sizing:border-box;width:' + W + 'px;padding:8px 10px;background:#163e73;border:2px solid #0e2b52;border-radius:10px;box-shadow:0 3px 12px rgba(14,43,82,.45);font:12px Helvetica,Arial,sans-serif;color:#fff');
+  var row = document.createElementNS(HTMLNS, 'div');
+  row.setAttribute('style', 'display:flex;gap:6px;align-items:center');
+  var input = document.createElementNS(HTMLNS, 'input');
+  input.setAttribute('type', 'text');
+  input.setAttribute('placeholder', 'number or name');
+  input.setAttribute('style', 'flex:1;min-width:0;font:13px Helvetica,Arial,sans-serif;padding:4px 8px;border:1px solid #0e2b52;border-radius:6px;background:#fff;color:#1c2430');
+  function btn(label, title) {
+    var b = document.createElementNS(HTMLNS, 'button');
+    b.textContent = label; b.setAttribute('title', title);
+    b.setAttribute('style', 'font:12px Helvetica,Arial,sans-serif;padding:3px 7px;border:1px solid #6f93c4;border-radius:6px;background:#1d4e89;color:#fff;cursor:pointer');
+    return b;
+  }
+  var prev = btn('◀', 'previous match (Shift+Enter)'), next = btn('▶', 'next match (Enter)'), clear = btn('✕', 'clear (Esc)');
+  var note = document.createElementNS(HTMLNS, 'div');
+  note.setAttribute('style', 'margin-top:4px;font-size:11px;color:#cfe0f5');
+  note.textContent = 'press / to search';
+  row.appendChild(input); row.appendChild(prev); row.appendChild(next); row.appendChild(clear);
+  box.appendChild(row); box.appendChild(note); host.appendChild(box);
+  fo.appendChild(host); svg.appendChild(fo);
+  svg.style.overflow = 'hidden';
+  /* Size everything in explicit pixels from the window size. Percentages are not re-resolved by every browser
+     after the window or the zoom changes, which left part of the screen undrawn. */
+  function fit() {
+    var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+    svg.setAttribute('width', w); svg.setAttribute('height', h);
+    fo.setAttribute('width', w); fo.setAttribute('height', h);
+    host.style.width = w + 'px'; host.style.height = h + 'px';
+    comp();
+  }
+  /* Keep the find box about the same size on screen when the browser zoom changes. The zoom is read as the
+     absolute zoom (devicePixelRatio over the native ratio, found below). The box is
+     scaled by the inverse, from its bottom-left corner, and its offsets are scaled with it. */
+  /* A reload keeps the zoom the page had, so the zoom at load is not 1 and cannot be read from the change since
+     load. The absolute zoom is devicePixelRatio / nativeDpr, where nativeDpr is the ratio at 100% (1 on a plain
+     screen, 2 on a retina one, 1.25, 1.5 ... with a Windows scale). nativeDpr is chosen among those values: the one
+     whose implied zoom is closest to outerWidth/innerWidth (outerWidth does not scale with the page zoom in Chrome
+     and Safari, innerWidth does). A docked devtools panel or a sidebar spoils the ratio, so the match must be
+     within 20%, else the page is taken to be at 100% at load. */
+  function nativeDpr() {
+    var d = window.devicePixelRatio || 1, r = window.outerWidth / window.innerWidth, best = d, bd = 0.2;
+    if (!isFinite(r) || r <= 0 || window.innerWidth < 200) return d;
+    [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 4].forEach(function (n) {
+      var e = Math.abs(Math.log((d / n) / r));
+      if (e < bd) { bd = e; best = n; }
+    });
+    return best;
+  }
+  var ndpr = nativeDpr(), zoomNow = 1;
+  function comp() {
+    var z = (window.devicePixelRatio || 1) / ndpr;
+    z = Math.min(5, Math.max(0.1, z));
+    if (Math.abs(z - zoomNow) < 0.005) return;
+    zoomNow = z;
+    box.style.transformOrigin = 'left bottom';
+    box.style.transform = 'scale(' + (1 / z) + ')';
+    box.style.left = (12 / z) + 'px'; box.style.bottom = (30 / z) + 'px';
+  }
+  window.lineageZoom = function () { return { dpr: window.devicePixelRatio, outer: window.outerWidth, inner: window.innerWidth, native: ndpr, zoom: zoomNow }; };
+  fit();
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', fit);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+  setInterval(function () {   /* safety net for a zoom that fires no resize event */
+    comp();
+    if (+fo.getAttribute('width') !== Math.max(1, window.innerWidth) || +fo.getAttribute('height') !== Math.max(1, window.innerHeight)) fit();
+  }, 300);
+  if (window.innerWidth < 50 || window.innerHeight < 50 || !scroller.clientWidth || !scroller.clientHeight) {      /* no real window (for example a thumbnail): keep the plain picture */
+    while (inner.firstChild) svg.insertBefore(inner.firstChild, fo);
+    svg.removeChild(fo);
+    ['width', 'height', 'viewBox'].forEach(function (a) { if (inner.hasAttribute(a)) svg.setAttribute(a, inner.getAttribute(a)); });
+    return;
+  }
+
+  var hits = [], cur = 0;
+  function reset() {
+    svg.classList.remove('q-on');
+    info.forEach(function (i) { i.g.classList.remove('hit'); i.g.classList.remove('cur'); });
+    hits = []; cur = 0;
+  }
+  function find(q) {
+    q = q.trim().toLowerCase().replace(/^#/, '');
+    if (!q) return [];
+    if (/^\d+$/.test(q)) {
+      var exact = info.filter(function (i) { return i.num === q; });
+      return exact.length ? exact : info.filter(function (i) { return i.num.indexOf(q) === 0; });
+    }
+    var toks = q.split(/\s+/);
+    return info.filter(function (i) { return toks.every(function (t) { return i.text.indexOf(t) >= 0; }); });
+  }
+  function show(jump) {
+    info.forEach(function (i) { i.g.classList.remove('cur'); });
+    if (!hits.length) return;
+    hits[cur].g.classList.add('cur');
+    note.textContent = hits.length + (hits.length === 1 ? ' match: #' : ' matches, showing #') + hits[cur].num + (hits.length > 1 ? ' (' + (cur + 1) + '/' + hits.length + ')' : '');
+    if (jump) {
+      var r = hits[cur].g.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+      scroller.scrollTo({ left: Math.max(0, scroller.scrollLeft + (r.left - sr.left) + r.width / 2 - scroller.clientWidth / 2),
+                          top: Math.max(0, scroller.scrollTop + (r.top - sr.top) + r.height / 2 - scroller.clientHeight / 2), behavior: jump === 'instant' ? 'auto' : 'smooth' });
+    }
+  }
+  function run(q, jump) {
+    reset();
+    hits = find(q);
+    if (!q.trim()) { note.textContent = 'press / to search'; return; }
+    if (!hits.length) { note.textContent = 'no match'; return; }
+    svg.classList.add('q-on');
+    hits.forEach(function (i) { i.g.classList.add('hit'); });
+    show(jump);
+  }
+  function step(d) { if (hits.length) { cur = (cur + d + hits.length) % hits.length; show(true); } }
+
+  input.addEventListener('input', function () { run(input.value, true); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { input.value = ''; run('', false); input.blur(); }
+    e.stopPropagation();
+  });
+  prev.addEventListener('click', function () { step(-1); });
+  next.addEventListener('click', function () { step(1); });
+  clear.addEventListener('click', function () { input.value = ''; run('', false); });
+  function clearAll() { input.value = ''; run('', false); input.blur(); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== input) { e.preventDefault(); input.focus(); }
+    else if (e.key === 'Escape') { clearAll(); }
+  });
+  document.addEventListener('dblclick', function (e) {
+    if (box.contains(e.target)) return;
+    clearAll();
+    if (window.getSelection) window.getSelection().removeAllRanges();
+  });
+
+  var h = decodeURIComponent((location.hash || '').replace(/^#(find=)?/, ''));
+  if (h) { input.value = h; setTimeout(function () { run(h, 'instant'); }, 50); }
+  window.lineageFind = function (q) { input.value = q; run(q, true); return hits.map(function (i) { return i.num; }); };
+})();
+
+]]></script>
+</svg>
