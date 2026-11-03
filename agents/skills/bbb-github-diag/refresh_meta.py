@@ -19,7 +19,8 @@ usage: refresh_meta.py OWNER/REPO diagram.svg snapshot.json [--tsv-dir DIR] [--d
 - A pull request that is open and a draft has the state `draft`; an open one that is ready is `open` (pill `waiting`).
 - Needs the `gh` CLI, logged in. Run it outside any sandbox that blocks TLS to api.github.com.
 """
-import json, os, re, subprocess, sys
+import json, os, re, subprocess, sys, tempfile
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')   # keep the compiled svg_state.py out of the skill folder
 
 FIELDS = """
   __typename
