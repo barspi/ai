@@ -29,7 +29,7 @@ FIELDS = """
                  blocking(first:20){nodes{number}} closedByPullRequestsReferences(first:10){nodes{number}} }
   ... on PullRequest { title state isDraft merged mergedAt updatedAt author{login} comments{totalCount}
                  reviews{totalCount} mergeCommit{oid} mergedBy{login} closingIssuesReferences(first:20){nodes{number}}
-                 commits(first:50){nodes{commit{authors(first:5){nodes{user{login}}}}}} }
+                 commits(first:50){nodes{commit{authors(first:5){nodes{name user{login}}}}}} }
 """
 
 def discover(repo, svg_text, live, since, meta):
@@ -120,8 +120,9 @@ def main():
         if pr:
             for c in d['commits']['nodes']:
                 for a in c['commit']['authors']['nodes']:
-                    if a['user'] and a['user']['login'] not in authors:
-                        authors.append(a['user']['login'])
+                    who = (a['user'] or {}).get('login') or a.get('name')      # no GitHub login: the git author's name
+                    if who and who not in authors:
+                        authors.append(who)
         nums_of = lambda key: sorted(x['number'] for x in d[key]['nodes']) if d.get(key) else []
         rel = {'closes': nums_of('closingIssuesReferences')} if pr else {
             'parent': (d['parent'] or {}).get('number'), 'children': nums_of('subIssues'), 'blockedBy': nums_of('blockedBy'),
