@@ -11,8 +11,13 @@ One or two lines: the repository (`OWNER/REPO`), the root issue(s), the topic. N
 - Roots: `#A`, `#B` (why each; if you picked a root yourself, say why, with the link).
 - Filters the user gave (state, closed within N days, area or label, depth) — quote them.
 - Relations followed: sub-issues, closing references, `blockedBy`/`blocking`, text relations.
-- Exceptions to the date window: each item kept although it is older, and why (a direct child of `#N`, already in the chart, …).
-- Questions asked of the user, and the answers.
+- Stopping rule: relevance and age (no hop limit), and the box cap (default about 40).
+- Exceptions to the date window, as a table (ask the user once, as one question):
+
+  | Item | Closed | Why kept |
+  |---|---|---|
+  | `#N` | YYYY-MM-DD | sub-issue of `#R`, or the pull request that tried to close `#N` |
+- Open questions, numbered, each with the GitHub link of the item it is about (the agent could not ask: say what was chosen), and later the user's answers.
 
 ## Layout (this diagram only)
 

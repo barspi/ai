@@ -2,7 +2,8 @@
 """Geometry, text and content checks for an issue/PR lineage SVG. No rendering.
 usage: check_diag.py new.svg [old.svg]
 Exit code 1 when a check fails. Checks the SVG text and path geometry only."""
-import re, sys
+import os, re, sys, tempfile
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')   # keep the compiled fonts.py out of the skill folder
 import xml.dom.minidom as md
 from fonts import load      # finds Helvetica/Arial/Liberation/DejaVu and Menlo/Consolas/... on macOS, Linux and Windows
 
@@ -79,6 +80,8 @@ for n, (bx, by, bw, bh) in boxes.items():
     if not (k and nm and pill):
         continue
     x, y, size, text = float(nm.group(1)), float(nm.group(2)), float(nm.group(3)), nm.group(4)
+    if x < bx + 10:
+        fail(f'name "{text}" in #{n} starts at {x:.0f}, left of the box text column (box x {bx:.0f})')
     if size < 9 - 0.01:
         fail(f'name in #{n} is {size}px (minimum 9px; use a second line)')
     w = load('bold', int(size * 4)).getlength(text.replace('&amp;', '&')) / 4
@@ -114,10 +117,27 @@ for i, (pts, arcs) in enumerate(paths):  # arrow tips touch a box edge
     if not ok:
         fail(f'path {i} tip ({px},{py}) does not touch a box')
 
+for i, (pts, arcs) in enumerate(paths):  # arrow tails touch a box edge too (an exit that falls below its box is a defect)
+    px, py = pts[0]
+    ok = any((abs(px - bx) < 1.5 or abs(px - (bx + bw)) < 1.5) and by - 1 <= py <= by + bh + 1 or
+             (abs(py - by) < 1.5 or abs(py - (by + bh)) < 1.5) and bx - 1 <= px <= bx + bw + 1
+             for (bx, by, bw, bh) in boxes.values())
+    if not ok:
+        fail(f'path {i} tail ({px},{py}) does not touch a box')
+
 for sg in segs:
     for n, r in boxes.items():
         if seg_in_box(sg, r):
             fail(f'path {sg[0]} runs through box #{n}')
+
+# ---- a jog (a short segment between two bends) shorter than 30px reads as a glitch; a straight arrow or a longer jog is fine
+for i, (pts, arcs) in enumerate(paths):
+    if arcs:
+        continue
+    for k in range(1, len(pts) - 2):
+        d = abs(pts[k + 1][0] - pts[k][0]) + abs(pts[k + 1][1] - pts[k][1])
+        if 0.5 < d < 30 and k >= 1:
+            print(f'WARN path {i} has a {d:.0f}px jog near ({pts[k][0]:.0f},{pts[k][1]:.0f}): make it straight or 30px or more')   # a warning: the rule says about 30px
 
 # ---- labels
 for k, (x, y, w, h) in enumerate(labels):
@@ -202,5 +222,44 @@ if old:
 cols = sorted({round(b[0]) for b in boxes.values()})
 print('column gaps', [cols[i + 1] - cols[i] - 260 for i in range(len(cols) - 1)])
 print('canvas', re.search(r'<svg[^>]*width="(\d+)" height="(\d+)"', new).groups())
+_w, _h = (int(v) for v in re.search(r'<svg[^>]*width="(\d+)" height="(\d+)"', new).groups())
+if _h >= 2 * _w or _w >= 2 * _h:
+    print('NOTE aspect %.1f:1 (%s): ask the user about the layout before going on' % (max(_w, _h) / min(_w, _h), 'tall' if _h > _w else 'wide'))
+# ---- largest empty rectangle (boxes, frames and the legend count as occupied), 10px grid
+cw, ch = (int(v) for v in re.search(r'<svg[^>]*width="(\d+)" height="(\d+)"', new).groups())
+occ = list(boxes.values()) + frames + [tuple(float(v) for v in m.groups()) for m in re.finditer(
+    r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="14" fill="#fbfaf6"', new)]
+G = 10
+cols, rows_ = cw // G, ch // G
+grid = [[0] * cols for _ in range(rows_)]
+for (ox, oy, ow, oh) in occ:
+    for gy in range(max(0, int(oy // G)), min(rows_, int((oy + oh) // G) + 1)):
+        for gx in range(max(0, int(ox // G)), min(cols, int((ox + ow) // G) + 1)):
+            grid[gy][gx] = 1
+top = min(oy for (_ox, oy, _ow, _oh) in occ)      # the title and header lines sit above the first box or frame
+for gy in range(min(rows_, int(top // G))):
+    grid[gy] = [1] * cols
+best, heights = (0, 0, 0, 0), [0] * cols
+for gy in range(rows_):
+    heights = [0 if grid[gy][gx] else heights[gx] + 1 for gx in range(cols)]
+    stack = []
+    for gx in range(cols + 1):
+        h = heights[gx] if gx < cols else 0
+        start = gx
+        while stack and stack[-1][1] >= h:
+            sx, sh = stack.pop()
+            area = sh * (gx - sx)
+            if area > best[0]:
+                best = (area, sx, gy - sh + 1, (gx - sx, sh))
+            start = sx
+        stack.append((start, h))
+_lg = re.search(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="14" fill="#fbfaf6"', new)
+if _lg:
+    _lx, _ly, _lw, _lh = (float(v) for v in _lg.groups())
+    _right = max(bx + bw for (bx, by, bw, bh) in list(boxes.values()) + frames)       # the farthest right edge of the nodes
+    if _ly > 300 or _lx + _lw < _right - 20:
+        print(f'WARN legend right edge {_lx + _lw:.0f} (top {_ly:.0f}) should be in the top row and reach the farthest right node edge {_right:.0f}: move it to the top right of the chart')
+if best[0]:
+    print(f'largest empty rectangle {best[3][0] * G}x{best[3][1] * G}px at ({best[1] * G},{best[2] * G})')
 print('FAILS', fails)
 sys.exit(1 if fails else 0)

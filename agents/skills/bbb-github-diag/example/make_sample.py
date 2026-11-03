@@ -8,7 +8,8 @@ files that `refresh_meta.py --tsv-dir` writes for a real diagram, so nobody type
 usage: python3 make_sample.py [out.svg]      (default: sample-lineage.svg next to this file)
 then:  python3 ../check_diag.py sample-lineage.svg
 """
-import os, re, sys, textwrap
+import os, re, sys, tempfile, textwrap
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')   # keep the compiled fonts.py out of the skill folder
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
@@ -25,6 +26,7 @@ STY = {
     'merged':   dict(fill='#e7f0fb', stroke='#1d4e89', pill='#163e73', pw=62.4, word='merged',  kind='PR'),
     'waiting':  dict(fill='#ffeb85', stroke='#8f6400', pill='#9a6700', pw=69.8, word='waiting', kind='PR'),
     'draft':    dict(fill='#fff6c9', stroke='#8f6400', pill='#9a6700', pw=55.0, word='draft',   kind='PR', dashed=True),
+    'handclosed': dict(fill='#eceae6', stroke='#6e6a64', pill='#4e4b48', pw=62.4, word='closed',  kind='ISSUE', cross=True),
     'prclosed': dict(fill='#eceae6', stroke='#6e6a64', pill='#4e4b48', pw=62.4, word='closed',  kind='PR', stripes=True, cross=True),
 }
 # arrow word: colour, dashed, arrowhead marker, label width
@@ -48,7 +50,7 @@ MEANS = [('child', 'B is a formal child of umbrella A'), ('closed by', 'B is the
 CX = [80, 545, 1010, 1475]          # column x; boxes are 260 wide, gaps are 205
 ITEMS = [
     (100, 0, 1, 'umbrella', 'Checkout rework: cart, coupons and guest retry', 'opened 2026-03-02 · still open', None,
-     ['Lists #101, #102 and #103 as children.', '**Blocked by #102.**']),
+     ['Lists #101, #102, #103 and #104 as children.', '**Blocked by #102.**']),
     (101, 1, 0, 'closed', 'Cart totals round half up instead of half even', 'opened 2026-03-04 · closed 2026-03-11', None,
      ['Closed by PR #110.']),
     (110, 2, 0, 'merged', 'cart: round totals half even (#101)', 'opened 2026-03-09 · merged 2026-03-11', 'merge 9f3c2ab41 (bob)',
@@ -63,6 +65,8 @@ ITEMS = [
      ['**Found in review of PR #111.**', '**Blocked by #120.**', 'Fix in PR #122 (draft).']),
     (122, 3, 2, 'draft', 'checkout: show the stacked total on the coupon line (#121)', 'opened 2026-03-22 \u00b7 draft', None,
      ['Closes #121.']),
+    (104, 1, 3, 'handclosed', 'Guest checkout: gift cards without an account', 'opened 2026-03-10 \u00b7 closed 2026-03-19', None,
+     ['Closed as not planned; no pull request.']),
     (103, 1, 2, 'closed', 'Guest checkout fails on payment retry', 'opened 2026-03-10 · closed 2026-03-18', None,
      ['Work started in PR #112,', 'finished in PR #113.']),
     (112, 2, 2, 'prclosed', 'checkout: keep the guest cart on retry (#103)', 'opened 2026-03-12 · closed 2026-03-17', None,
@@ -105,7 +109,7 @@ def rich(t):
     if '**' in t:
         return ''.join(('<tspan style="font-weight:700">%s</tspan>' % rich(p)) if i % 2 else rich(p) for i, p in enumerate(t.split('**')) if p)
     out, pos = '', 0
-    for m in re.finditer(r'#(\d{3,4})', t):
+    for m in re.finditer(r'#(\d{3,6})', t):
         out += esc(t[pos:m.start()]) + link(int(m.group(1)))
         pos = m.end()
     return out + esc(t[pos:])
@@ -115,13 +119,27 @@ _kind_font = load('bold', 54)      # 13.5px bold, measured at 4x
 _who_font = load('bold', 46)       # 11.5px bold
 
 
+def wrap_px(text, style, size, maxw=232):
+    """Greedy word wrap by the measured width of the real font (not by a character count)."""
+    f = load(style, int(size * 4))
+    plain = lambda t: re.sub(r'\*\*|#', '', t)
+    lines, cur = [], ''
+    for word in text.split():
+        trial = (cur + ' ' + word).strip()
+        if cur and f.getlength(plain(trial)) / 4 > maxw:
+            lines.append(cur); cur = word
+        else:
+            cur = trial
+    return lines + [cur] if cur else lines
+
+
 def node(num, x, y, state, title, meta, mono, notes, new):
     st = STY[state]
-    lines = textwrap.wrap(title, 33)
+    lines = wrap_px(title, 'regular', 12.5)
     t = len(lines)
     nlines = []
-    for n in notes:                                    # notes wrap at 38 characters
-        nlines += textwrap.wrap(n, 38) if '**' not in n else [n]
+    for n in notes:                                    # notes wrap by measured width
+        nlines += [n] if '**' in n else wrap_px(n, 'italic', 11)     # a bold claim line is written to fit on one line
     h = 78 + 15 * t + 14 * len(nlines) + (14 if mono else 0)
     pr = st['kind'] == 'PR'
     u = 'https://github.com/%s/%s/%d' % (REPO, 'pull' if pr else 'issues', num)
@@ -139,11 +157,11 @@ def node(num, x, y, state, title, meta, mono, notes, new):
     label = '%s #%d' % (st['kind'], num)
     w = _kind_font.getlength(label) / 4 + 0.3 * len(label)
     limit = x + 248 - st['pw'] - (25 if st.get('cross') else 6)        # the cross's left edge is 19px left of the pill
-    for size, line_y, x0 in ((11.5, y + 28, x + 14 + w), (9, y + 28, x + 14 + w), (11.5, y + 41, x - w)):
-        ax = x0 + 6                                                    # where the tiny arrow starts
-        tx = x0 + 8 if pr else ax + 15
+    for size, line_y, second in ((11.5, y + 28, False), (9, y + 28, False), (11.5, y + 41, True)):
+        ax = x + 14 if second else x + 14 + w + 6                      # where the tiny arrow starts
+        tx = (x + 14 if second else x + 14 + w + 8) if pr else ax + 15
         end = tx + load('bold', int(size * 4)).getlength(text) / 4
-        if end <= (limit if line_y == y + 28 else x + 246):
+        if end <= (x + 246 if second else limit):
             break
     else:
         raise SystemExit('name of #%d does not fit even on a second line' % num)
@@ -222,6 +240,7 @@ u = BOX[100]
 edge([(R(100), u[1] + 30), (400, u[1] + 30), (400, T(101) + 60), (L(101), T(101) + 60)], 'child', (472, T(101) + 60))
 edge([(R(100), u[1] + 60), (L(102), T(102) + 60)], 'child', (440, u[1] + 60))
 edge([(R(100), u[1] + 90), (400, u[1] + 90), (400, T(103) + 60), (L(103), T(103) + 60)], 'child', (472, T(103) + 60))
+edge([(R(100), u[1] + 120), (372, u[1] + 120), (372, T(104) + 60), (L(104), T(104) + 60)], 'child', (458, T(104) + 60))
 edge([(R(101), T(101) + 60), (L(110), T(110) + 60)], 'closed by', ((R(101) + L(110)) / 2, T(101) + 60))
 edge([(R(110), T(110) + 60), (L(120), T(120) + 60)], 'follow-up', ((R(110) + L(120)) / 2, T(110) + 60))
 edge([(R(102), T(102) + 60), (L(111), T(111) + 60)], 'closed by', ((R(102) + L(111)) / 2, T(102) + 60))
@@ -237,7 +256,7 @@ edge([(L(111) + 130, B(111)), (L(112) + 130, T(112))], 'related', (L(111) + 130,
 # ------------------------------------------------------------------ frame (an area of work; it names no relation), page, title
 fx0, fy0 = L(103) - 60, T(112) - 46
 frame = ['<rect x="%s" y="%s" width="%s" height="%s" rx="18" fill="#ffffff" fill-opacity="0.22" stroke="#8d877e" stroke-width="1.6" stroke-dasharray="2 6" stroke-linecap="round"/>' % (
-    fx0, fy0, R(113) + 30 - fx0, B(113) + 24 - fy0),
+    fx0, fy0, R(113) + 30 - fx0, max(B(113), B(104)) + 24 - fy0),
     '<text class="ftl" x="%s" y="%s">guest checkout</text>' % (fx0 + 16, fy0 + 24)]
 W = 2420
 H = int(max(B(n) for n in BOX) + 80)
@@ -257,7 +276,9 @@ for i, (word, c) in enumerate(((k, STY[k]) for k in ('open', 'closed', 'merged',
     lg.append('<rect x="%s" y="%s" width="88" height="30" rx="7" fill="%s" stroke="%s" stroke-width="1.4"%s/>' % (lx, y, c['fill'], c['stroke'], ' stroke-dasharray="6 4"' if c.get('dashed') else ''))
     lg.append('<text class="pill" x="%s" y="%s" text-anchor="middle" style="fill:%s">%s</text>' % (lx + 44, y + 19, c['stroke'], c['word']))
 y += 50
-lg.append('<text class="lg" x="%s" y="%s">Closed without merging: gray, red stripes, red cross.</text>' % (LX + 16, y))
+lg.append('<text class="lg" x="%s" y="%s">Closed pull request, not merged: gray, red stripes, red cross.</text>' % (LX + 16, y))
+y += 20
+lg.append('<text class="lg" x="%s" y="%s">Red cross on a closed issue: no merged pull request closed it.</text>' % (LX + 16, y))
 y += 20
 lg.append('<text class="lg" x="%s" y="%s">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>' % (LX + 16, y))
 y += 20

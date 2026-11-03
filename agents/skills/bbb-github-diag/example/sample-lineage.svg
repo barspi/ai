@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2420" height="1233" viewBox="0 0 2420 1233" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2420" height="1203" viewBox="0 0 2420 1203" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
 <title>Sample lineage of a checkout rework (acme/shop)</title>
 <desc>Example for the bbb-github-diag skill: an umbrella with three children, the pull requests that closed or replaced them, follow-ups, a block and a related pair.</desc>
 <defs>
@@ -11,39 +11,40 @@
 <marker id="h-cross" overflow="visible" viewBox="0 0 16 16" refX="8" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M2.5,2.5 L13.5,13.5 M13.5,2.5 L2.5,13.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/></marker>
 <style>.kind{font-size:13.5px;font-weight:700;letter-spacing:.3px}.ttl{font-size:12.5px;fill:#1c2430}.meta{font-size:11px;fill:#3b4350}.mono{font-size:11px;font-family:Menlo,Consolas,monospace;fill:#1c2430}.note{font-size:11px;font-style:italic;fill:#3b4350}.pill{font-size:10.5px;font-weight:700;letter-spacing:.6px}.lbl{font-size:11.5px;font-weight:600}.ftl{font-size:15px;font-style:italic;fill:#6e6a64;letter-spacing:.4px}.h1{font-size:30px;font-weight:700;fill:#1c2430}.h2{font-size:15px;fill:#3b4350}.lg{font-size:13px;fill:#1c2430}.lgb{font-size:13px;font-weight:700;fill:#1c2430}</style>
 </defs>
-<rect x="0" y="0" width="2420" height="1233" fill="#f3f0e8"/>
+<rect x="0" y="0" width="2420" height="1203" fill="#f3f0e8"/>
 <text class="h1" x="80" y="70">Checkout rework: what grew out of umbrella <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a></text>
 <text class="h2" x="80" y="100"><tspan style="font-weight:700">Repository: acme/shop</tspan></text>
 <text class="h2" x="80" y="124">Arrows point from the earlier item to the item it produced, or from an issue to the pull request that closed it. Read left to right.</text>
 <text class="h2" x="80" y="148">Facts as of 2026-03-22. Dotted frames name an area of work only; the arrows carry the relationships.</text>
-<rect x="485" y="705" width="815" height="472" rx="18" fill="#ffffff" fill-opacity="0.22" stroke="#8d877e" stroke-width="1.6" stroke-dasharray="2 6" stroke-linecap="round"/>
-<text class="ftl" x="501" y="729">guest checkout</text>
-<path d="M340.0,500.0 L400.0,500.0 L400.0,250.0 L545.0,250.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
-<path d="M340.0,530.0 L545.0,530.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
-<path d="M340.0,560.0 L400.0,560.0 L400.0,811.0 L545.0,811.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<rect x="485" y="689" width="815" height="458" rx="18" fill="#ffffff" fill-opacity="0.22" stroke="#8d877e" stroke-width="1.6" stroke-dasharray="2 6" stroke-linecap="round"/>
+<text class="ftl" x="501" y="713">guest checkout</text>
+<path d="M340.0,485.0 L400.0,485.0 L400.0,250.0 L545.0,250.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<path d="M340.0,515.0 L545.0,515.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<path d="M340.0,545.0 L400.0,545.0 L400.0,795.0 L545.0,795.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
+<path d="M340.0,575.0 L372.0,575.0 L372.0,1047.0 L545.0,1047.0" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
 <path d="M805.0,250.0 L1010.0,250.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
 <path d="M1270.0,250.0 L1475.0,250.0" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
-<path d="M805.0,530.0 L1010.0,530.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M1270.0,530.0 L1475.0,530.0" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
-<path d="M1605.0,470.0 L1605.0,326.0" fill="none" stroke="#8a3030" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-blocked)"/>
-<path d="M1605.0,620.0 L1605.0,751.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M805.0,811.0 L1010.0,811.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-work)"/>
-<path d="M805.0,857.0 L835.0,857.0 L835.0,1077.0 L1010.0,1077.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M1140.0,1017.0 L1140.0,873.0" fill="none" stroke="#b02a2a" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-cross)"/>
-<path d="M1140.0,606.0 L1140.0,751.0" fill="none" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-ref)"/>
+<path d="M805.0,515.0 L1010.0,515.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M1270.0,515.0 L1475.0,515.0" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
+<path d="M1605.0,455.0 L1605.0,311.0" fill="none" stroke="#8a3030" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-blocked)"/>
+<path d="M1605.0,605.0 L1605.0,735.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M805.0,795.0 L1010.0,795.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-work)"/>
+<path d="M805.0,826.0 L835.0,826.0 L835.0,1047.0 L1010.0,1047.0" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
+<path d="M1140.0,987.0 L1140.0,857.0" fill="none" stroke="#b02a2a" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-cross)"/>
+<path d="M1140.0,591.0 L1140.0,735.0" fill="none" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-ref)"/>
 <g id="n100">
-<rect x="80" y="470" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
-<text class="kind" x="94" y="498" style="fill:#8a3030">UMBRELLA <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a></text>
-<polyline points="212.9,493.4 222.9,493.4 219.9,490.8 222.9,493.4 219.9,496.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-<text class="meta" x="227.9" y="498" style="fill:#8a3030;font-size:11.5px;font-weight:600">alice</text>
-<rect x="280.4" y="483" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
-<text class="pill" x="304.2" y="497" text-anchor="middle" style="fill:#f8e8e4">open</text>
-<text class="ttl" x="94" y="525">Checkout rework: cart, coupons</text>
-<text class="ttl" x="94" y="540">and guest retry</text>
-<line x1="94" y1="552" x2="326" y2="552" stroke="#8a3030" stroke-opacity="0.35"/>
-<text class="meta" x="94" y="565">opened 2026-03-02 &#183; still open</text>
-<text class="note" x="94" y="579">Lists <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>, <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a> and <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a> as children.</text>
-<text class="note" x="94" y="593"><tspan style="font-weight:700">Blocked by <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>.</tspan></text>
+<rect x="80" y="455" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="94" y="483" style="fill:#8a3030">UMBRELLA <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a></text>
+<polyline points="212.9,478.4 222.9,478.4 219.9,475.8 222.9,478.4 219.9,481.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="227.9" y="483" style="fill:#8a3030;font-size:11.5px;font-weight:600">alice</text>
+<rect x="280.4" y="468" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="304.2" y="482" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="94" y="510">Checkout rework: cart, coupons and</text>
+<text class="ttl" x="94" y="525">guest retry</text>
+<line x1="94" y1="537" x2="326" y2="537" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="94" y="550">opened 2026-03-02 &#183; still open</text>
+<text class="note" x="94" y="564">Lists <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>, <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>, <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a> and <a href="https://github.com/acme/shop/issues/104" xlink:href="https://github.com/acme/shop/issues/104" target="_blank"><title>Guest checkout: gift cards without an account</title><tspan style="text-decoration:underline">#104</tspan></a> as children.</text>
+<text class="note" x="94" y="578"><tspan style="font-weight:700">Blocked by <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>.</tspan></text>
 </g>
 <g id="n101">
 <rect x="545" y="190" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
@@ -52,173 +53,186 @@
 <text class="meta" x="657.3" y="218" style="fill:#6e6a64;font-size:11.5px;font-weight:600">bob</text>
 <rect x="730.6" y="203" width="62.4" height="20" rx="10" fill="#4e4b48"/>
 <text class="pill" x="761.8" y="217" text-anchor="middle" style="fill:#eceae6">closed</text>
-<text class="ttl" x="559" y="245">Cart totals round half up instead</text>
-<text class="ttl" x="559" y="260">of half even</text>
+<text class="ttl" x="559" y="245">Cart totals round half up instead of half</text>
+<text class="ttl" x="559" y="260">even</text>
 <line x1="559" y1="272" x2="791" y2="272" stroke="#6e6a64" stroke-opacity="0.35"/>
 <text class="meta" x="559" y="285">opened 2026-03-04 &#183; closed 2026-03-11</text>
 <text class="note" x="559" y="299">Closed by PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a>.</text>
 </g>
 <g id="n102">
-<rect x="545" y="470" width="260" height="151" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
-<text class="kind" x="559" y="498" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a></text>
-<polyline points="642.3,493.4 652.3,493.4 649.3,490.8 652.3,493.4 649.3,496.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-<text class="meta" x="657.3" y="498" style="fill:#8a3030;font-size:11.5px;font-weight:600">carol</text>
-<rect x="745.4" y="483" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
-<text class="pill" x="769.2" y="497" text-anchor="middle" style="fill:#f8e8e4">open</text>
-<text class="ttl" x="559" y="525">Coupon stacking: allow one</text>
-<text class="ttl" x="559" y="540">percent coupon and one fixed</text>
-<text class="ttl" x="559" y="555">coupon</text>
-<line x1="559" y1="567" x2="791" y2="567" stroke="#8a3030" stroke-opacity="0.35"/>
-<text class="meta" x="559" y="580">opened 2026-03-05 &#183; still open</text>
-<text class="note" x="559" y="594">Fix in PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a> (open).</text>
-<text class="note" x="559" y="608"><tspan style="font-weight:700">Blocks <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a>.</tspan></text>
+<rect x="545" y="455" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="559" y="483" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a></text>
+<polyline points="642.3,478.4 652.3,478.4 649.3,475.8 652.3,478.4 649.3,481.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="657.3" y="483" style="fill:#8a3030;font-size:11.5px;font-weight:600">carol</text>
+<rect x="745.4" y="468" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="769.2" y="482" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="559" y="510">Coupon stacking: allow one percent</text>
+<text class="ttl" x="559" y="525">coupon and one fixed coupon</text>
+<line x1="559" y1="537" x2="791" y2="537" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="559" y="550">opened 2026-03-05 &#183; still open</text>
+<text class="note" x="559" y="564">Fix in PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a> (open).</text>
+<text class="note" x="559" y="578"><tspan style="font-weight:700">Blocks <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a>.</tspan></text>
 </g>
 <g id="n103">
-<rect x="545" y="751" width="260" height="136" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
-<text class="kind" x="559" y="779" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a></text>
-<polyline points="642.3,774.4 652.3,774.4 649.3,771.8 652.3,774.4 649.3,777.0" fill="none" stroke="#6e6a64" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-<text class="meta" x="657.3" y="779" style="fill:#6e6a64;font-size:11.5px;font-weight:600">alice</text>
-<rect x="730.6" y="764" width="62.4" height="20" rx="10" fill="#4e4b48"/>
-<text class="pill" x="761.8" y="778" text-anchor="middle" style="fill:#eceae6">closed</text>
-<text class="ttl" x="559" y="806">Guest checkout fails on payment</text>
-<text class="ttl" x="559" y="821">retry</text>
-<line x1="559" y1="833" x2="791" y2="833" stroke="#6e6a64" stroke-opacity="0.35"/>
-<text class="meta" x="559" y="846">opened 2026-03-10 &#183; closed 2026-03-18</text>
-<text class="note" x="559" y="860">Work started in PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>,</text>
-<text class="note" x="559" y="874">finished in PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</text>
+<rect x="545" y="735" width="260" height="121" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
+<text class="kind" x="559" y="763" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a></text>
+<polyline points="642.3,758.4 652.3,758.4 649.3,755.8 652.3,758.4 649.3,761.0" fill="none" stroke="#6e6a64" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="657.3" y="763" style="fill:#6e6a64;font-size:11.5px;font-weight:600">alice</text>
+<rect x="730.6" y="748" width="62.4" height="20" rx="10" fill="#4e4b48"/>
+<text class="pill" x="761.8" y="762" text-anchor="middle" style="fill:#eceae6">closed</text>
+<text class="ttl" x="559" y="790">Guest checkout fails on payment retry</text>
+<line x1="559" y1="802" x2="791" y2="802" stroke="#6e6a64" stroke-opacity="0.35"/>
+<text class="meta" x="559" y="815">opened 2026-03-10 &#183; closed 2026-03-18</text>
+<text class="note" x="559" y="829">Work started in PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>,</text>
+<text class="note" x="559" y="843">finished in PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</text>
+</g>
+<g id="n104">
+<rect x="545" y="987" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
+<text class="kind" x="559" y="1015" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/104" xlink:href="https://github.com/acme/shop/issues/104" target="_blank"><title>Guest checkout: gift cards without an account</title><tspan style="text-decoration:underline">#104</tspan></a></text>
+<polyline points="642.3,1010.4 652.3,1010.4 649.3,1007.8 652.3,1010.4 649.3,1013.0" fill="none" stroke="#6e6a64" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="657.3" y="1015" style="fill:#6e6a64;font-size:11.5px;font-weight:600">carol</text>
+<rect x="730.6" y="1000" width="62.4" height="20" rx="10" fill="#4e4b48"/>
+<text class="pill" x="761.8" y="1014" text-anchor="middle" style="fill:#eceae6">closed</text>
+<line x1="711.6" y1="1004" x2="723.6" y2="1016" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
+<line x1="723.6" y1="1004" x2="711.6" y2="1016" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
+<text class="ttl" x="559" y="1042">Guest checkout: gift cards without an</text>
+<text class="ttl" x="559" y="1057">account</text>
+<line x1="559" y1="1069" x2="791" y2="1069" stroke="#6e6a64" stroke-opacity="0.35"/>
+<text class="meta" x="559" y="1082">opened 2026-03-10 &#183; closed 2026-03-19</text>
+<text class="note" x="559" y="1096">Closed as not planned; no pull request.</text>
 </g>
 <g id="n110">
-<rect x="1010" y="190" width="260" height="150" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
+<rect x="1010" y="190" width="260" height="135" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
 <text class="kind" x="1024" y="218" style="fill:#1d4e89">PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a></text>
 <text class="meta" x="1085.9" y="218" style="fill:#1d4e89;font-size:11.5px;font-weight:600">by bob</text>
 <rect x="1195.6" y="203" width="62.4" height="20" rx="10" fill="#163e73"/>
 <text class="pill" x="1226.8" y="217" text-anchor="middle" style="fill:#e7f0fb">merged</text>
-<text class="ttl" x="1024" y="245">cart: round totals half even</text>
-<text class="ttl" x="1024" y="260">(<a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>)</text>
-<line x1="1024" y1="272" x2="1256" y2="272" stroke="#1d4e89" stroke-opacity="0.35"/>
-<text class="meta" x="1024" y="285">opened 2026-03-09 &#183; merged 2026-03-11</text>
-<text class="mono" x="1024" y="299">merge 9f3c2ab41 (bob)</text>
-<text class="note" x="1024" y="313">Closes <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>.</text>
-<text class="note" x="1024" y="327">Shipping is rounded the old way: <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a>.</text>
+<text class="ttl" x="1024" y="245">cart: round totals half even (<a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>)</text>
+<line x1="1024" y1="257" x2="1256" y2="257" stroke="#1d4e89" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="270">opened 2026-03-09 &#183; merged 2026-03-11</text>
+<text class="mono" x="1024" y="284">merge 9f3c2ab41 (bob)</text>
+<text class="note" x="1024" y="298">Closes <a href="https://github.com/acme/shop/issues/101" xlink:href="https://github.com/acme/shop/issues/101" target="_blank"><title>Cart totals round half up instead of half even</title><tspan style="text-decoration:underline">#101</tspan></a>.</text>
+<text class="note" x="1024" y="312">Shipping is rounded the old way: <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a>.</text>
 </g>
 <g id="n111">
-<rect x="1010" y="470" width="260" height="136" rx="10" fill="#ffeb85" stroke="#8f6400" stroke-width="1.6"/>
-<text class="kind" x="1024" y="498" style="fill:#8f6400">PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a></text>
-<text class="meta" x="1085.2" y="498" style="fill:#8f6400;font-size:11.5px;font-weight:600">by carol</text>
-<rect x="1188.2" y="483" width="69.8" height="20" rx="10" fill="#9a6700"/>
-<text class="pill" x="1223.1" y="497" text-anchor="middle" style="fill:#ffeb85">waiting</text>
-<text class="ttl" x="1024" y="525">checkout: stack one percent and</text>
-<text class="ttl" x="1024" y="540">one fixed coupon (<a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>)</text>
-<line x1="1024" y1="552" x2="1256" y2="552" stroke="#8f6400" stroke-opacity="0.35"/>
-<text class="meta" x="1024" y="565">opened 2026-03-20 &#183; waiting for review</text>
-<text class="note" x="1024" y="579">Closes <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>. Related: PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>.</text>
-<text class="note" x="1024" y="593">Review found <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
+<rect x="1010" y="455" width="260" height="136" rx="10" fill="#ffeb85" stroke="#8f6400" stroke-width="1.6"/>
+<text class="kind" x="1024" y="483" style="fill:#8f6400">PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a></text>
+<text class="meta" x="1085.2" y="483" style="fill:#8f6400;font-size:11.5px;font-weight:600">by carol</text>
+<rect x="1188.2" y="468" width="69.8" height="20" rx="10" fill="#9a6700"/>
+<text class="pill" x="1223.1" y="482" text-anchor="middle" style="fill:#ffeb85">waiting</text>
+<text class="ttl" x="1024" y="510">checkout: stack one percent and one</text>
+<text class="ttl" x="1024" y="525">fixed coupon (<a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>)</text>
+<line x1="1024" y1="537" x2="1256" y2="537" stroke="#8f6400" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="550">opened 2026-03-20 &#183; waiting for review</text>
+<text class="note" x="1024" y="564">Closes <a href="https://github.com/acme/shop/issues/102" xlink:href="https://github.com/acme/shop/issues/102" target="_blank"><title>Coupon stacking: allow one percent coupon and one fixed coupon</title><tspan style="text-decoration:underline">#102</tspan></a>. Related: PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>.</text>
+<text class="note" x="1024" y="578">Review found <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
 </g>
 <g id="n112">
-<rect x="1010" y="751" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
-<text class="kind" x="1024" y="779" style="fill:#6e6a64">PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a></text>
-<text class="meta" x="1085.9" y="779" style="fill:#6e6a64;font-size:9px;font-weight:600">by chris-petersen</text>
-<rect x="1195.6" y="764" width="62.4" height="20" rx="10" fill="#4e4b48"/>
-<text class="pill" x="1226.8" y="778" text-anchor="middle" style="fill:#eceae6">closed</text>
+<rect x="1010" y="735" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
+<text class="kind" x="1024" y="763" style="fill:#6e6a64">PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a></text>
+<text class="meta" x="1085.9" y="763" style="fill:#6e6a64;font-size:9px;font-weight:600">by chris-petersen</text>
+<rect x="1195.6" y="748" width="62.4" height="20" rx="10" fill="#4e4b48"/>
+<text class="pill" x="1226.8" y="762" text-anchor="middle" style="fill:#eceae6">closed</text>
 <defs><pattern id="stripes112" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="22" fill="#b84a4a" fill-opacity=".10"/></pattern></defs>
-<rect x="1010" y="751" width="260" height="122" rx="10" fill="url(#stripes112)"/>
-<line x1="1176.6" y1="768" x2="1188.6" y2="780" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
-<line x1="1188.6" y1="768" x2="1176.6" y2="780" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
-<text class="ttl" x="1024" y="806">checkout: keep the guest cart on</text>
-<text class="ttl" x="1024" y="821">retry (<a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>)</text>
-<line x1="1024" y1="833" x2="1256" y2="833" stroke="#6e6a64" stroke-opacity="0.35"/>
-<text class="meta" x="1024" y="846">opened 2026-03-12 &#183; closed 2026-03-17</text>
-<text class="note" x="1024" y="860"><tspan style="font-weight:700">Not merged: superseded by PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</tspan></text>
+<rect x="1010" y="735" width="260" height="122" rx="10" fill="url(#stripes112)"/>
+<line x1="1176.6" y1="752" x2="1188.6" y2="764" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
+<line x1="1188.6" y1="752" x2="1176.6" y2="764" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>
+<text class="ttl" x="1024" y="790">checkout: keep the guest cart on retry</text>
+<text class="ttl" x="1024" y="805">(<a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>)</text>
+<line x1="1024" y1="817" x2="1256" y2="817" stroke="#6e6a64" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="830">opened 2026-03-12 &#183; closed 2026-03-17</text>
+<text class="note" x="1024" y="844"><tspan style="font-weight:700">Not merged: superseded by PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</tspan></text>
 </g>
 <g id="n113">
-<rect x="1010" y="1017" width="260" height="136" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
-<text class="kind" x="1024" y="1045" style="fill:#1d4e89">PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a></text>
-<text class="meta" x="1085.9" y="1045" style="fill:#1d4e89;font-size:11.5px;font-weight:600">by alice</text>
-<rect x="1195.6" y="1030" width="62.4" height="20" rx="10" fill="#163e73"/>
-<text class="pill" x="1226.8" y="1044" text-anchor="middle" style="fill:#e7f0fb">merged</text>
-<text class="ttl" x="1024" y="1072">checkout: retry reuses the guest</text>
-<text class="ttl" x="1024" y="1087">cart and the payment key (<a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>)</text>
-<line x1="1024" y1="1099" x2="1256" y2="1099" stroke="#1d4e89" stroke-opacity="0.35"/>
-<text class="meta" x="1024" y="1112">opened 2026-03-16 &#183; merged 2026-03-18</text>
-<text class="mono" x="1024" y="1126">merge 4d1e7c0a2 (alice, bob)</text>
-<text class="note" x="1024" y="1140">Closes <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>. Supersedes PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>.</text>
+<rect x="1010" y="987" width="260" height="136" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
+<text class="kind" x="1024" y="1015" style="fill:#1d4e89">PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a></text>
+<text class="meta" x="1085.9" y="1015" style="fill:#1d4e89;font-size:11.5px;font-weight:600">by alice</text>
+<rect x="1195.6" y="1000" width="62.4" height="20" rx="10" fill="#163e73"/>
+<text class="pill" x="1226.8" y="1014" text-anchor="middle" style="fill:#e7f0fb">merged</text>
+<text class="ttl" x="1024" y="1042">checkout: retry reuses the guest cart and</text>
+<text class="ttl" x="1024" y="1057">the payment key (<a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>)</text>
+<line x1="1024" y1="1069" x2="1256" y2="1069" stroke="#1d4e89" stroke-opacity="0.35"/>
+<text class="meta" x="1024" y="1082">opened 2026-03-16 &#183; merged 2026-03-18</text>
+<text class="mono" x="1024" y="1096">merge 4d1e7c0a2 (alice, bob)</text>
+<text class="note" x="1024" y="1110">Closes <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a>. Supersedes PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>.</text>
 </g>
 <g id="n120">
-<rect x="1475" y="190" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<rect x="1475" y="190" width="260" height="121" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
 <text class="kind" x="1489" y="218" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a></text>
 <polyline points="1572.3,213.4 1582.3,213.4 1579.3,210.8 1582.3,213.4 1579.3,216.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
 <text class="meta" x="1587.3" y="218" style="fill:#8a3030;font-size:11.5px;font-weight:600">?</text>
 <rect x="1675.4" y="203" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
 <text class="pill" x="1699.2" y="217" text-anchor="middle" style="fill:#f8e8e4">open</text>
-<text class="ttl" x="1489" y="245">cart: round shipping half even</text>
-<text class="ttl" x="1489" y="260">too</text>
-<line x1="1489" y1="272" x2="1721" y2="272" stroke="#8a3030" stroke-opacity="0.35"/>
-<text class="meta" x="1489" y="285">opened 2026-03-11 &#183; still open</text>
-<text class="note" x="1489" y="299">Follow-up of PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a>.</text>
-<text class="note" x="1489" y="313"><tspan style="font-weight:700">Blocks <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</tspan></text>
+<text class="ttl" x="1489" y="245">cart: round shipping half even too</text>
+<line x1="1489" y1="257" x2="1721" y2="257" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="1489" y="270">opened 2026-03-11 &#183; still open</text>
+<text class="note" x="1489" y="284">Follow-up of PR <a href="https://github.com/acme/shop/pull/110" xlink:href="https://github.com/acme/shop/pull/110" target="_blank"><title>cart: round totals half even (#101)</title><tspan style="text-decoration:underline">#110</tspan></a>.</text>
+<text class="note" x="1489" y="298"><tspan style="font-weight:700">Blocks <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</tspan></text>
 <g transform="rotate(-45 1478 193)">
 <rect x="1454.5" y="182.15" width="47.0" height="21.7" rx="10.85" fill="#ff2a2a" stroke="#f3f0e8" stroke-width="1.2"/>
 <text class="pill" x="1478.45" y="197.2" text-anchor="middle" style="fill:#ffffff;font-size:15.75px;letter-spacing:.9px">new</text>
 </g>
 </g>
 <g id="n121">
-<rect x="1475" y="470" width="260" height="150" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
-<text class="kind" x="1489" y="498" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a></text>
-<polyline points="1403.7,506.4 1413.7,506.4 1410.7,503.8 1413.7,506.4 1410.7,509.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-<text class="meta" x="1418.7" y="511" style="fill:#8a3030;font-size:11.5px;font-weight:600">maximiliano-fernandez-delgado</text>
-<rect x="1675.4" y="483" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
-<text class="pill" x="1699.2" y="497" text-anchor="middle" style="fill:#f8e8e4">open</text>
-<text class="ttl" x="1489" y="525">coupon line shows the old total</text>
-<text class="ttl" x="1489" y="540">after stacking</text>
-<line x1="1489" y1="552" x2="1721" y2="552" stroke="#8a3030" stroke-opacity="0.35"/>
-<text class="meta" x="1489" y="565">opened 2026-03-21 &#183; still open</text>
-<text class="note" x="1489" y="579"><tspan style="font-weight:700">Found in review of PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a>.</tspan></text>
-<text class="note" x="1489" y="593"><tspan style="font-weight:700">Blocked by <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a>.</tspan></text>
-<text class="note" x="1489" y="607">Fix in PR <a href="https://github.com/acme/shop/pull/122" xlink:href="https://github.com/acme/shop/pull/122" target="_blank"><title>checkout: show the stacked total on the coupon line (#121)</title><tspan style="text-decoration:underline">#122</tspan></a> (draft).</text>
-<g transform="rotate(-45 1478 473)">
-<rect x="1454.5" y="462.15" width="47.0" height="21.7" rx="10.85" fill="#ff2a2a" stroke="#f3f0e8" stroke-width="1.2"/>
-<text class="pill" x="1478.45" y="477.2" text-anchor="middle" style="fill:#ffffff;font-size:15.75px;letter-spacing:.9px">new</text>
+<rect x="1475" y="455" width="260" height="150" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.6"/>
+<text class="kind" x="1489" y="483" style="fill:#8a3030">ISSUE <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a></text>
+<polyline points="1489.0,491.4 1499.0,491.4 1496.0,488.8 1499.0,491.4 1496.0,494.0" fill="none" stroke="#8a3030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text class="meta" x="1504.0" y="496" style="fill:#8a3030;font-size:11.5px;font-weight:600">maximiliano-fernandez-delgado</text>
+<rect x="1675.4" y="468" width="47.6" height="20" rx="10" fill="#9f2d2d"/>
+<text class="pill" x="1699.2" y="482" text-anchor="middle" style="fill:#f8e8e4">open</text>
+<text class="ttl" x="1489" y="510">coupon line shows the old total after</text>
+<text class="ttl" x="1489" y="525">stacking</text>
+<line x1="1489" y1="537" x2="1721" y2="537" stroke="#8a3030" stroke-opacity="0.35"/>
+<text class="meta" x="1489" y="550">opened 2026-03-21 &#183; still open</text>
+<text class="note" x="1489" y="564"><tspan style="font-weight:700">Found in review of PR <a href="https://github.com/acme/shop/pull/111" xlink:href="https://github.com/acme/shop/pull/111" target="_blank"><title>checkout: stack one percent and one fixed coupon (#102)</title><tspan style="text-decoration:underline">#111</tspan></a>.</tspan></text>
+<text class="note" x="1489" y="578"><tspan style="font-weight:700">Blocked by <a href="https://github.com/acme/shop/issues/120" xlink:href="https://github.com/acme/shop/issues/120" target="_blank"><title>cart: round shipping half even too</title><tspan style="text-decoration:underline">#120</tspan></a>.</tspan></text>
+<text class="note" x="1489" y="592">Fix in PR <a href="https://github.com/acme/shop/pull/122" xlink:href="https://github.com/acme/shop/pull/122" target="_blank"><title>checkout: show the stacked total on the coupon line (#121)</title><tspan style="text-decoration:underline">#122</tspan></a> (draft).</text>
+<g transform="rotate(-45 1478 458)">
+<rect x="1454.5" y="447.15" width="47.0" height="21.7" rx="10.85" fill="#ff2a2a" stroke="#f3f0e8" stroke-width="1.2"/>
+<text class="pill" x="1478.45" y="462.2" text-anchor="middle" style="fill:#ffffff;font-size:15.75px;letter-spacing:.9px">new</text>
 </g>
 </g>
 <g id="n122">
-<rect x="1475" y="751" width="260" height="122" rx="10" fill="#fff6c9" stroke="#8f6400" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="kind" x="1489" y="779" style="fill:#8f6400">PR <a href="https://github.com/acme/shop/pull/122" xlink:href="https://github.com/acme/shop/pull/122" target="_blank"><title>checkout: show the stacked total on the coupon line (#121)</title><tspan style="text-decoration:underline">#122</tspan></a></text>
-<text class="meta" x="1551.6" y="779" style="fill:#8f6400;font-size:11.5px;font-weight:600">by bob</text>
-<rect x="1668.0" y="764" width="55.0" height="20" rx="10" fill="#9a6700"/>
-<text class="pill" x="1695.5" y="778" text-anchor="middle" style="fill:#fff6c9">draft</text>
-<text class="ttl" x="1489" y="806">checkout: show the stacked total</text>
-<text class="ttl" x="1489" y="821">on the coupon line (<a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>)</text>
-<line x1="1489" y1="833" x2="1721" y2="833" stroke="#8f6400" stroke-opacity="0.35"/>
-<text class="meta" x="1489" y="846">opened 2026-03-22 &#183; draft</text>
-<text class="note" x="1489" y="860">Closes <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
+<rect x="1475" y="735" width="260" height="122" rx="10" fill="#fff6c9" stroke="#8f6400" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="kind" x="1489" y="763" style="fill:#8f6400">PR <a href="https://github.com/acme/shop/pull/122" xlink:href="https://github.com/acme/shop/pull/122" target="_blank"><title>checkout: show the stacked total on the coupon line (#121)</title><tspan style="text-decoration:underline">#122</tspan></a></text>
+<text class="meta" x="1551.6" y="763" style="fill:#8f6400;font-size:11.5px;font-weight:600">by bob</text>
+<rect x="1668.0" y="748" width="55.0" height="20" rx="10" fill="#9a6700"/>
+<text class="pill" x="1695.5" y="762" text-anchor="middle" style="fill:#fff6c9">draft</text>
+<text class="ttl" x="1489" y="790">checkout: show the stacked total on the</text>
+<text class="ttl" x="1489" y="805">coupon line (<a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>)</text>
+<line x1="1489" y1="817" x2="1721" y2="817" stroke="#8f6400" stroke-opacity="0.35"/>
+<text class="meta" x="1489" y="830">opened 2026-03-22 &#183; draft</text>
+<text class="note" x="1489" y="844">Closes <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
 </g>
 <rect x="449.0" y="241.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
 <text class="lbl" x="472.0" y="254.0" text-anchor="middle" style="fill:#1c2430">child</text>
-<rect x="417.0" y="521.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
-<text class="lbl" x="440.0" y="534.0" text-anchor="middle" style="fill:#1c2430">child</text>
-<rect x="449.0" y="802.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
-<text class="lbl" x="472.0" y="815.0" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="417.0" y="506.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="440.0" y="519.0" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="449.0" y="786.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="472.0" y="799.0" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="435.0" y="1038.0" width="46.0" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="458.0" y="1051.0" text-anchor="middle" style="fill:#1c2430">child</text>
 <rect x="871.7" y="241.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
 <text class="lbl" x="907.5" y="254.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
 <rect x="1336.7" y="241.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#8a4b12" stroke-width="0.9"/>
 <text class="lbl" x="1372.5" y="254.0" text-anchor="middle" style="fill:#8a4b12">follow-up</text>
-<rect x="871.7" y="521.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
-<text class="lbl" x="907.5" y="534.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
-<rect x="1346.3" y="521.0" width="52.4" height="18.0" rx="4" fill="#fffdf7" stroke="#8a4b12" stroke-width="0.9"/>
-<text class="lbl" x="1372.5" y="534.0" text-anchor="middle" style="fill:#8a4b12">led to</text>
-<rect x="1572.0" y="389.0" width="66.0" height="18.0" rx="4" fill="#fffdf7" stroke="#8a3030" stroke-width="0.9"/>
-<text class="lbl" x="1605.0" y="402.0" text-anchor="middle" style="fill:#8a3030">blocked by</text>
-<rect x="1569.2" y="676.5" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
-<text class="lbl" x="1605.0" y="689.5" text-anchor="middle" style="fill:#1d4e89">closed by</text>
-<rect x="862.1" y="802.0" width="90.8" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
-<text class="lbl" x="907.5" y="815.0" text-anchor="middle" style="fill:#1d4e89">work done by</text>
-<rect x="886.7" y="1068.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
-<text class="lbl" x="922.5" y="1081.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
-<rect x="1107.0" y="936.0" width="66.0" height="18.0" rx="4" fill="#fffdf7" stroke="#b02a2a" stroke-width="0.9"/>
-<text class="lbl" x="1140.0" y="949.0" text-anchor="middle" style="fill:#b02a2a">supersedes</text>
-<rect x="1110.6" y="669.5" width="58.8" height="18.0" rx="4" fill="#fffdf7" stroke="#6e6a64" stroke-width="0.9"/>
-<text class="lbl" x="1140.0" y="682.5" text-anchor="middle" style="fill:#6e6a64">related</text>
-<rect x="1860" y="190" width="500" height="448" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
+<rect x="871.7" y="506.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="907.5" y="519.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="1346.3" y="506.0" width="52.4" height="18.0" rx="4" fill="#fffdf7" stroke="#8a4b12" stroke-width="0.9"/>
+<text class="lbl" x="1372.5" y="519.0" text-anchor="middle" style="fill:#8a4b12">led to</text>
+<rect x="1572.0" y="374.0" width="66.0" height="18.0" rx="4" fill="#fffdf7" stroke="#8a3030" stroke-width="0.9"/>
+<text class="lbl" x="1605.0" y="387.0" text-anchor="middle" style="fill:#8a3030">blocked by</text>
+<rect x="1569.2" y="661.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="1605.0" y="674.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="862.1" y="786.0" width="90.8" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="907.5" y="799.0" text-anchor="middle" style="fill:#1d4e89">work done by</text>
+<rect x="886.7" y="1038.0" width="71.6" height="18.0" rx="4" fill="#fffdf7" stroke="#1d4e89" stroke-width="0.9"/>
+<text class="lbl" x="922.5" y="1051.0" text-anchor="middle" style="fill:#1d4e89">closed by</text>
+<rect x="1107.0" y="913.0" width="66.0" height="18.0" rx="4" fill="#fffdf7" stroke="#b02a2a" stroke-width="0.9"/>
+<text class="lbl" x="1140.0" y="926.0" text-anchor="middle" style="fill:#b02a2a">supersedes</text>
+<rect x="1110.6" y="654.0" width="58.8" height="18.0" rx="4" fill="#fffdf7" stroke="#6e6a64" stroke-width="0.9"/>
+<text class="lbl" x="1140.0" y="667.0" text-anchor="middle" style="fill:#6e6a64">related</text>
+<rect x="1860" y="190" width="500" height="468" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
 <text class="lgb" x="1876" y="220" style="font-size:16px">How to read this graph</text>
 <text class="lg" x="1876" y="244">Arrows run from the earlier item to the later one;</text>
 <text class="lg" x="1876" y="262">blocked by, supersedes and related may point back.</text>
@@ -232,33 +246,34 @@
 <text class="pill" x="2208" y="307" text-anchor="middle" style="fill:#8f6400">waiting</text>
 <rect x="2260" y="288" width="88" height="30" rx="7" fill="#fff6c9" stroke="#8f6400" stroke-width="1.4" stroke-dasharray="6 4"/>
 <text class="pill" x="2304" y="307" text-anchor="middle" style="fill:#8f6400">draft</text>
-<text class="lg" x="1876" y="338">Closed without merging: gray, red stripes, red cross.</text>
-<text class="lg" x="1876" y="358">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
-<text class="lg" x="1876" y="378"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
-<line x1="1876" y1="416" x2="1922" y2="416" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
-<text class="lgb" x="1934" y="420" style="font-size:12.5px">child</text>
-<text class="lg" x="2030" y="420" style="font-size:12px">B is a formal child of umbrella A</text>
-<line x1="1876" y1="444" x2="1922" y2="444" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
-<text class="lgb" x="1934" y="448" style="font-size:12.5px">closed by</text>
-<text class="lg" x="2030" y="448" style="font-size:12px">B is the pull request that closed issue A</text>
-<line x1="1876" y1="472" x2="1922" y2="472" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
-<text class="lgb" x="1934" y="476" style="font-size:12.5px">work done by</text>
-<text class="lg" x="2030" y="476" style="font-size:12px">B worked on A without closing it</text>
-<line x1="1876" y1="500" x2="1922" y2="500" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
-<text class="lgb" x="1934" y="504" style="font-size:12.5px">follow-up</text>
-<text class="lg" x="2030" y="504" style="font-size:12px">B was filed for what A left out</text>
-<line x1="1876" y1="528" x2="1922" y2="528" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
-<text class="lgb" x="1934" y="532" style="font-size:12.5px">led to</text>
-<text class="lg" x="2030" y="532" style="font-size:12px">work on A produced B</text>
-<line x1="1876" y1="556" x2="1922" y2="556" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
-<text class="lgb" x="1934" y="560" style="font-size:12.5px">supersedes</text>
-<text class="lg" x="2030" y="560" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
-<line x1="1876" y1="584" x2="1922" y2="584" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
-<text class="lgb" x="1934" y="588" style="font-size:12.5px">blocked by</text>
-<text class="lg" x="2030" y="588" style="font-size:12px">A cannot finish until B is done</text>
-<line x1="1876" y1="612" x2="1922" y2="612" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
-<text class="lgb" x="1934" y="616" style="font-size:12.5px">related</text>
-<text class="lg" x="2030" y="616" style="font-size:12px">related work, no parent</text>
+<text class="lg" x="1876" y="338">Closed pull request, not merged: gray, red stripes, red cross.</text>
+<text class="lg" x="1876" y="358">Red cross on a closed issue: no merged pull request closed it.</text>
+<text class="lg" x="1876" y="378">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
+<text class="lg" x="1876" y="398"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
+<line x1="1876" y1="436" x2="1922" y2="436" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
+<text class="lgb" x="1934" y="440" style="font-size:12.5px">child</text>
+<text class="lg" x="2030" y="440" style="font-size:12px">B is a formal child of umbrella A</text>
+<line x1="1876" y1="464" x2="1922" y2="464" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
+<text class="lgb" x="1934" y="468" style="font-size:12.5px">closed by</text>
+<text class="lg" x="2030" y="468" style="font-size:12px">B is the pull request that closed issue A</text>
+<line x1="1876" y1="492" x2="1922" y2="492" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
+<text class="lgb" x="1934" y="496" style="font-size:12.5px">work done by</text>
+<text class="lg" x="2030" y="496" style="font-size:12px">B worked on A without closing it</text>
+<line x1="1876" y1="520" x2="1922" y2="520" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="1934" y="524" style="font-size:12.5px">follow-up</text>
+<text class="lg" x="2030" y="524" style="font-size:12px">B was filed for what A left out</text>
+<line x1="1876" y1="548" x2="1922" y2="548" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="1934" y="552" style="font-size:12.5px">led to</text>
+<text class="lg" x="2030" y="552" style="font-size:12px">work on A produced B</text>
+<line x1="1876" y1="576" x2="1922" y2="576" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
+<text class="lgb" x="1934" y="580" style="font-size:12.5px">supersedes</text>
+<text class="lg" x="2030" y="580" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
+<line x1="1876" y1="604" x2="1922" y2="604" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
+<text class="lgb" x="1934" y="608" style="font-size:12.5px">blocked by</text>
+<text class="lg" x="2030" y="608" style="font-size:12px">A cannot finish until B is done</text>
+<line x1="1876" y1="632" x2="1922" y2="632" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
+<text class="lgb" x="1934" y="636" style="font-size:12.5px">related</text>
+<text class="lg" x="2030" y="636" style="font-size:12px">related work, no parent</text>
 <script type="text/javascript"><![CDATA[
 /* Find box for the lineage diagram: type a number (120, #120) to jump to that issue or pull request,
    or any text (a username, a title word, merged) to light up every matching box. */
