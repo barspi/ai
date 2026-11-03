@@ -23,11 +23,11 @@ import json, os, re, subprocess, sys
 
 FIELDS = """
   __typename
-  ... on Issue { title state stateReason updatedAt author{login} comments{totalCount}
+  ... on Issue { title state stateReason closedAt updatedAt author{login} comments{totalCount}
                  assignees(first:10){nodes{login}}
                  parent{number} subIssues(first:50){nodes{number}} blockedBy(first:20){nodes{number}}
                  blocking(first:20){nodes{number}} closedByPullRequestsReferences(first:10){nodes{number}} }
-  ... on PullRequest { title state isDraft merged mergedAt updatedAt author{login} comments{totalCount}
+  ... on PullRequest { title state isDraft merged mergedAt closedAt updatedAt author{login} comments{totalCount}
                  reviews{totalCount} mergeCommit{oid} mergedBy{login} closingIssuesReferences(first:20){nodes{number}}
                  commits(first:50){nodes{commit{authors(first:5){nodes{name user{login}}}}}} }
 """
@@ -88,6 +88,7 @@ def main():
     ap.add_argument('--tsv-dir'); ap.add_argument('--discover', action='store_true'); ap.add_argument('--since')
     ap.add_argument('--umbrellas', action='store_true', help='for an umbrella by title without sub-issues, list the issues its body names')
     ap.add_argument('--relations', action='store_true', help='print every GitHub-native relation between two boxes')
+    ap.add_argument('--apply', action='store_true', help='edit the SVG in place: pills, colours, date line, merge line, assignee label, "Closed by PR" note (svg_state.py). Run check_diag.py after it')
     opts = ap.parse_args()
     repo, svg, snap_path, tsv_dir = opts.repo, opts.svg, opts.snapshot, opts.tsv_dir
     import datetime
@@ -137,7 +138,25 @@ def main():
             'mergeSha': d['mergeCommit']['oid'][:9] if pr and d.get('mergeCommit') else '',
             'mergedBy': (d.get('mergedBy') or {}).get('login', '') if pr else '',
             'authors': authors,
+            'closedAt': (d.get('closedAt') or '')[:10], 'mergedAt': (d.get('mergedAt') or '')[:10] if pr else '',
         }
+
+    if opts.apply:          # local text edits on the boxes (see svg_state.py); no layout work, no rebuild
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import svg_state
+        text, log, rep = svg_state.apply(text, live, repo)
+        open(svg, 'w').write(text)
+        print('--- applied to %s (%d edits) ---' % (svg, len(log)))
+        for ln in log:
+            print('  ' + ln)
+        for ln in rep:
+            print('  NEEDS A HUMAN: ' + ln)
+        pills, kinds = {}, {}
+        for m in re.finditer(r'<g id="n(\d+)"(.*?)</g>', text, flags=re.S):
+            k = re.search(r'class="kind"[^>]*>(ISSUE|UMBRELLA|PR) ', m.group(2))
+            kinds[int(m.group(1))] = k.group(1) if k else '?'
+            w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
+            pills[int(m.group(1))] = w[-1] if w else '?'
 
     old = json.load(open(snap_path)) if os.path.exists(snap_path) else {}
     changed = 0
