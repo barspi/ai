@@ -21,14 +21,15 @@ usage: refresh_meta.py OWNER/REPO diagram.svg snapshot.json [--tsv-dir DIR] [--d
 """
 import json, os, re, subprocess, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')   # keep the compiled svg_state.py out of the skill folder
+import box_header
 
 FIELDS = """
   __typename
-  ... on Issue { title state stateReason closedAt updatedAt author{login} comments{totalCount}
+  ... on Issue { title state stateReason createdAt closedAt updatedAt author{login} comments{totalCount}
                  assignees(first:10){nodes{login}}
                  parent{number} subIssues(first:50){nodes{number}} blockedBy(first:20){nodes{number}}
                  blocking(first:20){nodes{number}} closedByPullRequestsReferences(first:10){nodes{number}} }
-  ... on PullRequest { title state isDraft merged mergedAt closedAt updatedAt author{login} comments{totalCount}
+  ... on PullRequest { title state isDraft merged mergedAt createdAt closedAt updatedAt author{login} comments{totalCount}
                  reviews{totalCount} mergeCommit{oid} mergedBy{login} closingIssuesReferences(first:20){nodes{number}}
                  commits(first:50){nodes{commit{authors(first:5){nodes{name user{login}}}}}} }
 """
@@ -99,12 +100,11 @@ def main():
     nums = sorted({int(n) for n in re.findall(r'<g id="n(\d+)"', text)})
     pills, kinds = {}, {}
     for m in re.finditer(r'<g id="n(\d+)"(.*?)</g>', text, flags=re.S):
-        k = re.search(r'class="kind"[^>]*>(ISSUE|UMBRELLA|PR) ', m.group(2))
-        kinds[int(m.group(1))] = k.group(1) if k else '?'
+        kinds[int(m.group(1))] = box_header.kind_of(m.group(2)) or '?'
         w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
         pills[int(m.group(1))] = w[-1] if w else '?'
 
-    q = 'query{repository(owner:"%s",name:"%s"){%s}}' % (
+    q ='query{repository(owner:"%s",name:"%s"){%s}}' % (
         owner, name, ' '.join('i%d:issueOrPullRequest(number:%d){%s}' % (n, n, FIELDS) for n in nums))
     out = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=' + q], capture_output=True, text=True)
     if out.returncode:
@@ -139,6 +139,7 @@ def main():
             'mergeSha': d['mergeCommit']['oid'][:9] if pr and d.get('mergeCommit') else '',
             'mergedBy': (d.get('mergedBy') or {}).get('login', '') if pr else '',
             'authors': authors,
+            'createdAt': (d.get('createdAt') or '')[:10],
             'closedAt': (d.get('closedAt') or '')[:10], 'mergedAt': (d.get('mergedAt') or '')[:10] if pr else '',
         }
 
@@ -154,9 +155,8 @@ def main():
             print('  NEEDS A HUMAN: ' + ln)
         pills, kinds = {}, {}
         for m in re.finditer(r'<g id="n(\d+)"(.*?)</g>', text, flags=re.S):
-            k = re.search(r'class="kind"[^>]*>(ISSUE|UMBRELLA|PR) ', m.group(2))
-            kinds[int(m.group(1))] = k.group(1) if k else '?'
-            w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
+            kinds[int(m.group(1))] = box_header.kind_of(m.group(2)) or '?'
+            w =re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
             pills[int(m.group(1))] = w[-1] if w else '?'
 
     old = json.load(open(snap_path)) if os.path.exists(snap_path) else {}

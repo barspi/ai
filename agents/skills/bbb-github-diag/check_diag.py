@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Geometry, text and content checks for an issue/PR lineage SVG. No rendering.
-usage: check_diag.py new.svg [old.svg]
+usage: check_diag.py new.svg [old.svg] [--keep-new]
+With old.svg (the frozen previous revision) the `new` pills must be on exactly the boxes added since; with --keep-new, also on the
+boxes that had one in old.svg.
 Exit code 1 when a check fails. Checks the SVG text and path geometry only."""
 import os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')   # keep the compiled fonts.py out of the skill folder
 import xml.dom.minidom as md
 from fonts import load      # finds Helvetica/Arial/Liberation/DejaVu and Menlo/Consolas/... on macOS, Linux and Windows
 
-new = open(sys.argv[1], encoding='utf-8').read()
-old = open(sys.argv[2], encoding='utf-8').read() if len(sys.argv) > 2 else None
+_files = [a for a in sys.argv[1:] if not a.startswith('--')]
+new = open(_files[0], encoding='utf-8').read()
+old = open(_files[1], encoding='utf-8').read() if len(_files) > 1 else None
 fails = 0
 
 
@@ -53,6 +56,51 @@ frames = [tuple(float(v) for v in m.groups()) for m in re.finditer(
     r'<rect x="([\d.-]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="18" fill="#ffffff"', new)]
 print(len(boxes), 'boxes', len(paths), 'paths', len(labels), 'labels', len(frames), 'frames')
 
+# ---- dotted frames must not overlap each other (a frame that shrinks or moves can run into its neighbour)
+for i, (ax, ay, aw, ah) in enumerate(frames):
+    for (bx_, by_, bw_, bh_) in frames[i + 1:]:
+        if ax < bx_ + bw_ - 1 and bx_ < ax + aw - 1 and ay < by_ + bh_ - 1 and by_ < ay + ah - 1:
+            fail(f'frames at ({ax:.0f},{ay:.0f}) and ({bx_:.0f},{by_:.0f}) overlap')
+
+# ---- collapsed boxes: keywords fit on one line, the pop-up exists, sits at the same corner, comes before the script and is a sibling of its box
+_tags = [(m.start(), m.group(0)) for m in re.finditer(r'<g[\s>]|</g>|<script', new)]
+_depth, _d, _at = {}, 0, {}
+for pos, tag in _tags:
+    if tag.startswith('<g'):
+        gid = re.match(r'<g id="((?:n|pop)\d+)"', new[pos:pos + 40])
+        if gid:
+            _depth[gid.group(1)] = _d
+            _at[gid.group(1)] = pos
+        _d += 1
+    elif tag == '</g>':
+        _d -= 1
+_script = new.find('<script')
+_coll = {int(m.group(1)): (float(m.group(2)), float(m.group(3)), m.group(4)) for m in re.finditer(
+    r'<g id="n(\d+)">\s*<rect x="([\d.]+)" y="([\d.]+)"[^>]*data-collapsed="1" data-keywords="([^"]*)"', new)}
+for n, (cx_, cy_, kw) in sorted(_coll.items()):
+    kwt = kw.replace('&amp;', '&').replace('&quot;', '"').replace('&lt;', '<')
+    if width('ttl', kwt) > 232:
+        fail(f'keywords of collapsed #{n} are {width("ttl", kwt):.0f}px wide (limit 232): shorten them')
+    pm = re.search(r'<g id="pop%d" class="pop">\s*<rect x="([\d.]+)" y="([\d.]+)"' % n, new)
+    if not pm:
+        fail(f'collapsed #{n} has no pop-up (g id="pop{n}")')
+        continue
+    if abs(float(pm.group(1)) - cx_) > .5 or abs(float(pm.group(2)) - cy_) > .5:
+        fail(f'pop-up of #{n} is at ({pm.group(1)},{pm.group(2)}), not at the corner of its box ({cx_:.0f},{cy_:.0f})')
+    if _script >= 0 and _at[f'pop{n}'] > _script:
+        fail(f'pop-up of #{n} comes after the <script>: the find box script would leave it outside the drawing and the hover rule would never match')
+    if _depth.get(f'pop{n}') != _depth.get(f'n{n}'):
+        fail(f'pop-up of #{n} is not a sibling of its box (depth {_depth.get(f"pop{n}")} vs {_depth.get(f"n{n}")}): the hover rule needs siblings')
+    if f'#n{n}:hover~#pop{n}' not in new:
+        fail(f'no hover rule for the pop-up of #{n}')
+    if not re.search(r'<g id="n%d">.*?<title>' % n, new[new.find('<g id="n%d">' % n):new.find('<g id="n%d">' % n) + 3000], re.S):
+        fail(f'collapsed #{n} has no <title> tooltip with its full title')
+for pm in re.finditer(r'<g id="pop(\d+)" class="pop">', new):
+    if int(pm.group(1)) not in _coll:
+        fail(f'pop-up pop{pm.group(1)} has no collapsed box')
+if _coll:
+    print(len(_coll), 'collapsed boxes')
+
 # ---- text inside boxes must fit
 for n, (bx, by, bw, bh) in boxes.items():
     for m in re.finditer(r'<text class="(ttl|meta|note|mono)" x="([\d.]+)" y="([\d.]+)">(.*?)</text>', new):
@@ -71,7 +119,26 @@ for n, (bx, by, bw, bh) in boxes.items():
             if x + w > bx + bw - 12:
                 fail(f'text too wide in #{n}: "{txt[:40]}" {w:.0f}px')
 
-# ---- the assignee or submitter name must not run into the pill or the red cross, and must be at least 9px
+# ---- the first line (tag, number, arrow, name) is one kind text (box_header.py): it must end before the pill (6px) and the red cross (12px);
+#      a second kind text (the arrow and the name on their own line) must end inside the box
+import box_header
+for n, (bx, by, bw, bh) in boxes.items():
+    g = re.search(r'<g id="n%d">(.*?)</g>' % n, new, re.S).group(1)
+    texts = list(box_header.KIND_TEXT.finditer(g))
+    if not texts or box_header.who_of(g) is None:
+        continue
+    pill = re.search(r'<rect x="([\d.]+)" y="[\d.]+" width="[\d.]+" height="20" rx="10"', g)
+    cross = re.search(r'<line x1="([\d.]+)"[^>]*stroke="#ff2a2a"', g)
+    if not pill:
+        continue
+    limit = float(cross.group(1)) - 12 if cross else float(pill.group(1)) - 6
+    for i, t in enumerate(texts):
+        end = float(t.group(1)) + box_header.text_width(t.group(4))
+        lim = limit if i == 0 else bx + bw - 12
+        if end > lim + 0.5:
+            fail(f'first line of #{n} ends at {end:.0f}, past {lim:.0f} ({"pill or cross" if i == 0 else "box edge"}): shorten the login or put the arrow and name on a second line')
+
+# ---- old form (a separate name text and arrow polyline): the name must not run into the pill or the red cross, and must be at least 9px
 for n, (bx, by, bw, bh) in boxes.items():
     g = re.search(r'<g id="n%d">(.*?)</g>' % n, new, re.S).group(1)
     k = re.search(r'<text class="kind" x="([\d.]+)" y="([\d.]+)"', g)
@@ -219,6 +286,22 @@ if old:
     nb = {int(m.group(1)) for m in re.finditer(r'<g id="n(\d+)">', new)}
     if ob != nb:
         print('note: boxes added', sorted(nb - ob), 'removed', sorted(ob - nb))
+
+    def pill_boxes(text, bx):
+        got = set()
+        for m in re.finditer(r'rotate\(-45 ([\d.]+) ([\d.]+)\)', text):
+            for n, (px, py, pw_, ph_) in bx.items():
+                if abs(float(m.group(1)) - (px + 3)) < 2 and abs(float(m.group(2)) - (py + 3)) < 2:
+                    got.add(n)
+        return got
+    old_boxes = {int(m.group(1)): tuple(float(v) for v in m.groups()[1:]) for m in re.finditer(r'<g id="n(\d+)">\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', old)}
+    have, kept = pill_boxes(new, boxes), pill_boxes(old, old_boxes)
+    added = nb - ob
+    if '--keep-new' in sys.argv:                  # the user asked to keep the old pills: the pills of the old file stay, and every added box has one
+        if not (added <= have and have <= added | kept):
+            fail(f'new pills on {sorted(have)}: expected the added boxes {sorted(added)} plus the kept ones {sorted(kept)}')
+    elif have != added:
+        fail(f'new pills on {sorted(have)}, but the boxes added since the previous revision are {sorted(added)} (run new_revision.py, or use --keep-new when the user asked to keep the pills)')
 cols = sorted({round(b[0]) for b in boxes.values()})
 print('column gaps', [cols[i + 1] - cols[i] - 260 for i in range(len(cols) - 1)])
 print('canvas', re.search(r'<svg[^>]*width="(\d+)" height="(\d+)"', new).groups())

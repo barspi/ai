@@ -19,7 +19,9 @@ arrow), a kind change (ISSUE to UMBRELLA), a changed title, stale note text such
 """
 import re
 
-# state -> (fill, stroke, pill colour, pill width, dashed); the same table as the skill's palette
+import box_header
+
+# state ->(fill, stroke, pill colour, pill width, dashed); the same table as the skill's palette
 STY = {
     'open':    ('#f8e8e4', '#8a3030', '#9f2d2d', 47.6, False),
     'closed':  ('#eceae6', '#6e6a64', '#4e4b48', 62.4, False),
@@ -35,10 +37,11 @@ def fmt(v):
     return ('%.1f' % v).rstrip('0').rstrip('.')
 
 
-def blocks(svg):
-    """num -> (start, end) character offsets of each box group `<g id="nNNN">...</g>` (nested groups counted)."""
+def blocks(svg, pop=False):
+    """num -> (start, end) character offsets of each box group `<g id="nNNN">...</g>` (nested groups counted).
+    pop=True: the pop-up groups `<g id="popNNN" class="pop">` of collapsed boxes instead."""
     out = {}
-    for m in re.finditer(r'<g id="n(\d+)">', svg):
+    for m in re.finditer(r'<g id="pop(\d+)" class="pop">' if pop else r'<g id="n(\d+)">', svg):
         depth, pos = 0, m.start()
         for t in re.finditer(r'<g[ >]|</g>', svg[pos:]):
             depth += 1 if t.group(0).startswith('<g') else -1
@@ -93,8 +96,17 @@ def grow(blk, dy):
 
 
 def apply(svg, live, repo, boxes_live=None):
+    """Two passes. The boxes as drawn (a collapsed box gets only what its compact form shows: colour, pill, assignee), then the
+    pop-ups of the collapsed boxes, which are full copies that float over the picture: they get every edit and need no room."""
     log, report = [], []
-    bl = blocks(svg)
+    svg = _apply(svg, live, repo, log, report, False)
+    svg = _apply(svg, live, repo, log, report, True)
+    return svg, log, sorted(set(report))
+
+
+def _apply(svg, live, repo, log, report, pop):
+    bl = blocks(svg, pop)
+    room_below_ = (lambda *a: True) if pop else room_below       # a pop-up grows over the picture: nothing to push
     for num in sorted(bl):
         l = live.get(num)
         if not l or l.get('missing'):
@@ -102,6 +114,8 @@ def apply(svg, live, repo, boxes_live=None):
         a, b = bl[num]
         blk = svg[a:b]
         before = blk
+        compact = (not pop) and 'data-collapsed="1"' in blk       # the small form has no date line, merge line or notes
+        tag = '#%d%s' % (num, ' (pop-up)' if pop else '')
         kind = l['kind']
         want = pill_word(l['state'], kind)
         have = (re.findall(r'>(open|closed|merged|waiting|draft)<', blk) or ['?'])[-1]
@@ -116,30 +130,30 @@ def apply(svg, live, repo, boxes_live=None):
         if have != want and have in STY and want in STY:
             f0, s0, p0, w0, d0 = STY[have]
             f1, s1, p1, w1, d1 = STY[want]
-            blk = blk.replace('fill="%s" stroke="%s" stroke-width="1.6"%s/>' % (f0, s0, DASH if d0 else ''),
-                              'fill="%s" stroke="%s" stroke-width="1.6"%s/>' % (f1, s1, DASH if d1 else ''), 1)
-            blk = blk.replace('style="fill:%s' % s0, 'style="fill:%s' % s1)                    # kind and assignee text
-            blk = blk.replace('stroke="%s" stroke-width="1.3"' % s0, 'stroke="%s" stroke-width="1.3"' % s1)   # tiny assignee arrow
+            blk = blk.replace('fill="%s" stroke="%s" stroke-width="1.6"%s' % (f0, s0, DASH if d0 else ''),
+                              'fill="%s" stroke="%s" stroke-width="1.6"%s' % (f1, s1, DASH if d1 else ''), 1)   # no closing '/>': a collapsed rect has more attributes
+            blk = blk.replace('style="fill:%s' % s0, 'style="fill:%s' % s1)                    # the kind text, which holds the assignee
             blk = blk.replace('stroke="%s" stroke-opacity="0.35"' % s0, 'stroke="%s" stroke-opacity="0.35"' % s1)
             blk = re.sub(r'<rect x="[\d.]+" y="([\d.]+)" width="%s" height="20" rx="10" fill="%s"/>' % (re.escape(fmt(w0)), p0),
                          lambda m: '<rect x="%s" y="%s" width="%s" height="20" rx="10" fill="%s"/>' % (fmt(x + 248 - w1), m.group(1), fmt(w1), p1), blk, count=1)
             blk = re.sub(r'(<text class="pill" x=")[\d.]+(" y="[\d.]+" text-anchor="middle" style="fill:)%s(">)%s' % (f0, have),
                          lambda m: m.group(1) + fmt(x + 248 - w1 / 2) + m.group(2) + f1 + m.group(3) + want, blk, count=1)
-            log.append('#%d: pill %s -> %s' % (num, have, want))
+            log.append('%s: pill %s -> %s' % (tag, have, want))
         elif have != want:
             report.append('#%d: pill %s, GitHub says %s: not patched' % (num, have, want))
             continue
-        # date line
-        mm = re.search(r'(<text class="meta" x="[\d.]+" y="([\d.]+)">opened [\d-]+ %s )(still open|closed [\d-]+|merged [\d-]+|draft[^<]*)(</text>)' % DOT, blk)
+        # date line (the small form of a collapsed box has none)
+        mm = None if compact else re.search(r'(<text class="meta" x="[\d.]+" y="([\d.]+)">opened [\d-]+ %s )(still open|closed [\d-]+|merged [\d-]+|draft[^<]*)(</text>)' % DOT, blk)
         if mm:
             new = ('merged ' + l['mergedAt']) if l['state'] == 'merged' else ('closed ' + l['closedAt']) if l['state'] == 'closed' else 'still open'
             if mm.group(3) != new:
                 blk = blk[:mm.start(3)] + new + blk[mm.end(3):]
-                log.append('#%d: date line "%s" -> "%s"' % (num, mm.group(3), new))
+                log.append('%s: date line "%s" -> "%s"' % (tag, mm.group(3), new))
             meta_y = float(mm.group(2))
         else:
             meta_y = None
-            report.append('#%d: no date line found' % num)
+            if not compact:
+                report.append('#%d: no date line found' % num)
         # merge line
         if kind == 'PR' and l['state'] == 'merged' and l.get('mergeSha') and meta_y is not None:
             text = 'merge %s (%s)' % (l['mergeSha'], authors_text(l['authors'])) if l['authors'] else 'merge %s' % l['mergeSha']
@@ -148,19 +162,19 @@ def apply(svg, live, repo, boxes_live=None):
                 pass          # an existing merge line is kept: the diagram's author list may follow a convention that GitHub data does not carry
             else:
                 tail = re.search(r'<text class="meta" x="([\d.]+)" y="%s">[^<]*</text>' % re.escape(mm.group(2)), blk)
-                if not room_below(svg, bl, num, 14):
+                if not room_below_(svg, bl, num, 14):
                     report.append('#%d: merge line needs 14px more room below the box: rebuild or move boxes' % num)
                 else:
                     blk = re.sub(r'(<text class="note" x="[\d.]+" y=")([\d.]+)(")', lambda m: m.group(1) + fmt(float(m.group(2)) + 14) + m.group(3), blk)
                     ins = '\n<text class="mono" x="%s" y="%s">%s</text>' % (tail.group(1), fmt(meta_y + 14), text)
                     blk = blk[:tail.end()] + ins + blk[tail.end():]
                     blk = grow(blk, 14)
-                    log.append('#%d: merge line added, box 14px taller' % num)
+                    log.append('%s: merge line added, box 14px taller' % tag)
         # a closing pull request that is a box
-        if kind == 'ISSUE' and l['state'] == 'closed' and 'Closed by' not in re.sub(r'<[^>]+>', '', blk):
+        if not compact and kind == 'ISSUE' and l['state'] == 'closed' and 'Closed by' not in re.sub(r'<[^>]+>', '', blk):
             prs = [p for p in l.get('rel', {}).get('closedBy', []) if p in live and p != num]
             if prs:
-                if not room_below(svg, bl, num, 14):
+                if not room_below_(svg, bl, num, 14):
                     report.append('#%d: closed by PR #%s: note line needs 14px more room below the box' % (num, prs[0]))
                 else:
                     notes = list(re.finditer(r'<text class="note" x="([\d.]+)" y="([\d.]+)"', blk))
@@ -169,24 +183,30 @@ def apply(svg, live, repo, boxes_live=None):
                     line = '\n<text class="note" x="%s" y="%s">Closed by PR %s.</text>' % (
                         last.group(1), fmt(float(last.group(2)) + 14), ' and '.join(link(repo, p, True, live[p]['title']) for p in prs[:2]))
                     blk = grow(blk[:end] + line + blk[end:], 14)
-                    log.append('#%d: note "Closed by PR #%s." added, box 14px taller' % (num, prs[0]))
+                    log.append('%s: note "Closed by PR #%s." added, box 14px taller' % (tag, prs[0]))
         # assignee label
         if kind == 'ISSUE':
             names = l.get('assignees') or []
             label = '?' if not names else names[0] + (' +%d' % (len(names) - 1) if len(names) > 1 else '')
-            am = re.search(r'(<text class="meta" x="[\d.]+" y="[\d.]+" style="fill:#[0-9a-f]{6};font-size:11.5px;font-weight:600">)([^<]*)(</text>)', blk)
-            if am and am.group(2) != label:
-                blk = blk[:am.start(2)] + label + blk[am.end(2):]
-                log.append('#%d: assignee %s -> %s' % (num, am.group(2), label))
+            esc_label = label.replace('&', '&amp;').replace('<', '&lt;')
+            new_blk, old_label = box_header.set_who(blk, esc_label)          # the login is a tspan of the kind text (box_header.py)
+            if old_label is None:
+                am = re.search(r'(<text class="meta" x="[\d.]+" y="[\d.]+" style="fill:#[0-9a-f]{6};font-size:11.5px;font-weight:600">)([^<]*)(</text>)', blk)
+                if am:                                                          # a box still drawn the old way: run box_header.py restyle
+                    new_blk, old_label = blk[:am.start(2)] + esc_label + blk[am.end(2):], am.group(2)
+                    report.append('#%d: drawn the old way (separate arrow and name): run box_header.py restyle' % num)
+            if old_label is not None and old_label != esc_label:
+                blk = new_blk
+                log.append('%s: assignee %s -> %s' % (tag, old_label, label))
         # report only: things that need thought
-        k = re.search(r'class="kind"[^>]*>(ISSUE|UMBRELLA|PR) ', blk)
-        if k and kind == 'ISSUE':
+        shown = box_header.kind_of(blk)
+        if shown and kind == 'ISSUE':
             wantk = 'UMBRELLA' if (l['rel']['children'] or re.search('umbrella', l['title'], re.I)) else 'ISSUE'
-            if k.group(1) != wantk:
-                report.append('#%d: shows %s, the rule says %s: relabel by hand (the assignee label moves)' % (num, k.group(1), wantk))
-        if want in ('closed', 'merged') and re.search(r'\((?:open|draft)\)', re.sub(r'<[^>]+>', '', blk)):
+            if shown != wantk:
+                report.append('#%d: shows %s, the rule says %s: relabel by hand (the tag, the thick border and the inner frame)' % (num, shown, wantk))
+        if not compact and want in ('closed', 'merged') and re.search(r'\((?:open|draft)\)', re.sub(r'<[^>]+>', '', blk)):
             report.append('#%d: a note still says "(open)" or "(draft)": edit the note' % num)
         if blk != before:
             svg = svg[:a] + blk + svg[b:]
-            bl = blocks(svg)          # offsets moved
-    return svg, log, report
+            bl = blocks(svg, pop)          # offsets moved
+    return svg

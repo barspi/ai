@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Build a lineage diagram from a graph description. Use it for the first revision of a diagram (see SKILL.md, "First revision").
+
+usage: build.py graph.json out.svg
+
+graph.json (the example next to the sample: example/sample-graph.json):
+{ "repo": "owner/name",
+  "title": "text for the page title; #N becomes a link",
+  "date": "2026-03-22",                                    (the date the facts were read)
+  "reading": "optional second header line",                (default: how to read the arrows)
+  "nodes": [ {"num": 123, "state": "open|closed|handclosed|merged|waiting|draft|prclosed",
+              "title": "...", "meta": "opened 2026-01-05 · still open", "notes": ["line", ...], "mono": "merge abc1234 (a, b)",
+              "assignees": ["login"]  (issue)   "author": "login"  (pull request),
+              "umbrella": true, "new": true, "frame": "name of the dotted frame", "collapsed": "keywords (on request only)"} ],
+  "edges": [ {"from": 10, "to": 12, "kind": "closed by"} ] }        (kinds: the arrow vocabulary in SKILL.md; read A, kind, B)
+
+What it does, with the skill's own modules and nothing else: layout.py puts the boxes in columns and rows and draws the easy arrows;
+route.py finds a path for every other arrow in the picture as it is; hops.py draws the jump arcs; collapse.py collapses the boxes
+that have "collapsed"; the legend, the header and the find box are written here. It prints what it could not route or label: say so
+to the user, and do not draw such an arrow worse by hand. Then run check_diag.py. A box needs no x or y: the layout decides.
+"""
+import json, os, re, sys, tempfile
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import draw, layout, route, hops, collapse
+from fonts import load
+
+
+def collapsed_height_patch(lines, n, h):
+    """Give the collapsed box n the height h (collapse.process only knows 62px or what arrows ask for)."""
+    _, box, _, _ = collapse.parse('\n'.join(lines))
+    b = box[n]
+    a = b['a']
+    lines[a + 1] = re.sub(r'height="[\d.]+"', 'height="%s"' % draw.fmt(h), lines[a + 1], count=1)
+    for k in range(a + 2, b['b'] + 1):
+        if lines[k].startswith('<rect') and 'rx="7"' in lines[k]:
+            lines[k] = re.sub(r'height="[\d.]+"', 'height="%s"' % draw.fmt(h - 8), lines[k], count=1)
+        if '&#8230;' in lines[k]:
+            lines[k] = re.sub(r' y="[\d.]+"', ' y="%s"' % draw.fmt(b['y'] + h - 10), lines[k], count=1)
+
+
+def main():
+    if len(sys.argv) != 3:
+        sys.exit(__doc__)
+    spec = json.load(open(sys.argv[1], encoding='utf-8'))
+    out_path = sys.argv[2]
+    if not spec.get('repo'):
+        sys.exit('graph.json needs "repo": "owner/name"')
+    nodes = spec['nodes']
+    nums = [n['num'] for n in nodes]
+    prs = {n['num'] for n in nodes if draw.STY[n['state']]['kind'] == 'PR'}
+    ctx = draw.Ctx(spec['repo'], {n['num']: n['title'] for n in nodes}, prs)
+    edges = []
+    for e in spec.get('edges', []):
+        if e['kind'] not in draw.EDGE:
+            sys.exit('unknown arrow word "%s": use one of %s' % (e['kind'], ', '.join(draw.EDGE)))
+        if e['from'] not in nums or e['to'] not in nums:
+            sys.exit('arrow %s -> %s names a box that is not in "nodes"' % (e['from'], e['to']))
+        edges.append((e['from'], e['to'], e['kind']))
+
+    ftl = load('italic', 60)
+    pl_nodes = [dict(num=n['num'], h=draw.box_height(n), frame=n.get('frame'), collapsed=((collapse.HC_TWO if draw.two_lines(ctx, n) else collapse.HC) if n.get('collapsed') else False),
+                     title_w=(ftl.getlength(n['frame']) / 4 if n.get('frame') else 0)) for n in nodes]
+    if any(n.get('frame') for n in nodes):        # frames are blocks: laid out inside, then packed; the root forks into them
+        P = layout.plan_blocks(pl_nodes, edges, spec.get('roots') or ())
+    else:
+        P = layout.plan(pl_nodes, edges)
+    rect = P['rect']
+
+    # ---------------------------------------------------------------- boxes (full size; collapse.process shrinks the collapsed ones)
+    boxes, natural = [], {}
+    for n in nodes:
+        x, y, w, h = rect[n['num']]
+        mk, hh = draw.box(ctx, n, x, y, min_h=0 if n.get('collapsed') else h)
+        boxes.append(mk)
+        natural[n['num']] = hh
+
+    # ---------------------------------------------------------------- page
+    right = P['right']
+    LX = right + 60
+    W = max(int(LX + draw.LEGEND_W + 60), 1500)
+    kinds = {k for _, _, k in edges}
+    states = {n['state'] for n in nodes}
+    leg, leg_h = draw.legend(LX, layout.TOP, kinds, states)
+    H = int(max(P['bottom'], layout.TOP + leg_h) + 80)
+    reading = spec.get('reading') or 'Arrows point from the earlier item to the item it produced, or from an issue to the pull request that closed it. Read left to right.'
+    head = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">' % (W, H, W, H),
+        '<title>%s</title>' % draw.esc(re.sub(r'\s+', ' ', spec.get('title', 'Lineage diagram'))),
+        '<desc>%s</desc>' % draw.esc(spec.get('desc', 'Issues and pull requests of %s: what spawned, closed or replaced what.' % spec['repo'])),
+    ] + ([   # how this picture was made (make_diagram.py): its inputs, options, the user's decisions, the skill version
+        '<metadata id="provenance">%s</metadata>' % draw.esc(json.dumps(spec['provenance'], ensure_ascii=False, sort_keys=True)),
+    ] if spec.get('provenance') else []) + [
+        draw.defs(),
+        '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (W, H, draw.PAGE),
+        '<text class="h1" x="80" y="70">%s</text>' % ctx.rich(spec.get('title', 'Lineage diagram')),
+        '<text class="h2" x="80" y="100"><tspan style="font-weight:700">Repository: %s</tspan></text>' % draw.esc(spec['repo']),
+        '<text class="h2" x="80" y="124">%s</text>' % draw.esc(reading),
+        '<text class="h2" x="80" y="148">Facts as of %s. Dotted frames name an area of work only; the arrows carry the relationships.</text>' % draw.esc(spec.get('date', '')),
+    ]
+    frame_lines = []
+    for name, fx, fy, fw, fh in P['frames']:
+        frame_lines += draw.frame(fx, fy, fw, fh, name)
+    script = open(os.path.join(HERE, 'find-box.js'), encoding='utf-8').read()
+    text = '\n'.join(head + frame_lines + ['<!--ARROWS-->'] + boxes + ['<!--LABELS-->', '<!--legend-->'] + leg + ['<!--/legend-->',
+                     '<script type="text/javascript"><![CDATA[\n' + script + '\n]]></script>', '</svg>', ''])
+
+    # ---------------------------------------------------------------- collapsed boxes, on request only
+    sets = {n['num']: n['collapsed'] for n in nodes if n.get('collapsed')}
+    if sets:
+        text, log = collapse.process(text, sets)
+        lines = text.split('\n')
+        for n in sets:
+            collapsed_height_patch(lines, n, rect[n][3])
+        text = '\n'.join(lines)
+
+    # ---------------------------------------------------------------- arrows and labels
+    pills = [(rect[n['num']][0] + 3 - 26, rect[n['num']][1] + 3 - 26, 52, 52) for n in nodes if n.get('new')]
+    titles = [(fx, fy, fw_title + 32, 30) for (name, fx, fy, fw, fh), fw_title in ((f, ftl.getlength(f[0]) / 4) for f in P['frames'])]
+    sc = route.Scene(rect, [(f[1], f[2], f[3], f[4]) for f in P['frames']], titles, pills, [], bounds=(30, layout.TOP - 25, LX - 25, int(P['bottom']) + 60))
+    arrow_lines, label_lines, problems = [], [], []
+
+    def add(a, b, kind, pts):
+        sc.arrows.append(list(pts))
+        arrow_lines.append(draw.arrow(pts, kind))
+
+    easy = P['easy']
+    for a, b, kind, pts in easy:
+        add(a, b, kind, pts)
+    placed = []
+    for a, b, kind, pts in easy:
+        lab = route.place_label(sc, pts, kind)
+        if lab:
+            sc.add([], kind, lab)
+            sc.arrows.pop()
+            label_lines += draw.label(kind, *lab)
+        else:
+            problems.append('no free straight stretch for the label of #%s %s #%s' % (a, kind, b))
+
+    def span(e):
+        ra, rb = rect[e[0]], rect[e[1]]
+        return -(abs(ra[0] - rb[0]) + abs(ra[1] - rb[1]))
+
+    # the most important arrows first (draw.IMPORTANCE), each tier longest first: they get the short, simple paths
+    for a, b, kind in sorted(P['hard'], key=lambda e: (-draw.IMPORTANCE.get(e[2], 2), span(e))):
+        pts = route.route(sc, a, b, '*', '*')        # one search over every side of both boxes: fewest bends and crossings win
+        if not pts:
+            problems.append('NO PATH for #%s %s #%s: leave it out of the picture, name it in the box note, and say what would have to move' % (a, kind, b))
+            continue
+        add(a, b, kind, pts)
+        lab = route.place_label(sc, pts, kind)
+        if lab:
+            sc.add([], kind, lab)
+            sc.arrows.pop()
+            label_lines += draw.label(kind, *lab)
+        else:
+            problems.append('no free straight stretch for the label of #%s %s #%s' % (a, kind, b))
+
+    text = text.replace('<!--ARROWS-->', '\n'.join(arrow_lines)).replace('<!--LABELS-->', '\n'.join(label_lines))
+    text, added, removed = hops.add_hops(text)
+    import model                                  # the jump arcs exist only now: move every label that sits too near one
+    text, moved, failed = model.relabel(text, hop_pad=20)
+    for x, y, why in failed:
+        problems.append('label near (%d,%d): %s' % (x, y, why))
+    open(out_path, 'w', encoding='utf-8').write(text)
+    print('wrote %s: %dx%d, %d boxes, %d arrows (%d by the layout, %d by the router), %d jump arcs' % (
+        out_path, W, H, len(nodes), len(arrow_lines), len(easy), len(arrow_lines) - len(easy), added))
+    for p in problems:
+        print('PROBLEM', p)
+    print('next: check_diag.py %s' % out_path)
+
+
+if __name__ == '__main__':
+    main()

@@ -4,7 +4,7 @@
   var SVGNS = 'http://www.w3.org/2000/svg', HTMLNS = 'http://www.w3.org/1999/xhtml';
   var svg = document.documentElement;
   var info = [].slice.call(document.querySelectorAll('g[id]')).filter(function (g) { return /^n\d+$/.test(g.id); })
-    .map(function (g) { return { g: g, num: g.id.slice(1), text: (g.textContent || '').replace(/\s+/g, ' ').toLowerCase() }; });
+    .map(function (g) { return { g: g, num: g.id.slice(1), text: ((g.textContent || '') + ' ' + ((document.getElementById('pop' + g.id.slice(1)) || {}).textContent || '')).replace(/\s+/g, ' ').toLowerCase() }; });   /* a collapsed box is also searched by the text of its pop-up */
   if (!info.length) return;
 
   var css = document.createElementNS(SVGNS, 'style');
@@ -30,7 +30,9 @@
   var fo = document.createElementNS(SVGNS, 'foreignObject');
   fo.setAttribute('x', 0); fo.setAttribute('y', 0); fo.setAttribute('width', '100%'); fo.setAttribute('height', '100%');
   var host = document.createElementNS(HTMLNS, 'div');
-  host.setAttribute('style', 'position:relative;width:100%;height:100%;overflow:hidden;background:#f3f0e8');
+  var page = inner.querySelector('rect[x="0"][y="0"]');          /* the page colour, read from the drawing: never out of step */
+  var bg = (page && /^#[0-9a-fA-F]{6}$/.test(page.getAttribute('fill') || '')) ? page.getAttribute('fill') : '#f3f0e8';
+  host.setAttribute('style', 'position:relative;width:100%;height:100%;overflow:hidden;background:' + bg);
   var scroller = document.createElementNS(HTMLNS, 'div');
   scroller.setAttribute('style', 'position:absolute;left:0;top:0;right:0;bottom:0;overflow:auto');
   scroller.appendChild(inner); host.appendChild(scroller);
@@ -60,6 +62,7 @@
   /* Size everything in explicit pixels from the window size. Percentages are not re-resolved by every browser
      after the window or the zoom changes, which left part of the screen undrawn. */
   function fit() {
+    if (typeof settle === 'function') settle();
     var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
     svg.setAttribute('width', w); svg.setAttribute('height', h);
     fo.setAttribute('width', w); fo.setAttribute('height', h);
@@ -75,18 +78,81 @@
      whose implied zoom is closest to outerWidth/innerWidth (outerWidth does not scale with the page zoom in Chrome
      and Safari, innerWidth does). A docked devtools panel or a sidebar spoils the ratio, so the match must be
      within 20%, else the page is taken to be at 100% at load. */
+  /* The outerWidth/innerWidth ratio is only trustworthy when no side panel (docked devtools, a browser sidebar)
+     eats part of the window. So the result is used in three steps:
+     1. a CONFIDENT match (ratio within 4% of a candidate and the zoom a standard browser zoom step) is saved in
+        localStorage for this screen (key: screen size, which does not change with the page zoom) and used;
+     2. otherwise the value saved earlier for this screen is used (this is what keeps the box right on a reload at
+        20% or 300% with a panel open);
+     3. otherwise the old guess (best match within 20%, else the page is taken to be at 100% at load).
+     Safari does not change devicePixelRatio with the page zoom, so there the zoom is read from the ratio itself. */
+  var STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
+  function nearStep(z) { return STEPS.some(function (s) { return Math.abs(z / s - 1) < 0.03; }); }
+  var calKey = 'lineageFindBox:' + (/Firefox\//.test(navigator.userAgent || '') ? 'ff2:' : '') + window.screen.width + 'x' + window.screen.height;
+  function loadCal() { try { var v = parseFloat(window.localStorage.getItem(calKey)); return v > 0 ? v : 0; } catch (e) { return 0; } }
+  function saveCal(n) { try { window.localStorage.setItem(calKey, String(n)); } catch (e) { } }
+  var ua = navigator.userAgent || '';
+  var safari = /Safari\//.test(ua) && !/Chrome\/|Chromium\/|Edg\/|OPR\/|Firefox\//.test(ua);
+  var calSource = 'none';
+  var firefox = /Firefox\//.test(ua);
+  /* Firefox: outerWidth is scaled by the page zoom like innerWidth, so outerWidth/innerWidth is always about 1 and says
+     nothing about the zoom (using it made the box jump at some zoom levels). What Firefox does give is
+     devicePixelRatio = native ratio x zoom, and the zoom is always one of its fixed steps. So the native ratio is a value
+     (1, 1.25, 1.5, 2, 2.5, 3) for which the implied zoom is such a step. Several values often fit (at ratio 2: 100% on a
+     retina screen, 200% on a plain one), so: keep the value already chosen while it still fits (the ratio never changes
+     within a page); else take the only one that fits (saved for this screen); else the one saved for this screen; else a
+     Mac is taken as retina (2). A value saved by the first Firefox version of this code used another key and is ignored. */
+  /* No step list: the zoom is devicePixelRatio / native for any value (43%, 79%, 134%). Firefox rounds the ratio to 60/N, so
+     at very high zoom (3x and up) the box can be off by a few percent; below that the error is under 2%. */
+  function ffOk(d, n) { var z = d / n; return z >= 0.25 && z <= 5.5; }
+  function ffNative() {
+    var d = window.devicePixelRatio || 1;
+    var prev = (typeof ndpr === 'number') ? ndpr : 0;
+    if (prev) return prev;   /* the ratio never changes within a page: keep it at any zoom, no range check */
+    /* Firefox reads no saved value: screen.width (the key) changes with the zoom, so old entries were wrong ones. */
+    var mac = /Mac/.test(navigator.platform || ua);
+    var pick = [mac ? 2 : 1, 1, 2, 1.5, 1.25, 2.5, 3].filter(function (n) { return ffOk(d, n); })[0];
+    if (pick) { calSource = 'prior'; return pick; }
+    calSource = 'guess';
+    return d;
+  }
   function nativeDpr() {
+    if (firefox) return ffNative();
     var d = window.devicePixelRatio || 1, r = window.outerWidth / window.innerWidth, best = d, bd = 0.2;
-    if (!isFinite(r) || r <= 0 || window.innerWidth < 200) return d;
-    [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 4].forEach(function (n) {
+    var ok = isFinite(r) && r > 0 && window.innerWidth >= 200;
+    if (ok) [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 4].forEach(function (n) {
       var e = Math.abs(Math.log((d / n) / r));
       if (e < bd) { bd = e; best = n; }
     });
-    return best;
+    if (ok && bd < 0.04 && nearStep(d / best)) { saveCal(best); calSource = 'measured'; return best; }
+    var cal = loadCal();
+    if (cal) { calSource = 'saved'; return cal; }   /* saved from a strict measurement on this screen: trusted at any zoom */
+    calSource = 'guess';
+    return ok && bd < 0.2 ? best : d;
   }
   var ndpr = nativeDpr(), zoomNow = 1;
+  /* While the page loads, innerWidth and outerWidth may not be settled yet, so the first reading can be a guess. Read it
+     again when the page has loaded and a little later; a strict match then replaces the guess and is saved. */
+  function settle() {
+    var prev = calSource, keep = ndpr, n = nativeDpr();
+    if (calSource === 'guess' && prev !== 'guess') { ndpr = keep; calSource = prev; } else ndpr = n;   /* a later guess never replaces a measured or saved value */
+  }
+  window.addEventListener('load', settle);
+  setTimeout(settle, 700); setTimeout(settle, 2500);
+  function zoomRead() {
+    if (safari) {
+      var r = window.outerWidth / window.innerWidth;
+      if (isFinite(r) && r > 0 && window.innerWidth >= 200) {
+        var s = STEPS.filter(function (x) { return Math.abs(r / x - 1) < 0.05; })[0];
+        return s || r;
+      }
+      return 1;
+    }
+    var raw = (window.devicePixelRatio || 1) / ndpr;
+    return raw;
+  }
   function comp() {
-    var z = (window.devicePixelRatio || 1) / ndpr;
+    var z = zoomRead();
     z = Math.min(5, Math.max(0.1, z));
     if (Math.abs(z - zoomNow) < 0.005) return;
     zoomNow = z;
@@ -94,7 +160,7 @@
     box.style.transform = 'scale(' + (1 / z) + ')';
     box.style.left = (12 / z) + 'px'; box.style.bottom = (30 / z) + 'px';
   }
-  window.lineageZoom = function () { return { dpr: window.devicePixelRatio, outer: window.outerWidth, inner: window.innerWidth, native: ndpr, zoom: zoomNow }; };
+  window.lineageZoom = function () { return { dpr: window.devicePixelRatio, outer: window.outerWidth, inner: window.innerWidth, native: ndpr, source: calSource, safari: safari, firefox: firefox, screen: window.screen.width + 'x' + window.screen.height, zoom: zoomNow, scale: box.style.transform, left: box.style.left, bottom: box.style.bottom, boxPx: Math.round(box.getBoundingClientRect().width), boxScreenPx: Math.round(box.getBoundingClientRect().width * (window.devicePixelRatio || 1) / (ndpr || 1)) }; };
   fit();
   window.addEventListener('resize', fit);
   window.addEventListener('orientationchange', fit);

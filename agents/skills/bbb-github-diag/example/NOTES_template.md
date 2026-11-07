@@ -31,9 +31,9 @@ One line per non-obvious arrow: the pair, the label, and the evidence (a GitHub 
 
 One line per item looked at and left out, with the reason. Every item here is also in `_meta.ignored` of the snapshot, so `--discover` does not report it again.
 
-## Build
+## Commands
 
-The exact commands, in order (build script, `refresh_meta.py ... --tsv-dir`, `check_diag.py`), and the expected checker result (0 failures; list any known warnings).
+The commands of the last revision, in order (`new_revision.py`, `refresh_meta.py ... --apply`, `add_nodes.py` with its spec, `check_diag.py`), and the expected checker result (0 failures; list any known warnings). The scripts are the skill's; nothing here is a script of this diagram.
 
 ## Revision marks
 
