@@ -3,43 +3,56 @@
   "title": "Checkout rework: what grew out of umbrella #100",
   "date": "2026-03-22",
   "desc": "Example for the bbb-github-diag skill: an umbrella with three children, the pull requests that closed or replaced them, follow-ups, a block and a related pair.",
+  "roots": [100],
   "nodes": [
     {"num": 100, "state": "open", "umbrella": true, "assignees": ["alice"],
      "title": "Checkout rework: cart, coupons and guest retry", "meta": "opened 2026-03-02 · still open",
-     "notes": ["Lists #101, #102, #103 and #104 as children.", "**Blocked by #102.**"]},
+     "notes": ["Lists #101, #102, #103 and #104 as children.", "**Blocked by #102.**"],
+     "github": {"kind": "ISSUE", "title": "Checkout rework: cart, coupons and guest retry", "state": "open", "rel": {"parent": null, "children": [101, 102, 103, 104], "blockedBy": [102], "blocking": [], "closedBy": []}, "updatedAt": "2026-03-02T12:00:00Z", "createdAt": "2026-03-02", "closedAt": "", "mergedAt": "", "opener": "alice", "assignees": ["alice"], "comments": 6, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": []}},
     {"num": 101, "state": "closed", "assignees": ["bob"], "collapsed": "Cart totals round half up",
      "title": "Cart totals round half up instead of half even", "meta": "opened 2026-03-04 · closed 2026-03-11",
-     "notes": ["Closed by PR #110."]},
+     "notes": ["Closed by PR #110."],
+     "github": {"kind": "ISSUE", "title": "Cart totals round half up instead of half even", "state": "closed", "rel": {"parent": 100, "children": [], "blockedBy": [], "blocking": [], "closedBy": [110]}, "updatedAt": "2026-03-11T12:00:00Z", "createdAt": "2026-03-04", "closedAt": "2026-03-11", "mergedAt": "", "opener": "bob", "assignees": ["bob"], "comments": 2, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": [], "stateReason": "COMPLETED", "closer": {"pr": 110, "merged": true}, "closeVerdict": ["done", "closed by merged PR #110"]}},
     {"num": 110, "state": "merged", "author": "bob", "collapsed": "cart: round totals half even",
-     "title": "cart: round totals half even (#101)", "meta": "opened 2026-03-09 · merged 2026-03-11", "mono": "merge 9f3c2ab41 (bob)",
-     "notes": ["Closes #101.", "Shipping is rounded the old way: #120."]},
+     "title": "cart: round totals half even (#101)", "meta": "opened 2026-03-09 · merged 2026-03-11",
+     "notes": ["Closes #101.", "Shipping is rounded the old way: #120."], "mono": "merge 9f3c2ab41 (bob)",
+     "github": {"kind": "PR", "title": "cart: round totals half even (#101)", "state": "merged", "rel": {"closes": [101]}, "updatedAt": "2026-03-11T12:00:00Z", "createdAt": "2026-03-09", "closedAt": "2026-03-11", "mergedAt": "2026-03-11", "opener": "bob", "assignees": [], "comments": 1, "reviews": 2, "mergeSha": "9f3c2ab41", "mergedBy": "alice", "authors": ["bob"]}},
     {"num": 120, "state": "open", "assignees": [], "new": true,
      "title": "cart: round shipping half even too", "meta": "opened 2026-03-11 · still open",
-     "notes": ["Follow-up of PR #110.", "**Blocks #121.**"]},
+     "notes": ["Follow-up of PR #110.", "**Blocks #121.**"],
+     "github": {"kind": "ISSUE", "title": "cart: round shipping half even too", "state": "open", "rel": {"parent": null, "children": [], "blockedBy": [], "blocking": [121], "closedBy": []}, "updatedAt": "2026-03-11T12:00:00Z", "createdAt": "2026-03-11", "closedAt": "", "mergedAt": "", "opener": "alice", "assignees": [], "comments": 1, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": []}},
     {"num": 102, "state": "open", "assignees": ["carol"],
      "title": "Coupon stacking: allow one percent coupon and one fixed coupon", "meta": "opened 2026-03-05 · still open",
-     "notes": ["Fix in PR #111 (open).", "**Blocks #100.**"]},
+     "notes": ["Fix in PR #111 (open).", "**Blocks #100.**"],
+     "github": {"kind": "ISSUE", "title": "Coupon stacking: allow one percent coupon and one fixed coupon", "state": "open", "rel": {"parent": 100, "children": [], "blockedBy": [], "blocking": [100], "closedBy": [111]}, "updatedAt": "2026-03-05T12:00:00Z", "createdAt": "2026-03-05", "closedAt": "", "mergedAt": "", "opener": "carol", "assignees": ["carol"], "comments": 3, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": []}},
     {"num": 111, "state": "waiting", "author": "carol",
      "title": "checkout: stack one percent and one fixed coupon (#102)", "meta": "opened 2026-03-20 · waiting for review",
-     "notes": ["Closes #102. Related: PR #112.", "Review found #121."]},
+     "notes": ["Closes #102. Related: PR #112.", "Review found #121."],
+     "github": {"kind": "PR", "title": "checkout: stack one percent and one fixed coupon (#102)", "state": "open", "rel": {"closes": [102]}, "updatedAt": "2026-03-20T12:00:00Z", "createdAt": "2026-03-20", "closedAt": "", "mergedAt": "", "opener": "carol", "assignees": [], "comments": 3, "reviews": 1, "mergeSha": "", "mergedBy": "", "authors": []}},
     {"num": 121, "state": "open", "assignees": ["maximiliano-fernandez-delgado"], "new": true,
      "title": "coupon line shows the old total after stacking", "meta": "opened 2026-03-21 · still open",
-     "notes": ["**Found in review of PR #111.**", "**Blocked by #120.**", "Fix in PR #122 (draft)."]},
+     "notes": ["**Found in review of PR #111.**", "**Blocked by #120.**", "Fix in PR #122 (draft)."],
+     "github": {"kind": "ISSUE", "title": "coupon line shows the old total after stacking", "state": "open", "rel": {"parent": null, "children": [], "blockedBy": [120], "blocking": [], "closedBy": [122]}, "updatedAt": "2026-03-21T12:00:00Z", "createdAt": "2026-03-21", "closedAt": "", "mergedAt": "", "opener": "maximiliano-fernandez-delgado", "assignees": ["maximiliano-fernandez-delgado"], "comments": 2, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": []}},
     {"num": 122, "state": "draft", "author": "bob",
      "title": "checkout: show the stacked total on the coupon line (#121)", "meta": "opened 2026-03-22 · draft",
-     "notes": ["Closes #121."]},
+     "notes": ["Closes #121."],
+     "github": {"kind": "PR", "title": "checkout: show the stacked total on the coupon line (#121)", "state": "draft", "rel": {"closes": [121]}, "updatedAt": "2026-03-22T12:00:00Z", "createdAt": "2026-03-22", "closedAt": "", "mergedAt": "", "opener": "bob", "assignees": [], "comments": 0, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": []}},
     {"num": 103, "state": "closed", "assignees": ["alice"], "frame": "guest checkout",
      "title": "Guest checkout fails on payment retry", "meta": "opened 2026-03-10 · closed 2026-03-18",
-     "notes": ["Work started in PR #112,", "finished in PR #113."]},
+     "notes": ["Work started in PR #112,", "finished in PR #113."],
+     "github": {"kind": "ISSUE", "title": "Guest checkout fails on payment retry", "state": "closed", "rel": {"parent": 100, "children": [], "blockedBy": [], "blocking": [], "closedBy": [112, 113]}, "updatedAt": "2026-03-18T12:00:00Z", "createdAt": "2026-03-10", "closedAt": "2026-03-18", "mergedAt": "", "opener": "alice", "assignees": ["alice"], "comments": 4, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": [], "stateReason": "COMPLETED", "closer": {"pr": 113, "merged": true}, "closeVerdict": ["done", "closed by merged PR #113"]}},
     {"num": 104, "state": "handclosed", "assignees": ["carol"], "frame": "guest checkout",
      "title": "Guest checkout: gift cards without an account", "meta": "opened 2026-03-10 · closed 2026-03-19",
-     "notes": ["Closed as not planned; no pull request."]},
+     "notes": ["Closed as not planned; no pull request."],
+     "github": {"kind": "ISSUE", "title": "Guest checkout: gift cards without an account", "state": "closed", "rel": {"parent": 100, "children": [], "blockedBy": [], "blocking": [], "closedBy": []}, "updatedAt": "2026-03-19T12:00:00Z", "createdAt": "2026-03-10", "closedAt": "2026-03-19", "mergedAt": "", "opener": "carol", "assignees": ["carol"], "comments": 1, "reviews": 0, "mergeSha": "", "mergedBy": "", "authors": [], "stateReason": "NOT_PLANNED", "closer": {}, "closeVerdict": ["hand", "GitHub close reason NOT_PLANNED"]}},
     {"num": 112, "state": "prclosed", "author": "chris-petersen", "frame": "guest checkout",
      "title": "checkout: keep the guest cart on retry (#103)", "meta": "opened 2026-03-12 · closed 2026-03-17",
-     "notes": ["**Not merged: superseded by PR #113.**"]},
+     "notes": ["**Not merged: superseded by PR #113.**"],
+     "github": {"kind": "PR", "title": "checkout: keep the guest cart on retry (#103)", "state": "closed", "rel": {"closes": [103]}, "updatedAt": "2026-03-17T12:00:00Z", "createdAt": "2026-03-12", "closedAt": "2026-03-17", "mergedAt": "", "opener": "chris-petersen", "assignees": [], "comments": 2, "reviews": 1, "mergeSha": "", "mergedBy": "", "authors": [], "replacedBy": 113}},
     {"num": 113, "state": "merged", "author": "alice", "frame": "guest checkout",
-     "title": "checkout: retry reuses the guest cart and the payment key (#103)", "meta": "opened 2026-03-16 · merged 2026-03-18", "mono": "merge 4d1e7c0a2 (alice, bob)",
-     "notes": ["Closes #103. Supersedes PR #112."]}
+     "title": "checkout: retry reuses the guest cart and the payment key (#103)", "meta": "opened 2026-03-16 · merged 2026-03-18",
+     "notes": ["Closes #103. Supersedes PR #112."], "mono": "merge 4d1e7c0a2 (alice, bob)",
+     "github": {"kind": "PR", "title": "checkout: retry reuses the guest cart and the payment key (#103)", "state": "merged", "rel": {"closes": [103]}, "updatedAt": "2026-03-18T12:00:00Z", "createdAt": "2026-03-16", "closedAt": "2026-03-18", "mergedAt": "2026-03-18", "opener": "alice", "assignees": [], "comments": 1, "reviews": 2, "mergeSha": "4d1e7c0a2", "mergedBy": "alice", "authors": ["alice", "bob"]}}
   ],
   "edges": [
     {"from": 100, "to": 101, "kind": "child"},
@@ -56,5 +69,28 @@
     {"from": 103, "to": 113, "kind": "closed by"},
     {"from": 113, "to": 112, "kind": "supersedes"},
     {"from": 111, "to": 112, "kind": "related"}
-  ]
+  ],
+  "meta": {
+    "lastRun": "2026-03-22T09:00:00Z",
+    "ignored": [
+      {
+        "num": 130,
+        "reason": "example: a second report of the rounding defect of #101, looked at and left out"
+      }
+    ],
+    "nopath": [
+      {
+        "from": 104,
+        "to": 121,
+        "kind": "related",
+        "reason": "example: true but not drawn (a far, low arrow from closed work)"
+      }
+    ],
+    "decisions": [
+      "2026-03-22 example-user: #104 stays on the diagram although it was closed as not planned"
+    ],
+    "notes": "# Notes for sample-lineage.svg\n\n## What it is\nacme/shop, root #100 (checkout rework). Invented data: the example of the skill.\n\n## Scope\n- Roots: #100.\n- Relations followed: sub-issues, closing references, blockedBy, text relations.\n\n## Revision marks\n`new` pills on #120 and #121.",
+    "accepted": [],
+    "closed": []
+  }
 }

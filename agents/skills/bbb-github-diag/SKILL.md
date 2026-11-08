@@ -20,7 +20,7 @@ compatibility: >-
 
 Apply only on an explicit request. The picture shows how issues and pull requests relate: what spawned, closed or replaced what. Read the facts from `gh`, not from memory.
 
-`example/sample-lineage.svg` is a finished example with invented numbers, titles and people. It uses every box state, the pills, the `new` mark, the bold claim lines, a dotted frame, the legend, the find box and two collapsed boxes (#101 and #110: hover over them). Open it to see the look. It is built by this skill's own builder from `example/sample-graph.json`, which is also the model for the input of `build.py` (see "First revision and the scripts"). After you change a style rule here, regenerate it with `python3 example/make_sample.py` and run `check_diag.py` on it (0 failures).
+`example/sample-lineage.svg` is a finished example with invented numbers, titles and people. It uses every box state, the pills, the `new` mark, the bold claim lines, a dotted frame, the legend, the find box and two collapsed boxes (#101 and #110: hover over them). It also carries every kind of fact the file keeps about itself (see "What the file keeps about itself"): a GitHub record on each box (with close reasons and a `replacedBy`), the kind and ends on each arrow, and one example entry in each list of the metadata block (`svgmeta.py show example/sample-lineage.svg`). Open it to see the look. It is built by this skill's own builder from `example/sample-graph.json`, which is also the model for the input of `build.py` (see "First revision and the scripts"). After you change a style rule here, regenerate it with `python3 example/make_sample.py` and run `check_diag.py` on it (0 failures).
 
 ## Requirements
 

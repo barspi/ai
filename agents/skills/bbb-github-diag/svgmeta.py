@@ -18,7 +18,10 @@ One `<metadata id="diagram">` block after `<desc>`, one line of JSON, for the fa
    "nopath":    [{"from": A, "to": B, "kind": "...", "reason": "..."}],   arrows that are true but not drawn (no clean path, or dropped)
    "decisions": ["YYYY-MM-DD who: what was decided and why"],             choices the drawing alone does not explain
    "notes":     "markdown: scope, revision naming, rules for this diagram (example/NOTES_template.md is the outline)",
-   "accepted":  [{"from": A, "to": B, "check": "stale-far", "reason": "...", "date": "..."}]}   review findings answered "keep" (rules.py)
+   "accepted":  [{"from": A, "to": B, "check": "stale-far", "reason": "...", "date": "..."}],   review findings answered "keep" (rules.py)
+   "closed":    [{"num": N, "verdict": "hand|done", "reason": "...", "date": "..."}]}   why an issue was closed, as the user said (rules.py)
+Every key is written, empty when unused, so a reader sees the whole shape. A box record may also hold closeVerdict, replacedBy and
+duplicateOf (refresh_meta.py).
 Everything here travels with the file: facts and neutral reasons only, never remarks about people.
 
 usage:
@@ -45,7 +48,7 @@ BOX_OPEN = r'<g id="n(\d+)"((?: data-[\w-]+="[^"]*")*)>'      # a box group's op
 BOX_RE = re.compile(BOX_OPEN)
 META_RE = re.compile(r'<metadata id="diagram">(.*?)</metadata>', re.S)
 ATTR_RE = re.compile(r' (data-[\w-]+)="([^"]*)"')
-KEYS = ('format', 'repo', 'roots', 'lastRun', 'ignored', 'nopath', 'decisions', 'notes')
+KEYS = ('format', 'repo', 'roots', 'lastRun', 'ignored', 'nopath', 'decisions', 'notes', 'accepted', 'closed')
 
 
 def esc(s):
@@ -135,7 +138,7 @@ def is_arrow(line):
 
 def new_meta(repo='', roots=()):
     return {'format': FORMAT, 'repo': repo, 'roots': [int(r) for r in roots], 'lastRun': None, 'ignored': [], 'nopath': [],
-            'decisions': [], 'notes': ''}
+            'decisions': [], 'notes': '', 'accepted': [], 'closed': []}
 
 
 def read(text):
