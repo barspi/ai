@@ -10,6 +10,7 @@
 <marker id="h-blocked" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#8a3030"/></marker>
 <marker id="h-ref" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#6e6a64"/></marker>
 <marker id="h-evid" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#9a6700"/></marker>
+<marker id="h-dup" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#b02a2a"/></marker>
 <marker id="h-cross" overflow="visible" viewBox="0 0 16 16" refX="8" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M2.5,2.5 L13.5,13.5 M13.5,2.5 L2.5,13.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/></marker>
 <style>.kind{font-size:13.5px;font-weight:700;letter-spacing:.3px}.ttl{font-size:12.5px;fill:#1c2430}.meta{font-size:11px;fill:#3b4350}.mono{font-size:11px;font-family:Menlo,Consolas,monospace;fill:#1c2430}.note{font-size:11px;font-style:italic;fill:#3b4350}.pill{font-size:10.5px;font-weight:700;letter-spacing:.6px}.lbl{font-size:11.5px;font-weight:600}.ftl{font-size:15px;font-style:italic;fill:#6e6a64;letter-spacing:.4px}.h1{font-size:30px;font-weight:700;fill:#1c2430}.h2{font-size:15px;fill:#3b4350}.lg{font-size:13px;fill:#1c2430}.lgb{font-size:13px;font-weight:700;fill:#1c2430}/*collapse-begin*/.pop{visibility:hidden;opacity:0;pointer-events:none;filter:drop-shadow(0 6px 12px rgba(0,0,0,.35))}#n101:hover~#pop101,#pop101:hover{visibility:visible;opacity:1;pointer-events:auto}#n110:hover~#pop110,#pop110:hover{visibility:visible;opacity:1;pointer-events:auto}/*collapse-end*/</style>
 </defs>
@@ -229,7 +230,7 @@
 <rect x="2629.0" y="288" width="88" height="30" rx="7" fill="#fff6c9" stroke="#8f6400" stroke-width="1.4" stroke-dasharray="6 4"/>
 <text class="pill" x="2673.0" y="307" text-anchor="middle" style="fill:#8f6400">draft</text>
 <text class="lg" x="2245.0" y="338">Closed pull request, not merged: gray, red stripes, red cross.</text>
-<text class="lg" x="2245.0" y="358">Red cross on a closed issue: no merged pull request closed it.</text>
+<text class="lg" x="2245.0" y="358">Red cross on a closed issue: closed by hand, the work not done.</text>
 <text class="lg" x="2245.0" y="378">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
 <text class="lg" x="2245.0" y="398"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
 <line x1="2245.0" y1="436" x2="2291.0" y2="436" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>

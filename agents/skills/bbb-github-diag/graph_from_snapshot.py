@@ -15,7 +15,8 @@ of boxes, the strongest kind first (closed by, child, supersedes, revised by, wo
 depends on, references, related, mentioned); an issue that a merged pull request closes by its text becomes `closed` with its note.
 
 Rules used for a box (the same as SKILL.md):
-  issue state open -> `open`; closed and a merged pull request in the snapshot closes it -> `closed`; closed without one -> `handclosed`
+  issue state open -> `open`; closed -> `handclosed` (red cross) when rules.close_verdict says closed by hand (the work not done),
+  else `closed`; an ASK is drawn by the old test (a merged pull request in the snapshot closes it) and printed
   pull request: merged -> `merged`; draft -> `draft`; open -> `waiting`; closed unmerged -> `prclosed`
   an issue with three or more sub-issues, or `umbrella` in its title, is drawn as an umbrella
   meta line: `opened D . still open | closed D | merged D | waiting for review | draft`
@@ -77,7 +78,16 @@ def main():
             state = {'merged': 'merged', 'draft': 'draft', 'open': 'waiting', 'closed': 'prclosed'}[s['state']]
             tail = {'merged': 'merged ' + s.get('mergedAt', ''), 'draft': 'draft', 'waiting': 'waiting for review', 'prclosed': 'closed ' + s.get('closedAt', '')}[state]
         else:
-            state = 'open' if s['state'] == 'open' else ('closed' if merged_pr(n) else 'handclosed')
+            if s['state'] == 'open':
+                state = 'open'
+            else:                                    # the red cross means closed by hand, the work not done (rules.close_verdict)
+                import rules
+                v, why = s.get('closeVerdict') or rules.close_verdict(s)
+                if v == 'ask':
+                    v = 'done' if merged_pr(n) else 'hand'
+                    print('ASK #%d: %s; drawn %s until the user says (rules.py closed IN.svg %d hand|done "reason")' % (
+                        n, why, 'without the cross' if v == 'done' else 'with the red cross', n))
+                state = 'handclosed' if v == 'hand' else 'closed'
             tail = 'still open' if state == 'open' else 'closed ' + s.get('closedAt', '')
         notes = []
         if pr:
@@ -137,6 +147,9 @@ def main():
             if k == 'work done by' and (a, b, 'closed by') in edges:
                 edges.discard((a, b, k))
         import rules
+        for n2, s2 in snap.items():               # an issue closed as a duplicate points to the one that remains
+            if s2.get('duplicateOf') in has and s2['duplicateOf'] != n2:
+                edges.add((n2, s2['duplicateOf'], 'duplicate of'))
         rank = rules.RANK                         # the one strength order (rules.py)
         best = {}
         for a, b, k in edges:                    # one arrow per pair of boxes: the strongest kind (a blocking child is told by its bold lines)

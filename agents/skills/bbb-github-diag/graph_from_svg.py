@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import box_header, collapse, draw, model, route, svgmeta
 
 MARK = {'h-child': 'child', 'h-closed': 'closed by', 'h-work': 'work done by', 'h-evid': 'evidence, does not close', 'h-cross': 'supersedes',
-        'h-blocked': 'blocked by', 'h-led': 'led to', 'h-ref': 'related'}
+        'h-blocked': 'blocked by', 'h-led': 'led to', 'h-ref': 'related', 'h-dup': 'duplicate of'}
 
 
 def plain(fragment):

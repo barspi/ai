@@ -16,7 +16,7 @@ def arrow_points(line):
 
 
 MARKER_KIND = {'h-child': 'child', 'h-closed': 'closed by', 'h-work': 'work done by', 'h-led': 'led to', 'h-blocked': 'blocked by',
-               'h-ref': 'related', 'h-cross': 'supersedes', 'h-evid': 'evidence, does not close'}
+               'h-ref': 'related', 'h-cross': 'supersedes', 'h-evid': 'evidence, does not close', 'h-dup': 'duplicate of'}
 
 
 def _side(p, r, tol=1.5):

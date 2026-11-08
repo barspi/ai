@@ -215,6 +215,26 @@ def _apply(svg, live, repo, log, report, pop):
                         last.group(1), fmt(float(last.group(2)) + 14), ' and '.join(link(repo, p, True, live[p]['title']) for p in prs[:2]))
                     blk = grow(blk[:end] + line + blk[end:], 14)
                     log.append('%s: note "Closed by PR #%s." added, box 14px taller' % (tag, prs[0]))
+        # the red cross on a closed issue: closed by hand, the work not done (rules.close_verdict decides, refresh_meta.py stores it)
+        if kind == 'ISSUE' and l['state'] == 'closed' and l.get('closeVerdict'):
+            v, why = l['closeVerdict']
+            crossed = bool(re.search(r'<line [^>]*stroke="#ff2a2a"', blk))
+            if v == 'done' and crossed:
+                blk = re.sub(r'\n?<line [^>]*stroke="#ff2a2a"[^>]*/>', '', blk)
+                log.append('%s: red cross removed (%s)' % (tag, why))
+            elif v == 'hand' and not crossed:
+                pm = re.search(r'<rect x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="20" rx="10" fill="#4e4b48"/>\n<text class="pill"[^\n]*', blk)
+                if pm:
+                    kx, ky = float(pm.group(1)) - 13, float(pm.group(2)) + 10
+                    cross = ''.join('\n<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="#ff2a2a" stroke-width="2.8" stroke-linecap="round"/>' % (
+                        fmt(kx + s1 * 6), fmt(ky - 6), fmt(kx - s1 * 6), fmt(ky + 6)) for s1 in (-1, 1))
+                    blk = blk[:pm.end()] + cross + blk[pm.end():]
+                    log.append('%s: red cross added (%s)' % (tag, why))
+                else:
+                    report.append('#%d: closed by hand (%s) but no closed pill found to put the cross beside' % (num, why))
+            elif v == 'ask' and not pop:
+                report.append('ASK #%d: %s; %s now. Read its last comments, ask the user when they do not say, then: '
+                              'rules.py closed IN.svg %d hand|done "reason"' % (num, why, 'red cross' if crossed else 'no cross', num))
         # assignee label
         if kind == 'ISSUE':
             names = l.get('assignees') or []

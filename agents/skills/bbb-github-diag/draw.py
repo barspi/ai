@@ -41,6 +41,7 @@ EDGE = {
     'work done by': ('#1d4e89', True,  'h-work',    True,  'B worked on A without closing it'),
     'evidence, does not close': ('#9a6700', True, 'h-evid', True, 'B is evidence for A; A stays open'),
     'supersedes':   ('#b02a2a', False, 'h-cross',   False, 'pull request A replaced B (B closed unmerged)'),
+    'duplicate of': ('#b02a2a', False, 'h-dup',     False, 'issue A was closed as a duplicate of B'),
     'blocked by':   ('#8a3030', False, 'h-blocked', False, 'A cannot finish until B is done'),
     'depends on':   ('#6e6a64', True,  'h-ref',     False, 'A needs the result of B, which does not block it'),
     'references':   ('#6e6a64', True,  'h-ref',     False, 'A points to B as relevant prior work'),
@@ -53,7 +54,7 @@ EDGE = {
 # runs out. Its direction (forward or not, the 4th field of EDGE) is a separate fact: it sets the columns.
 IMPORTANCE = {'child': 3, 'closed by': 3, 'blocked by': 3, 'depends on': 3,
               'follow-up': 2, 'led to': 2, 'spawned': 2, 'revised by': 2, 'work done by': 2, 'evidence, does not close': 2,
-              'supersedes': 2, 'references': 2,
+              'supersedes': 2, 'duplicate of': 2, 'references': 2,
               'related': 1, 'mentioned': 1}
 PULL = {3: 1.0, 2: 0.6, 1: 0.2}                     # tier -> how hard the arrow pulls its two frames together
 
@@ -61,7 +62,7 @@ PULL = {3: 1.0, 2: 0.6, 1: 0.2}                     # tier -> how hard the arrow
 def pull(kind):
     return PULL[IMPORTANCE.get(kind, 2)]
 MARKERS = (('h-child', '#1c2430'), ('h-closed', '#1d4e89'), ('h-work', '#1d4e89'), ('h-led', '#8a4b12'), ('h-blocked', '#8a3030'),
-           ('h-ref', '#6e6a64'), ('h-evid', '#9a6700'))
+           ('h-ref', '#6e6a64'), ('h-evid', '#9a6700'), ('h-dup', '#b02a2a'))
 
 
 def fmt(v):
@@ -288,7 +289,7 @@ def legend(lx, ly, kinds, states):
         lg.append('<text class="lg" x="%s" y="%s">Closed pull request, not merged: gray, red stripes, red cross.</text>' % (lx + 16, y))
         y += 20
     if 'handclosed' in states:
-        lg.append('<text class="lg" x="%s" y="%s">Red cross on a closed issue: no merged pull request closed it.</text>' % (lx + 16, y))
+        lg.append('<text class="lg" x="%s" y="%s">Red cross on a closed issue: closed by hand, the work not done.</text>' % (lx + 16, y))
         y += 20
     lg.append('<text class="lg" x="%s" y="%s">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>' % (lx + 16, y))
     y += 20

@@ -33,7 +33,11 @@ FIELDS = """
   ... on Issue { title state stateReason createdAt closedAt updatedAt author{login} comments{totalCount}
                  assignees(first:10){nodes{login}}
                  parent{number} subIssues(first:50){nodes{number}} blockedBy(first:20){nodes{number}}
-                 blocking(first:20){nodes{number}} closedByPullRequestsReferences(first:10){nodes{number}} }
+                 blocking(first:20){nodes{number}} closedByPullRequestsReferences(first:10){nodes{number}}
+                 timelineItems(itemTypes:[CLOSED_EVENT], last:1){nodes{... on ClosedEvent{closer{__typename
+                   ... on PullRequest{number merged} ... on Commit{abbreviatedOid}}}}}
+                 dup:timelineItems(itemTypes:[MARKED_AS_DUPLICATE_EVENT], last:1){nodes{... on MarkedAsDuplicateEvent{
+                   canonical{... on Issue{number} ... on PullRequest{number}}}}} }
   ... on PullRequest { title state isDraft merged mergedAt createdAt closedAt updatedAt author{login} comments{totalCount}
                  reviews{totalCount} mergeCommit{oid} mergedBy{login} closingIssuesReferences(first:20){nodes{number}}
                  commits(first:50){nodes{commit{authors(first:5){nodes{name user{login}}}}}} }
@@ -151,11 +155,49 @@ def main():
             'createdAt': (d.get('createdAt') or '')[:10],
             'closedAt': (d.get('closedAt') or '')[:10], 'mergedAt': (d.get('mergedAt') or '')[:10] if pr else '',
         }
+        if not pr and d['state'] == 'CLOSED':          # why it was closed: GitHub's reason and what closed it (rules.close_verdict)
+            ev = ((d.get('timelineItems') or {}).get('nodes') or [{}])[-1] or {}
+            c = ev.get('closer') or {}
+            live[n]['stateReason'] = d.get('stateReason') or ''
+            live[n]['closer'] = ({'pr': c['number'], 'merged': c['merged']} if c.get('__typename') == 'PullRequest' else
+                                 {'commit': c['abbreviatedOid']} if c.get('__typename') == 'Commit' else {})
+            canon = ((((d.get('dup') or {}).get('nodes') or [{}])[-1] or {}).get('canonical') or {}).get('number')
+            if canon:                                  # GitHub's own "marked as duplicate of #N"
+                live[n]['duplicateOf'] = canon
+
+    # why each closed issue was closed (rules.close_verdict): the user's recorded answer, GitHub's reason and closer, then the last
+    # comments, read in ONE extra call and only for the issues the record alone does not settle
+    import rules, svgmeta as _sm
+    decided = {x['num']: x for x in ((_sm.read(text) or {}).get('closed') or [])}
+    unsettled = [n for n in nums if n not in decided and rules.needs_text(live[n])]
+    unsettled += [n for n in nums if live[n].get('kind') == 'PR' and live[n].get('state') == 'closed']    # what replaced a closed PR
+    texts = {}
+    if unsettled:
+        q3 = 'query{repository(owner:"%s",name:"%s"){%s}}' % (owner, name, ' '.join(
+            'i%d:issueOrPullRequest(number:%d){... on Issue{body comments(last:5){nodes{body}}} ... on PullRequest{body comments(last:5){nodes{body}}}}' % (n, n) for n in unsettled))
+        r3 = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=' + q3], capture_output=True, text=True)
+        if r3.returncode:
+            sys.exit('gh failed: ' + r3.stderr.strip())
+        d3 = json.loads(r3.stdout)['data']['repository']
+        texts = {n: [(d3.get('i%d' % n) or {}).get('body') or ''] + [c.get('body') or '' for c in ((d3.get('i%d' % n) or {}).get('comments') or {}).get('nodes', [])]
+                 for n in unsettled}
+    for n in nums:
+        v, why = rules.close_verdict(live[n], texts.get(n), decided.get(n))
+        if v:
+            live[n]['closeVerdict'] = [v, why]
+        if n in texts and rules.replaced_by(texts[n]):
+            live[n]['replacedBy'] = rules.replaced_by(texts[n])
+        if n in texts and not live[n].get('duplicateOf') and rules.duplicate_of(texts[n]):
+            live[n]['duplicateOf'] = rules.duplicate_of(texts[n])
 
     if opts.apply:          # local text edits on the boxes (see svg_state.py); no layout work, no rebuild
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import svg_state
         text, log, rep = svg_state.apply(text, live, repo)
+        old_day = re.search(r'Facts as of (\d{4}-\d{2}-\d{2})', text)
+        if old_day and old_day.group(1) != run_start[:10]:             # the header says when the facts were read
+            text = text.replace(old_day.group(0), 'Facts as of ' + run_start[:10], 1)
+            log.append('header: facts as of %s (was %s)' % (run_start[:10], old_day.group(1)))
         open(svg, 'w').write(text)
         print('--- applied to %s (%d edits) ---' % (svg, len(log)))
         for ln in log:
