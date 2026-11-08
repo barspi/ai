@@ -11,6 +11,9 @@ this skill decides them the same way. A rule proposes; the agent confirms agains
    none, then more arrows, then the frame of the lowest-numbered neighbour (the oldest item). A box whose only arrows go to a root is
    an ASK: no rule knows its topic. add_nodes.py applies it to a box whose spec has no "frame".
 3. The box a new one is placed beside (near_for()): the neighbour with the most important arrow; ties: the lowest number.
+6. Far low arrows are not drawn (far_low()): a `related`, `references` or `mentioned` arrow whose tail is closed or merged, and whose
+   path is longer than FAR_FACTOR times the median arrow or passes through a frame that holds neither of its boxes. `rules.py prune`
+   drops them into "nopath" with the reason; build.py does it after routing.
 5. Closed by hand (close_verdict()): the red cross on a closed issue means the work was not done (wrong, duplicate, won't do,
    won't fix, superseded, not needed). In this order, the first that applies decides:
    a. the user's recorded answer for that box (`rules.py closed IN.svg N hand|done "reason"`, the block's "closed" list);
@@ -42,6 +45,7 @@ usage:
   rules.py review IN.svg                                    the review findings (exit 0)
   rules.py accept IN.svg A B CHECK "reason"                 record an answer (CHECK: stale-far, number-order)
   rules.py closed IN.svg N hand|done "reason"               record why issue N was closed (wins over every other step)
+  rules.py prune IN.svg                                     drop every far low arrow from closed work (far_low) into "nopath"
   rules.py selftest                                         the phrase rules against a fixed set of sentences
 """
 import datetime, json, os, re, statistics, sys, tempfile
@@ -344,6 +348,63 @@ def review(text):
     return out
 
 
+# ---------------------------------------------------------------- far low arrows are not drawn
+
+LOW_KINDS = ('related', 'references', 'mentioned')
+
+
+def frames_visited(pts, frames, own):
+    """How many frames the path passes through that hold neither end box (own: the frames of the two boxes), counting each entry."""
+    import route
+    n = 0
+    for f in frames:
+        if f in own:
+            continue
+        inside = [f[0] < x < f[0] + f[2] and f[1] < y < f[1] + f[3] for x, y in _dense(pts)]
+        n += sum(1 for a, b in zip(inside, inside[1:]) if b and not a) + (1 if inside and inside[0] else 0)
+    return n
+
+
+def _dense(pts, step=10.0):
+    out = []
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        k = max(1, int(max(abs(x2 - x1), abs(y2 - y1)) / step))
+        out += [(x1 + (x2 - x1) * t / k, y1 + (y2 - y1) * t / k) for t in range(k)]
+    return out + [pts[-1]]
+
+
+def far_low(text):
+    """[(a, b, kind, why)] for every drawn low-importance arrow (LOW_KINDS) whose tail is closed or merged and whose path goes too far:
+    longer than FAR_FACTOR times the median arrow, or through a frame that holds neither of its boxes. Such an arrow is not drawn: the
+    reader gains little from it and pays with crossings across the picture. `rules.py prune` and build.py move it to "nopath"."""
+    import model, route, svgmeta
+    sc, info = model.read(text)
+    bx = svgmeta.boxes(text)
+    arrows = []
+    for ln in info['lines']:
+        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+        if at:
+            pts = model.arrow_points(ln)
+            arrows.append((at, pts, sum(abs(x2 - x1) + abs(y2 - y1) for (x1, y1), (x2, y2) in zip(pts, pts[1:]))))
+    if not arrows:
+        return []
+    median = statistics.median(l for _, _, l in arrows)
+    def frame_of(n):
+        r = sc.boxes.get(n)
+        ins = [f for f in sc.frames if r and f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]]
+        return min(ins, key=lambda f: f[2] * f[3]) if ins else None
+    out = []
+    for (a, b, kind), pts, length in arrows:
+        g = (bx.get(a) or {}).get('github') or {}
+        if kind not in LOW_KINDS or g.get('state') not in ('closed', 'merged'):
+            continue
+        own = {frame_of(a), frame_of(b)}
+        visits = frames_visited(pts, sc.frames, own)
+        if length > FAR_FACTOR * median or visits:
+            out.append((a, b, kind, '%.0fpx (%.1f x the median)%s' % (length, length / median, ', through %d other frame(s)' % visits if visits else '')))
+    return out
+
+
 # ---------------------------------------------------------------- command line
 
 def main():
@@ -382,6 +443,19 @@ def main():
             {'num': n, 'verdict': a[3], 'reason': a[4], 'date': datetime.date.today().isoformat()}]
         open(path, 'w', encoding='utf-8').write(svgmeta.write(text, meta))
         print('updated %s: #%d closed %s (run refresh_meta.py --apply to draw it)' % (path, n, 'by hand' if a[3] == 'hand' else 'with the work done'))
+    elif cmd == 'prune':
+        meta = svgmeta.read(text)
+        if meta is None:
+            sys.exit('%s has no metadata block: run svgmeta.py migrate first' % path)
+        found = far_low(text)
+        for a2, b2, kind, why in found:
+            text = svgmeta.drop(text, a2, b2, 'low importance, from closed work, and too far to draw: %s' % why)
+            print('dropped #%d %s #%d: %s' % (a2, kind, b2, why))
+        meta = svgmeta.read(text)
+        meta['accepted'] = [x for x in meta.get('accepted', []) if (x['from'], x['to']) not in {(f[0], f[1]) for f in found}]
+        text = svgmeta.write(text, meta)
+        open(path, 'w', encoding='utf-8').write(text)
+        print('%d arrows dropped (kept in "nopath")' % len(found))
     elif cmd == 'review':
         fs = review(text)
         for f in fs:

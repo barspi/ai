@@ -10,9 +10,10 @@ Scene, so it adapts to the crossings and the free space of the current diagram. 
     sc.add(pts, 'closed by', lab)                         remember both, so the next arrow sees them
 
 Rules it keeps (SKILL.md, "Hard arrows"): a path never goes under a box (26px clear) or a label (10px clear); never runs parallel to another
-arrow closer than 36px or to a frame border closer than 30px; crosses a line only at a right angle, on a long straight stretch (at least
-36px from either line's bends and ends); never turns within 40px of a box edge (so it leaves and enters straight); has as few crossings and
-bends as it can. It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
+arrow closer than 14px (between 14 and 36px it may, at a cost per step) or to a frame border closer than 30px; crosses a line only at a
+right angle, away from either line's ends; never turns within 40px of a box edge (so it leaves and enters straight); has as few
+crossings, bends and frame-border crossings as it can. An arrow whose two boxes are in the same frame is searched inside that frame
+first and leaves it only when no path exists inside (route() then records the pair in sc.left_frame). It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
 The search is Dijkstra/A* on a 5px grid inside a window around the two boxes (the window grows when nothing is found).
 """
 import heapq, math
@@ -22,6 +23,10 @@ import draw
 G = 5
 BOXM, LABM, PROX, FPROX, TURN_FREE, EDGE_MARGIN = 26, 10, 36, 30, 40, 24
 TURN_COST, CROSS_COST, SIDE_COST = 30, 50, 20
+HARD = 14           # closer than this to another arrow is never allowed (check_diag.py asks 13.5px between parallel lines)
+NEAR_COST = 4       # per 5px cell run parallel to, or turned within, PROX of another arrow but no closer than HARD: allowed, at a cost,
+                    # so a tight but short way wins over a long detour around the picture
+FRAME_COST = 60     # per frame border crossed: an arrow does not wander through other frames for free
 OUT = {'R': 0, 'L': 2, 'B': 1, 'T': 3}               # direction numbers: 0 east, 1 south, 2 west, 3 north
 DX, DY = (1, 0, -1, 0), (0, 1, 0, -1)
 
@@ -33,6 +38,7 @@ class Scene:
         self.labels, self.pills = list(labels), list(pills)
         self.arrows = [list(a) for a in arrows]
         self.hops = []                                     # jump arcs already in the picture: (x0, y0, x1, y1) of each; labels keep clear of them
+        self.left_frame = []                               # (a, b) of arrows that had to leave their common frame (no path inside)
 
     def add(self, pts, kind=None, lab=None):
         self.arrows.append(list(pts))
@@ -63,16 +69,18 @@ def _side_cells(r, side, lo_margin):
     return a, b
 
 
-def _route(sc, a, b, sa, sb, pad, natural=None):
+def _route(sc, a, b, sa, sb, pad, natural=None, inside=None):
     ra, rb = sc.boxes[a], sc.boxes[b]
     bx0, by0, bx1, by1 = (int(v) for v in (sc.bounds or (0, 0, 10 ** 6, 10 ** 6)))
     x0 = max(bx0, int(min(ra[0], rb[0]) - pad))
     y0 = max(by0, int(min(ra[1], rb[1]) - pad))
     x1 = min(bx1, int(max(ra[0] + ra[2], rb[0] + rb[2]) + pad))
     y1 = min(by1, int(max(ra[1] + ra[3], rb[1] + rb[3]) + pad))
+    if inside:                                   # the window is the frame itself
+        x0, y0, x1, y1 = int(inside[0]) - 2 * G, int(inside[1]) - 2 * G, int(inside[0] + inside[2]) + 2 * G, int(inside[1] + inside[3]) + 2 * G
     NX, NY = (x1 - x0) // G + 1, (y1 - y0) // G + 1
     size = NX * NY
-    blk, noh, nov, nt, crh, crv = (bytearray(size) for _ in range(6))
+    blk, noh, nov, nt, crh, crv, sh, sv, st_, frh, frv = (bytearray(size) for _ in range(11))
 
     def rng(lo, hi, o, n):                       # grid indices with lo < coordinate < hi
         i1 = max(0, int(math.floor((lo - o) / G)) + 1)
@@ -96,17 +104,21 @@ def _route(sc, a, b, sa, sb, pad, natural=None):
     for (x, y, w, h) in sc.pills:
         mark(blk, x, y, x + w, y + h)
 
-    def add_seg(o, c, lo, hi, prox, cost):
+    def add_seg(o, c, lo, hi, prox, cost, hard):
         if o == 'h':
-            mark(noh, lo - prox, c - prox, hi + prox, c + prox)
-            mark(nt, lo - prox, c - prox, hi + prox, c + prox)
+            mark(noh, lo - hard, c - hard, hi + hard, c + hard)
+            mark(nt, lo - hard, c - hard, hi + hard, c + hard)
+            mark(sh, lo - prox, c - prox, hi + prox, c + prox)            # near, not too near: a cost (NEAR_COST)
+            mark(st_, lo - prox, c - prox, hi + prox, c + prox)
             mark(blk, lo - prox, c - prox, lo + prox, c + prox)          # near the ends no crossing is allowed
             mark(blk, hi - prox, c - prox, hi + prox, c + prox)
             if cost:
                 mark(crh, lo, c - G / 2 - .01, hi, c + G / 2 + .01)
         else:
-            mark(nov, c - prox, lo - prox, c + prox, hi + prox)
-            mark(nt, c - prox, lo - prox, c + prox, hi + prox)
+            mark(nov, c - hard, lo - hard, c + hard, hi + hard)
+            mark(nt, c - hard, lo - hard, c + hard, hi + hard)
+            mark(sv, c - prox, lo - prox, c + prox, hi + prox)
+            mark(st_, c - prox, lo - prox, c + prox, hi + prox)
             mark(blk, c - prox, lo - prox, c + prox, lo + prox)
             mark(blk, c - prox, hi - prox, c + prox, hi + prox)
             if cost:
@@ -114,10 +126,20 @@ def _route(sc, a, b, sa, sb, pad, natural=None):
 
     for pts in sc.arrows:
         for o, c, lo, hi in segments(pts):
-            add_seg(o, c, lo, hi, PROX, True)
+            add_seg(o, c, lo, hi, PROX, True, HARD)
     for (x, y, w, h) in sc.frames:
         for o, c, lo, hi in (('h', y, x, x + w), ('h', y + h, x, x + w), ('v', x, y, y + h), ('v', x + w, y, y + h)):
-            add_seg(o, c, lo, hi, FPROX, False)
+            add_seg(o, c, lo, hi, FPROX, False, FPROX)            # a frame border keeps its full 30px: no running along it
+            if o == 'h':
+                mark(frh, lo, c - G / 2 - .01, hi, c + G / 2 + .01)
+            else:
+                mark(frv, c - G / 2 - .01, lo, c + G / 2 + .01, hi)
+    if inside:                                                   # stay in the common frame: everything outside it is blocked
+        fx, fy, fw, fh = inside
+        mark(blk, x0 - G, y0 - G, fx + 2, y1 + G)
+        mark(blk, fx + fw - 2, y0 - G, x1 + G, y1 + G)
+        mark(blk, x0 - G, y0 - G, x1 + G, fy + 2)
+        mark(blk, x0 - G, fy + fh - 2, x1 + G, y1 + G)
     for r in (ra, rb):                                         # leave and enter a box straight
         x, y, w, h = r
         mark(nt, x - TURN_FREE, y - TURN_FREE, x + w + TURN_FREE, y + h + TURN_FREE)
@@ -204,6 +226,10 @@ def _route(sc, a, b, sa, sb, pad, natural=None):
             c2 = cst + 1 + (TURN_COST if nd != d else 0)
             if nd in (1, 3) and crh[k] or nd in (0, 2) and crv[k]:
                 c2 += CROSS_COST
+            if nd in (0, 2) and sh[k] or nd in (1, 3) and sv[k] or nd != d and st_[cell(i, j)]:
+                c2 += NEAR_COST
+            if nd in (1, 3) and frh[k] or nd in (0, 2) and frv[k]:
+                c2 += FRAME_COST
             s2 = (ni, nj, nd)
             if c2 < dist.get(s2, 1e18):
                 dist[s2] = c2
@@ -242,6 +268,35 @@ def _route(sc, a, b, sa, sb, pad, natural=None):
         pts[-1] = (pts[-1][0], py)
     else:
         pts[-1] = (pts[-1][0], py + h)
+    return unjog(pts, ra, rb, sa, sb)
+
+
+def unjog(pts, ra, rb, sa, sb, short=2 * G):
+    """Remove a jog shorter than `short` next to either end (the grid can leave a 5px step before a goal cell): the end point moves onto
+    the line of the stretch before the jog, when that point is still on the same side of its box, 20px from its corners."""
+    def on_side(r, side, v):
+        lo, hi = _side_cells(r, side, 20)
+        return lo - .01 <= v <= hi + .01
+    for end in (-1, 0):
+        if len(pts) < 4:
+            break
+        k = len(pts) - 1 if end == -1 else 0
+        j, i = (k - 1, k - 2) if end == -1 else (k + 1, k + 2)       # the jog runs from pts[i] to pts[j]; pts[j] to pts[k] enters the box
+        side, r = (sb, rb) if end == -1 else (sa, ra)
+        if side in 'LR' and abs(pts[j][0] - pts[i][0]) < .01 and 0 < abs(pts[j][1] - pts[i][1]) < short and on_side(r, side, pts[i][1]):
+            pts[k] = (pts[k][0], pts[i][1])
+            del pts[j]
+            if end == -1:
+                del pts[-2]
+            else:
+                del pts[1]
+        elif side in 'TB' and abs(pts[j][1] - pts[i][1]) < .01 and 0 < abs(pts[j][0] - pts[i][0]) < short and on_side(r, side, pts[i][0]):
+            pts[k] = (pts[i][0], pts[k][1])
+            del pts[j]
+            if end == -1:
+                del pts[-2]
+            else:
+                del pts[1]
     return pts
 
 
@@ -257,6 +312,15 @@ def sides_for(ra, rb):
     return [first] + [s for s in rest if s != first]
 
 
+def common_frame(sc, a, b):
+    """The smallest frame that holds both boxes, or None."""
+    def holds(f, r):
+        return f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]
+    ra, rb = sc.boxes[a], sc.boxes[b]
+    both = [f for f in sc.frames if holds(f, ra) and holds(f, rb)]
+    return min(both, key=lambda f: f[2] * f[3]) if both else None
+
+
 def route(sc, a, b, sa='R', sb='L', pad=260):
     """Path from side `sa` of box a to side `sb` of box b (sides R, L, T, B), or None when there is no path that keeps the rules.
     sa='*' and sb='*' let the search pick the sides: the pair that faces the other box is preferred, any other side is taken when it
@@ -265,6 +329,13 @@ def route(sc, a, b, sa='R', sb='L', pad=260):
     if sa == '*' or sb == '*':
         natural = sides_for(sc.boxes[a], sc.boxes[b])[0]
         sa, sb = ('RLTB' if sa == '*' else sa), ('RLTB' if sb == '*' else sb)
+    fr = common_frame(sc, a, b)
+    if fr:                                       # both boxes in one frame: the arrow stays inside it (an almost hard rule)
+        pts = _route(sc, a, b, sa, sb, 10 ** 6, natural, inside=fr)
+        if pts:
+            return pts
+        if hasattr(sc, 'left_frame'):
+            sc.left_frame.append((a, b))
     for _ in range(3):
         pts = _route(sc, a, b, sa, sb, pad, natural)
         if pts:

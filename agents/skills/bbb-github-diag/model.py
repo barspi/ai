@@ -122,24 +122,71 @@ def repair(text, count_only=False):
     return '\n'.join(lines), done, problems
 
 
-def relabel(text, hop_pad=0):
+def replace_labels(old, new, idxs):
+    """After arrows changed shape (same line indexes in `old` and `new`), take the label of each arrow in `idxs` off (found on its OLD
+    path: a label of its word centred on one of its stretches) and place it again on its NEW path with route.place_label (20px of shaft;
+    else the best place with less, reported). Returns (text, problems)."""
+    import svgmeta
+    lo_, ln_ = old.split('\n'), new.split('\n')
+    found = {}                                             # arrow line -> (label line, number of lines)
+    for i in idxs:
+        at = svgmeta.arrow_of(lo_[i])
+        if not at:
+            continue
+        segs = route.segments(arrow_points(lo_[i]))
+        for j in range(len(lo_)):
+            lab = route.draw.label_at(lo_, j)
+            if lab and lab[5] == at[2] and j not in [v[0] for v in found.values()]:
+                cx, cy = lab[0] + lab[2] / 2, lab[1] + lab[3] / 2
+                if any((o == 'h' and abs(c - cy) < 1 and lo - 1 <= cx <= hi + 1) or (o == 'v' and abs(c - cx) < 1 and lo - 1 <= cy <= hi + 1) for o, c, lo, hi in segs):
+                    found[i] = (j, 1 + lab[4])
+                    break
+    drop = {k for j, m in found.values() for k in range(j, j + m)}
+    keep = [l if k not in drop else None for k, l in enumerate(ln_)]
+    sc, _ = read('\n'.join(l for l in keep if l is not None))
+    problems = []
+    for i in idxs:
+        at = svgmeta.arrow_of(ln_[i])
+        if i not in found or not at:
+            continue
+        pts = arrow_points(ln_[i])
+        lab = route.place_label(sc, pts, at[2])
+        if not lab:
+            lab = route.place_label(sc, pts, at[2], strict=False)
+            problems.append('label of #%d %s #%d: %s' % (at[0], at[2], at[1], 'less than 20px of shaft, check it by eye' if lab else 'no straight stretch: it is left off'))
+        if lab:
+            w = route.draw.label_width(at[2])
+            sc.labels.append((lab[0] - w / 2, lab[1] - 9, w, 18))
+            keep[found[i][0]] = '\n'.join(route.draw.label(at[2], *lab))
+    return '\n'.join(l for l in keep if l is not None), problems
+
+
+def relabel(text, hop_pad=0, redo=()):
     """Put every label that does not sit well on its arrow (it covers another arrow, a box or a label, or is off its arrow) on a better
     straight stretch. Returns (text, fixed, failed): the number of labels moved, and (x, y, reason) for each label that found no good place.
     A label with no arrow under it goes back to the nearest arrow of its word that has no label. hop_pad: a label nearer than this to a
-    jump arc counts as badly placed (0: only one that covers an arc; build.py passes 20, the shaft the checker asks for)."""
+    jump arc counts as badly placed (0: only one that covers an arc; build.py passes 20, the shaft the checker asks for). redo: line
+    indexes of arrows whose labels are placed again even when they sit well (fit_heights.py passes the arrows it changed). An arrow's
+    word is its data-kind (svgmeta.py), else the word of its arrowhead."""
+    import svgmeta
     sc, info = read(text)
     lines = info['lines']
     fixed, failed = 0, []
-    kinds = []                                              # the word of each arrow, from its arrowhead (same order as sc.arrows)
-    for ln in lines:
+    kinds, redo_k = [], set()                               # the word of each arrow (same order as sc.arrows); the arrows to redo
+    for i, ln in enumerate(lines):
         if ln.startswith('<path d="M') and 'marker-end' in ln:
+            at = svgmeta.arrow_of(ln)
             mk = re.search(r'marker-end="url\(#([\w-]+)\)"', ln)
-            kinds.append(MARKER_KIND.get(mk.group(1)) if mk else None)
+            if i in redo:
+                redo_k.add(len(kinds))
+            kinds.append(at[2] if at else (MARKER_KIND.get(mk.group(1)) if mk else None))
 
     def on_arrow(k, cx, cy):
         return any((o == 'h' and abs(c - cy) < 1 and lo <= cx <= hi) or (o == 'v' and abs(c - cx) < 1 and lo <= cy <= hi) for o, c, lo, hi in route.segments(sc.arrows[k]))
 
     def distance(k, cx, cy):
+        if not route.segments(sc.arrows[k]):              # an arrow of no length has no stretch to carry a label
+            return 1e18
         return min((abs(c - cy) + max(0, lo - cx, cx - hi)) if o == 'h' else (abs(c - cx) + max(0, lo - cy, cy - hi)) for o, c, lo, hi in route.segments(sc.arrows[k]))
 
     labelled = set()                                        # arrows that carry a label now
@@ -154,10 +201,10 @@ def relabel(text, hop_pad=0):
         x, y, w, h, _, word = lab
         rect = (x, y, w, h)
         cx, cy = x + w / 2, y + h / 2
-        own, orphan = None, False
+        own, orphan, own_k = None, False, None
         for k in range(len(sc.arrows)):
-            if on_arrow(k, cx, cy):
-                own = sc.arrows[k]
+            if on_arrow(k, cx, cy) and (kinds[k] == word or own is None):
+                own, own_k = sc.arrows[k], k
         if own is None:                                    # a label with no arrow under it (an arrow moved and left it behind):
             free = [k for k in range(len(sc.arrows)) if kinds[k] == word and k not in labelled]   # give it back to the nearest arrow of its word that has no label
             if free:
@@ -166,7 +213,7 @@ def relabel(text, hop_pad=0):
                 labelled.add(k)
         others = route.Scene(sc.boxes, sc.frames, [l for l in sc.labels if tuple(l) != rect], sc.pills, sc.arrows, sc.bounds)
         others.hops = sc.hops
-        if own is not None and not orphan and not route._hit(rect, others, own=own, hop_pad=hop_pad):
+        if own is not None and not orphan and own_k not in redo_k and not route._hit(rect, others, own=own, hop_pad=hop_pad):
             continue
         if own is None or word not in route.draw.EDGE:
             failed.append((round(cx), round(cy), 'no arrow of this word to attach the label to'))

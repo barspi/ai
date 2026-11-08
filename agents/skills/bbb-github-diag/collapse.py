@@ -69,6 +69,22 @@ def shift_y_line(line, dy):
     return line
 
 
+def set_height(lines, n, h):
+    """Give the collapsed box n the height h, in place: its rect, an umbrella's inner frame, a closed pull request's stripes and the
+    "..." cue at the bottom. Used by build.py and fit_heights.py."""
+    _, box, _, _ = parse('\n'.join(lines))
+    b = box[n]
+    a = b['a']
+    lines[a + 1] = re.sub(r'height="[\d.]+"', 'height="%s"' % fmt(h), lines[a + 1], count=1)
+    for k in range(a + 2, b['b'] + 1):
+        if lines[k].startswith('<rect') and 'rx="7"' in lines[k]:
+            lines[k] = re.sub(r'height="[\d.]+"', 'height="%s"' % fmt(h - 8), lines[k], count=1)
+        elif lines[k].startswith('<rect') and 'url(#stripes' in lines[k]:
+            lines[k] = re.sub(r'height="[\d.]+"', 'height="%s"' % fmt(h), lines[k], count=1)
+        if '&#8230;' in lines[k]:
+            lines[k] = re.sub(r' y="[\d.]+"', ' y="%s"' % fmt(b['y'] + h - 10), lines[k], count=1)
+
+
 def group_end(lines, i):
     depth = 0
     for j in range(i, len(lines)):

@@ -34,19 +34,6 @@ import draw, layout, route, hops, collapse, svgmeta
 from fonts import load
 
 
-def collapsed_height_patch(lines, n, h):
-    """Give the collapsed box n the height h (collapse.process only knows 62px or what arrows ask for)."""
-    _, box, _, _ = collapse.parse('\n'.join(lines))
-    b = box[n]
-    a = b['a']
-    lines[a + 1] = re.sub(r'height="[\d.]+"', 'height="%s"' % draw.fmt(h), lines[a + 1], count=1)
-    for k in range(a + 2, b['b'] + 1):
-        if lines[k].startswith('<rect') and 'rx="7"' in lines[k]:
-            lines[k] = re.sub(r'height="[\d.]+"', 'height="%s"' % draw.fmt(h - 8), lines[k], count=1)
-        if '&#8230;' in lines[k]:
-            lines[k] = re.sub(r' y="[\d.]+"', ' y="%s"' % draw.fmt(b['y'] + h - 10), lines[k], count=1)
-
-
 def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__)
@@ -116,7 +103,7 @@ def main():
         text, log = collapse.process(text, sets)
         lines = text.split('\n')
         for n in sets:
-            collapsed_height_patch(lines, n, rect[n][3])
+            collapse.set_height(lines, n, rect[n][3])       # collapse.process only knows 62px or what arrows ask for
         text = '\n'.join(lines)
 
     # ---------------------------------------------------------------- arrows and labels
@@ -168,8 +155,37 @@ def main():
     text, moved, failed = model.relabel(text, hop_pad=20)
     for x, y, why in failed:
         problems.append('label near (%d,%d): %s' % (x, y, why))
+    import straighten, rules                      # Z-shaped arrows made straight where a box can move; far low arrows from closed work dropped
+    st_text, st_done, _, st_problems, st_before, st_after = straighten.straighten(text)
+    if st_done and st_after <= st_before:
+        text = st_text
+        problems += st_problems
+        print('straighten: %d arrows made straight' % len(st_done))
+    import reroute                                # straightening frees room: an arrow that had to leave its frame tries inside again
+    leavers = reroute.leaves_frame(text)
+    if leavers:
+        before_r = model.repair(text, count_only=True)[1]
+        rr, rr_done, _ = reroute.reroute(text, leavers)
+        rr, _, _ = hops.add_hops(rr)
+        rr, _, _ = model.relabel(rr, hop_pad=20)
+        if model.repair(rr, count_only=True)[1] <= before_r:
+            text = rr
+            print('reroute: %d arrows that left their frame routed again, %d still leave it' % (len(rr_done), len(reroute.leaves_frame(text))))
+    if svgmeta.read(text) is None:
+        text = svgmeta.write(text, svgmeta.new_meta(spec['repo'], spec.get('roots') or ()))
+    for a2, b2, kind2, why2 in rules.far_low(text):
+        text = svgmeta.drop(text, a2, b2, 'low importance, from closed work, and too far to draw: %s' % why2)
+        print('not drawn: #%s %s #%s (%s)' % (a2, kind2, b2, why2))
+    import fit_heights                            # give back the side room the layout reserved and the router did not use
+    fitted, changed, _, fit_problems, before, after, _ = fit_heights.fit(text)
+    if changed and after <= before:
+        text = fitted
+        problems += fit_problems
+        print('fit_heights: %d collapsed boxes shortened by %.0fpx' % (len(changed), sum(o - h for _, o, h in changed)))
     meta = svgmeta.new_meta(spec['repo'], spec.get('roots') or ())     # the facts with no box or arrow of their own (svgmeta.py)
     meta.update({k: v for k, v in (spec.get('meta') or {}).items() if k not in ('format', 'repo', 'roots')})
+    for x in (svgmeta.read(text) or {}).get('nopath', []):             # what the steps above left undrawn (rules.far_low)
+        svgmeta.add_nopath(meta, x['from'], x['to'], x['kind'], x['reason'])
     for a, b, kind in nopath:
         svgmeta.add_nopath(meta, a, b, kind, 'no clean path when the diagram was built')
     text = svgmeta.write(text, meta)
