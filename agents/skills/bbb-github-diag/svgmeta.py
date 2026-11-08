@@ -17,7 +17,8 @@ One `<metadata id="diagram">` block after `<desc>`, one line of JSON, for the fa
    "ignored":   [{"num": N, "reason": "..."}],               items looked at and left out (refresh_meta.py --discover counts, not lists, them)
    "nopath":    [{"from": A, "to": B, "kind": "...", "reason": "..."}],   arrows that are true but not drawn (no clean path, or dropped)
    "decisions": ["YYYY-MM-DD who: what was decided and why"],             choices the drawing alone does not explain
-   "notes":     "markdown: scope, revision naming, rules for this diagram (example/NOTES_template.md is the outline)"}
+   "notes":     "markdown: scope, revision naming, rules for this diagram (example/NOTES_template.md is the outline)",
+   "accepted":  [{"from": A, "to": B, "check": "stale-far", "reason": "...", "date": "..."}]}   review findings answered "keep" (rules.py)
 Everything here travels with the file: facts and neutral reasons only, never remarks about people.
 
 usage:
@@ -27,6 +28,7 @@ usage:
   svgmeta.py ignore IN.svg N "reason" | --remove N        an item looked at and left out
   svgmeta.py nopath IN.svg A B KIND "reason" | --remove A B   an arrow that is true but not drawn
   svgmeta.py notes IN.svg [--from FILE]                   print the notes, or replace them with the text of FILE
+  svgmeta.py drop IN.svg A B "reason"                     remove the drawn arrow A -> B and its label, and record it in "nopath"
   svgmeta.py kind IN.svg A B KIND                         set the kind of the drawn arrow A -> B (same arrowhead only: a kind with
                                                           another arrowhead or a label must be drawn again)
   svgmeta.py migrate IN.svg OUT.svg [--repo R] [--roots N,N] [--snapshot snap.json] [--notes NOTES.md]
@@ -272,6 +274,36 @@ def problems(text):
     return out
 
 
+# ---------------------------------------------------------------- drop a drawn arrow
+
+def drop(text, a, b, reason):
+    """Remove the drawn arrow a -> b (its path and the label on it), record it in "nopath" with the reason, and redo the jump arcs
+    (an arc that hopped over it now hops over nothing). Returns the text. The boxes and the other arrows do not move."""
+    import draw, hops, model, route
+    lines = text.split('\n')
+    hit = [i for i, l in enumerate(lines) if is_arrow(l) and (arrow_of(l) or (None, None))[:2] == (a, b)]
+    if len(hit) != 1:
+        raise KeyError('%d drawn arrows #%d -> #%d with data-from/data-to' % (len(hit), a, b))
+    i = hit[0]
+    kind = arrow_of(lines[i])[2]
+    segs = route.segments(model.arrow_points(lines[i]))
+    gone = [i]
+    for j in range(len(lines)):
+        lab = draw.label_at(lines, j)
+        if lab and lab[5] == kind:
+            cx, cy = lab[0] + lab[2] / 2, lab[1] + lab[3] / 2
+            if any((o == 'h' and abs(c - cy) < 1 and lo - 1 <= cx <= hi + 1) or (o == 'v' and abs(c - cx) < 1 and lo - 1 <= cy <= hi + 1) for o, c, lo, hi in segs):
+                gone += list(range(j, j + 1 + lab[4]))
+                break
+    text = '\n'.join(l for k, l in enumerate(lines) if k not in set(gone))
+    text, _, _ = hops.add_hops(text)
+    meta = read(text)
+    if meta is not None:
+        add_nopath(meta, a, b, kind, reason)
+        text = write(text, meta)
+    return text
+
+
 # ---------------------------------------------------------------- migrate
 
 def migrate(text, repo=None, roots=(), snapshot=None, notes=None):
@@ -363,6 +395,15 @@ def main():
             print(lvl.upper(), msg)
         print('metadata: %d errors, %d warnings' % (sum(1 for p in ps if p[0] == 'error'), sum(1 for p in ps if p[0] == 'warn')))
         sys.exit(1 if any(p[0] == 'error' for p in ps) else 0)
+    elif cmd == 'drop':
+        if len(rest) != 3:
+            sys.exit(__doc__)
+        fa, fb = int(rest[0].lstrip('#')), int(rest[1].lstrip('#'))
+        try:
+            save(drop(text, fa, fb, rest[2]))
+        except KeyError as e:
+            sys.exit(str(e))
+        print('updated %s: #%d -> #%d dropped and kept in "nopath"' % (path, fa, fb))
     elif cmd == 'kind':
         if len(rest) != 3:
             sys.exit(__doc__)

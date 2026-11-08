@@ -352,6 +352,9 @@ for _lvl, _msg in svgmeta.problems(new):
         fail('metadata: ' + _msg)
     else:
         print('WARN metadata: ' + _msg)
+import rules                                  # arrows a person should look at again: asked, never failed (rules.py review)
+for _f in rules.review(new):
+    print('ASK %s: %s' % (_f['check'], _f['message']))
 
 print('FAILS', fails)
 sys.exit(1 if fails else 0)

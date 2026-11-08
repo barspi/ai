@@ -136,8 +136,8 @@ def main():
         for a, b, k in list(edges):              # one pair, one arrow: a GitHub `closed by` wins over a text `work done by` for the same pair
             if k == 'work done by' and (a, b, 'closed by') in edges:
                 edges.discard((a, b, k))
-        rank = ['closed by', 'child', 'supersedes', 'revised by', 'work done by', 'evidence, does not close', 'follow-up', 'spawned',
-                'led to', 'blocked by', 'depends on', 'references', 'related', 'mentioned']
+        import rules
+        rank = rules.RANK                         # the one strength order (rules.py)
         best = {}
         for a, b, k in edges:                    # one arrow per pair of boxes: the strongest kind (a blocking child is told by its bold lines)
             key = (min(a, b), max(a, b))

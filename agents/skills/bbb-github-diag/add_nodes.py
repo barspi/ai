@@ -15,8 +15,10 @@ SPEC.json:
                "author": "login"           (a pull request: "by login")
                "umbrella": true            (an issue with sub-issues: the umbrella emoji, thick border, inner frame)
                "new": true                 (the red `new` pill)
-               "near": 120                 (optional: the box it relates to; the new box goes beside it, right of it when the arrow leaves it)
-               "frame": "guest checkout"   (optional: put it inside that dotted frame; the frame grows when needed)
+               "near": 120                 (optional: the box it relates to; the new box goes beside it, right of it when the arrow leaves it.
+                                            Left out: rules.near_for, the neighbour with the most important arrow, ties the lowest number)
+               "frame": "guest checkout"   (optional: put it inside that dotted frame; the frame grows when needed. Left out: rules.frame_for
+                                            votes with the arrows (printed); "" puts the box outside every frame)
                "x": 4825, "y": 4292        (optional: a place you decided yourself) } ],
   "arrows": [ {"from": 120, "to": 123, "kind": "follow-up"} ] }       (kinds: the vocabulary in SKILL.md; read A, kind, B)
 
@@ -31,7 +33,7 @@ import json, os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import draw, hops, model, route, svgmeta
+import draw, hops, model, route, rules, svgmeta
 
 STEP = 10
 GAP_X = 205
@@ -126,12 +128,30 @@ def main():
     prs = set(info['prs']) | {b['num'] for b in spec.get('boxes', []) if draw.STY[b['state']]['kind'] == 'PR'}
     ctx = draw.Ctx(spec['repo'], titles, prs)
     _, boxg, _, frames = __import__('collapse').parse(text)
-    frame_by_name = lambda name: next(((f['x'], f['y'], f['w'], f['h']), f) for f in frames if name.lower() in f['name'].lower()) if name else (None, None)
+    def frame_by_name(name):
+        """The frame whose visible title is `name`, else the first whose title contains it (case ignored)."""
+        full = [f for f in frames if svgmeta.frame_name(lines[f['tl']]) == name]
+        f = full[0] if full else next(f for f in frames if name.lower() in svgmeta.frame_name(lines[f['tl']]).lower())
+        return (f['x'], f['y'], f['w'], f['h']), f
+    kept = svgmeta.boxes(text)
+    placed_frame = {n: v['frame'] for n, v in kept.items()}         # the frame of every box, for the vote of rules.frame_for
+    roots = (svgmeta.read(text) or {}).get('roots', ())
+    spec_arrows = [(a['from'], a['to'], a['kind']) for a in spec.get('arrows', [])]
 
     box_markup, label_markup, path_markup, problems, grow, nopath, drawn = [], [], [], [], {}, [], set()
     for b in spec.get('boxes', []):
         h = draw.box_height(b)
         fr, fobj = (None, None)
+        mine = [e for e in spec_arrows if b['num'] in e[:2]]
+        if 'frame' not in b:                                          # decided by rule, never by guess
+            f, _, why = rules.frame_for(b['num'], mine, placed_frame, roots)
+            print('#%s: frame %s by rule (%s)' % (b['num'], repr(f) if f else 'none', why))
+            if why.startswith('ASK'):
+                problems.append('#%s: %s' % (b['num'], why))
+            b = dict(b, frame=f)
+        if 'near' not in b:
+            b = dict(b, near=rules.near_for(b['num'], mine, set(sc.boxes)))
+        placed_frame[b['num']] = b.get('frame') or None
         if b.get('frame'):
             try:
                 fr, fobj = frame_by_name(b['frame'])
