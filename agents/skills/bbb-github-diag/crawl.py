@@ -13,7 +13,7 @@ usage: crawl.py OWNER/REPO --seed N[,N...] [--window-days 30] [--max-nodes 40] [
 - `--text` also prints, for each kept item, the lines of its body that name another kept item (at most 3 per item), because `follow-up`, `led to`, `related` and `supersedes` are said in prose. Read them; the script does not classify them.
 - `--max-nodes` (default 40) stops the walk when that many items are kept, and says how many candidates were not fetched. `--depth N` is an optional hop cap (default: none).
 - Relations are followed only from kept items.
-- The script judges nothing about meaning. Read the titles and decide; write the scope and every exception in the NOTES file.
+- The script judges nothing about meaning. Read the titles and decide; write the scope and every exception in the diagram's notes (svgmeta.py notes).
 Needs the `gh` CLI, logged in.
 """
 import argparse, datetime, json, re, subprocess, sys

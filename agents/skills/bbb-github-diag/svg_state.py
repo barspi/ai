@@ -41,7 +41,7 @@ def blocks(svg, pop=False):
     """num -> (start, end) character offsets of each box group `<g id="nNNN">...</g>` (nested groups counted).
     pop=True: the pop-up groups `<g id="popNNN" class="pop">` of collapsed boxes instead."""
     out = {}
-    for m in re.finditer(r'<g id="pop(\d+)" class="pop">' if pop else r'<g id="n(\d+)">', svg):
+    for m in re.finditer(r'<g id="pop(\d+)" class="pop">' if pop else r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>', svg):
         depth, pos = 0, m.start()
         for t in re.finditer(r'<g[ >]|</g>', svg[pos:]):
             depth += 1 if t.group(0).startswith('<g') else -1
@@ -61,9 +61,40 @@ def frames_of(svg):
         r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="18"[^>]*stroke-dasharray="2 6"', svg)]
 
 
+_PAIR = re.compile(r'(-?[\d.]+),(-?[\d.]+)')
+
+
+def bottom_ends(svg, x, y, w, h):
+    """Arrows that end on the bottom edge of the box (x, y, w, h): [(start, end) of the d value, index of that point, index of its
+    neighbour]. An orthogonal arrow that ends on a bottom edge comes in vertically, so growing the box shortens that last stretch."""
+    out = []
+    for m in re.finditer(r'<path d="(M[^"]*)"[^>]*marker-end', svg):
+        ps = list(_PAIR.finditer(m.group(1)))
+        for k, nb in ((0, 1), (len(ps) - 1, len(ps) - 2)):
+            if len(ps) > 1 and abs(float(ps[k].group(2)) - (y + h)) < 1.5 and x - 1 <= float(ps[k].group(1)) <= x + w + 1:
+                out.append((m.start(1), m.end(1), k, nb))
+    return out
+
+
+def follow_bottom(svg, rect, dy):
+    """Move the ends of the arrows that touch the bottom edge of `rect` down by dy, so they still touch the box after it grew."""
+    x, y, w, h = rect
+    for s0, s1, k, _ in sorted(bottom_ends(svg, x, y, w, h), reverse=True):     # from the end of the text: offsets stay valid
+        d = svg[s0:s1]
+        p = list(_PAIR.finditer(d))[k]
+        d = d[:p.start(2)] + fmt(float(p.group(2)) + dy) + d[p.end(2):]
+        svg = svg[:s0] + d + svg[s1:]
+    return svg
+
+
 def room_below(svg, bl, num, dy):
-    """True when the box can grow by dy: no other box in the way and still inside its frame."""
+    """True when the box can grow by dy: no other box in the way, still inside its frame, and every arrow that comes in from below
+    keeps a straight stretch of at least 20px after its end moves down (follow_bottom)."""
     x, y, w, h = rect_of(svg[bl[num][0]:bl[num][1]])
+    for s0, s1, k, nb in bottom_ends(svg, x, y, w, h):
+        ps = list(_PAIR.finditer(svg[s0:s1]))
+        if abs(float(ps[nb].group(2)) - (y + h)) < dy + 20:
+            return False
     for n, (a, b) in bl.items():
         if n == num:
             continue
@@ -208,5 +239,7 @@ def _apply(svg, live, repo, log, report, pop):
             report.append('#%d: a note still says "(open)" or "(draft)": edit the note' % num)
         if blk != before:
             svg = svg[:a] + blk + svg[b:]
+            if not pop and rect_of(blk)[3] > h:            # the box grew: the arrows that come in from below follow its bottom edge
+                svg = follow_bottom(svg, (x, y, w, h), rect_of(blk)[3] - h)
             bl = blocks(svg, pop)          # offsets moved
     return svg

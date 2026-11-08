@@ -21,6 +21,9 @@ SPEC.json:
   "arrows": [ {"from": 120, "to": 123, "kind": "follow-up"} ] }       (kinds: the vocabulary in SKILL.md; read A, kind, B)
 
 An arrow may also give "points" [[x, y], ...] and "label" [x, y] to place it by hand; that is for a user who asked for a special shape.
+Each new box gets data-frame (the full title of its frame) and, with --snapshot, data-github (its record); each arrow gets data-from,
+data-to and data-kind; an arrow with NO PATH goes into the metadata block's "nopath" (svgmeta.py). A new box with no record yet gets one
+at the next refresh_meta.py.
 Prints every new box as `x y w h`, and a PROBLEM line for whatever it could not do (no free space, no path, no room for a label): say so
 to the user; do not draw it worse by hand.
 """
@@ -28,7 +31,7 @@ import json, os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import draw, hops, model, route
+import draw, hops, model, route, svgmeta
 
 STEP = 10
 GAP_X = 205
@@ -112,8 +115,10 @@ def main():
     sc, info = model.read(text)
     lines = info['lines']
     titles = dict(info['titles'])
+    records = {}
     if snap:
-        titles.update({k: v['title'] for k, v in json.load(open(snap)).items() if isinstance(v, dict) and 'title' in v})
+        records = {k: v for k, v in json.load(open(snap)).items() if isinstance(v, dict) and 'title' in v}
+        titles.update({k: v['title'] for k, v in records.items()})
     for b in spec.get('boxes', []):
         titles[str(b['num'])] = b['title']
         if b['num'] in sc.boxes:
@@ -123,7 +128,7 @@ def main():
     _, boxg, _, frames = __import__('collapse').parse(text)
     frame_by_name = lambda name: next(((f['x'], f['y'], f['w'], f['h']), f) for f in frames if name.lower() in f['name'].lower()) if name else (None, None)
 
-    box_markup, label_markup, path_markup, problems, grow = [], [], [], [], {}
+    box_markup, label_markup, path_markup, problems, grow, nopath, drawn = [], [], [], [], {}, [], set()
     for b in spec.get('boxes', []):
         h = draw.box_height(b)
         fr, fobj = (None, None)
@@ -151,6 +156,7 @@ def main():
                 problems.append('NO FREE SPACE for #%s: decide a place yourself ("x", "y" in the spec)' % b['num'])
                 continue
             x, y = spot
+        b = dict(b, frame=svgmeta.frame_name(lines[fobj['tl']]) if fobj else None, github=records.get(str(b['num'])) or b.get('github'))
         markup, hh = draw.box(ctx, b, x, y)
         box_markup.append(markup)
         sc.boxes[b['num']] = (x, y, float(draw.BOX_W), float(hh))
@@ -187,11 +193,13 @@ def main():
                 if pts:
                     break
             if not pts:
-                problems.append('NO PATH for #%s %s #%s: leave it out, name it in the box note, and say what would have to move' % (a['from'], kind, a['to']))
+                problems.append('NO PATH for #%s %s #%s: kept in the metadata ("nopath"); name it in the box note, and say what would have to move' % (a['from'], kind, a['to']))
+                nopath.append((a['from'], a['to'], kind))
                 continue
             lab = route.place_label(sc, pts, kind)
         sc.arrows.append(list(pts))
-        path_markup.append(draw.arrow(pts, kind))
+        path_markup.append(draw.arrow(pts, kind, a['from'], a['to']))
+        drawn.add((a['from'], a['to']))
         if lab:
             label_markup += draw.label(kind, *lab)
             sc.labels.append((lab[0] - draw.label_width(kind) / 2, lab[1] - 9, draw.label_width(kind), 18.0))
@@ -227,6 +235,14 @@ def main():
                    lambda q: '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (nW, nH, q.group(1)), s, count=1)
         print('canvas %dx%d -> %dx%d' % (W, H, nW, nH))
     s, hops_added, hops_removed = hops.add_hops(s)           # the jump arcs of the whole diagram, recomputed
+    meta = svgmeta.read(s)
+    if meta is None:
+        problems.append('%s has no metadata block (drawn before svgmeta.py): run svgmeta.py migrate on it first' % src)
+    else:
+        meta['nopath'] = [x for x in meta['nopath'] if (x['from'], x['to']) not in drawn]      # drawn now: no longer "not drawn"
+        for x, y, kind in nopath:
+            svgmeta.add_nopath(meta, x, y, kind, 'no clean path when it was added')
+        s = svgmeta.write(s, meta)
     open(out, 'w', encoding='utf-8').write(s)
     used = {a['kind'] for a in spec.get('arrows', [])}
     missing = [k for k in used if '>%s<' % draw.esc(k) not in s]

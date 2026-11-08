@@ -56,7 +56,9 @@ def main():
                     'different frames is not drawn: it becomes a note on its tail box ("Related: #N."). Such an arrow crosses the chart for '
                     'little meaning; inside one frame it is short and stays')
     o = ap.parse_args()
-    snap = {int(k): v for k, v in json.load(open(o.snapshot, encoding='utf-8')).items() if k != '_meta'}
+    raw = json.load(open(o.snapshot, encoding='utf-8'))
+    snap = {int(k): v for k, v in raw.items() if k != '_meta'}
+    nopath = []                                          # arrows that are true but become notes: kept in the SVG's metadata block
     frames = json.load(open(o.frames, encoding='utf-8')) if o.frames else {}
     frame_of = {int(n): name for name, nums in frames.items() for n in nums}
     nums = sorted(snap)
@@ -103,6 +105,7 @@ def main():
                 node['umbrella'] = True
         if n in frame_of:
             node['frame'] = frame_of[n]
+        node['github'] = s                                   # the box keeps its GitHub record (svgmeta.py data-github)
         nodes.append(node)
 
     edges = set()
@@ -167,6 +170,7 @@ def main():
             if draw.IMPORTANCE.get(k, 2) == 1 and by_n[a].get('frame') != by_n[b].get('frame'):
                 edges.discard((a, b, k))
                 by_n[a]['notes'].append('%s #%d.' % (word_of.get(k, 'See'), b))
+                nopath.append({'from': a, 'to': b, 'kind': k, 'reason': 'low importance across frames: a note on #%d instead' % a})
     # The notes the agent wrote from the text, then "Blocked by": bold while the issue and a blocker named on the line are both open
     # (the block is live), plain once either is closed. An arrow `blocked by` with no line about it gets a plain "Blocked by #N." line.
     written = {int(k): v for k, v in json.load(open(o.notes, encoding='utf-8')).items()} if o.notes else {}
@@ -205,7 +209,9 @@ def main():
             if n['state'] in ('closed', 'handclosed', 'merged', 'prclosed') and n['num'] not in given:
                 n['collapsed'] = title_keywords(n['title'])
     spec = {'repo': o.repo, 'title': o.title, 'date': o.date, 'roots': [int(r) for r in o.roots.replace('#', '').split(',') if r.strip()], 'nodes': nodes,
-            'edges': [{'from': a, 'to': b, 'kind': k} for a, b, k in sorted(edges)]}
+            'edges': [{'from': a, 'to': b, 'kind': k} for a, b, k in sorted(edges)],
+            'meta': {'nopath': nopath, 'lastRun': raw.get('_meta', {}).get('lastRun'),
+                     'ignored': [x if isinstance(x, dict) else {'num': int(x), 'reason': ''} for x in raw.get('_meta', {}).get('ignored', [])]}}
     json.dump(spec, open(o.out, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
     kinds = {}
     for _, _, k in edges:

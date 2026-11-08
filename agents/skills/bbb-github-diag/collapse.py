@@ -82,7 +82,7 @@ def parse(s):
     lines = s.split('\n')
     box, pop = {}, {}
     for i, ln in enumerate(lines):
-        m = re.match(r'<g id="n(\d+)">$', ln)
+        m = re.match(r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>$', ln)
         if m:
             j = group_end(lines, i)
             r = re.match(r'<rect x="([\d.]+)" y="([\d.]+)" width="(\d+)(?:\.0)?" height="([\d.]+)"([^>]*)/?>', lines[i + 1])
@@ -109,7 +109,7 @@ def expand(s, nums):
             continue
         pa, pb = pop[n]
         full = list(lines[pa:pb + 1])
-        full[0] = '<g id="n%d">' % n
+        full[0] = lines[box[n]['a']]          # the box's own tag, with its attributes (svgmeta.py)
         b = box[n]
         out[b['a']] = '\n'.join(full)                      # one list item, so the other line numbers stay valid
         for k in range(b['a'] + 1, b['b'] + 1):

@@ -1,6 +1,6 @@
 # Notes for `<diagram>_vNN.svg`
 
-Diagram-specific instructions. The generic rules are in the skill `bbb-github-diag` (`<path to the skill>/SKILL.md`). Read this file at the start of every revision and update it in the same revision. Keep it short.
+The outline of a diagram's notes. The notes live inside the SVG, in its metadata block (`svgmeta.py notes IN.svg` prints them; `svgmeta.py notes IN.svg --from FILE` replaces them with the text of FILE), never in a file next to it. Diagram-specific instructions only; the generic rules are in the skill `bbb-github-diag` (`<path to the skill>/SKILL.md`). Read them at the start of every revision and update them in the same revision. Keep them short.
 
 ## What it is
 
@@ -25,11 +25,11 @@ Column x positions, frame order, lanes, anything that must stay. Note a size hac
 
 ## Arrows
 
-One line per non-obvious arrow: the pair, the label, and the evidence (a GitHub relation, or a sentence in a comment with its link). Note arrows left out as too hard.
+One line per non-obvious arrow: the pair, the label, and the evidence (a GitHub relation, or a sentence in a comment with its link). An arrow that is true but not drawn goes in the block's `nopath` (`svgmeta.py nopath`), not here.
 
 ## Not drawn
 
-One line per item looked at and left out, with the reason. Every item here is also in `_meta.ignored` of the snapshot, so `--discover` does not report it again.
+Kept in the block's `ignored` list, one entry per item with its reason (`svgmeta.py ignore IN.svg N "reason"`), so `--discover` does not report it again. Nothing to write here.
 
 ## Commands
 

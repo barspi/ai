@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 """Refresh the metadata of every box in a lineage diagram with ONE GitHub GraphQL call.
 
-usage: refresh_meta.py OWNER/REPO diagram.svg snapshot.json [--tsv-dir DIR] [--discover] [--since ISO8601]
+usage: refresh_meta.py OWNER/REPO diagram.svg [--apply] [--discover] [--since ISO8601] [--snapshot-out FILE] [--tsv-dir DIR]
 
 - Box numbers come from the `<g id="nNNN">` groups of the SVG.
-- The snapshot (JSON, kept next to the SVG) stores, per box: updatedAt, state, merged, title, assignees,
-  opener, comment/review counts, merge commit and commit authors. `updatedAt` changes on ANY edit, comment,
-  label, assignee or state change, so a box whose updatedAt is unchanged needs no reading at all.
-- Prints only what changed since the snapshot (new snapshot is then saved), plus every box whose pill in the
-  SVG disagrees with the live state. Read the full text of a box only when it is listed as changed.
+- The SVG is the only file: each box keeps what GitHub said at the last refresh in its data-github attribute (updatedAt, state,
+  title, assignees, opener, comment/review counts, merge commit and commit authors, dates, native relations; svgmeta.py), and the
+  metadata block keeps lastRun and the "ignored" list. `updatedAt` changes on ANY edit, comment, label, assignee or state change, so a
+  box whose updatedAt is unchanged needs no reading at all.
+- Prints only what changed since the last refresh, plus every box whose pill in the SVG disagrees with the live state. Read the full
+  text of a box only when it is listed as changed. Then it writes the new records into the SVG: every run edits the file, even without
+  --apply (attributes only; nothing visible changes without --apply).
+- --snapshot-out also writes the records to a JSON file: a working file for a first picture (graph_from_snapshot.py, mentions.py),
+  never kept next to a diagram.
 - With --tsv-dir it also writes assignees.tsv (issue<TAB>login,login) and prauthors.tsv (pr<TAB>opener),
   which a build script can read, so nobody types them by hand.
 - With --discover it also lists the issues and pull requests created or changed since the last run (or --since)
   that are NOT boxes yet, one line each: kind, state, title, which boxes they name (`#N` in title or body),
   which boxes' texts name them, and the area tags (the `word:` prefixes of titles) they share with boxes.
-  Items listed in the snapshot's `_meta.ignored` (decided "not drawn") are counted, not listed.
+  Items in the metadata block's "ignored" list (decided "not drawn", svgmeta.py ignore) are counted, not listed.
   Judge the relation from that line; open the item only when the line is not enough.
 - A pull request that is open and a draft has the state `draft`; an open one that is ready is `open` (pill `waiting`).
 - Needs the `gh` CLI, logged in. Run it outside any sandbox that blocks TLS to api.github.com.
 """
 import json, os, re, subprocess, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')   # keep the compiled svg_state.py out of the skill folder
-import box_header
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import box_header, svgmeta
 
 FIELDS = """
   __typename
@@ -44,14 +49,14 @@ def discover(repo, svg_text, live, since, meta):
     items = [json.loads(l) for l in r.stdout.splitlines() if l.strip()]
     boxset = {n for n in live}
     box_text = {}
-    for m in re.finditer(r'<g id="n(\d+)"(.*?)</g>', svg_text, flags=re.S):
+    for m in re.finditer(r'<g id="n(\d+)"[^>]*>(.*?)</g>', svg_text, flags=re.S):
         box_text[int(m.group(1))] = re.sub(r'<[^>]+>', ' ', m.group(2))
     area = {}
     for n, v in live.items():
         for x in (re.match(r'\s*([^:]{2,40}):', v.get('title', '')) or [None, ''])[1].split(','):
             if x.strip():
                 area.setdefault(x.strip(), set()).add(n)
-    ignored = set(meta.get('ignored', []))
+    ignored = svgmeta.ignored_nums(meta)
     print('--- created, closed or merged since %s, not boxes ---' % since)
     n_old = n_ign = n_none = 0
     same_area = {}
@@ -86,20 +91,24 @@ def discover(repo, svg_text, live, since, meta):
 def main():
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('repo'); ap.add_argument('svg'); ap.add_argument('snapshot')
+    ap.add_argument('repo'); ap.add_argument('svg'); ap.add_argument('old_snapshot', nargs='?', help=argparse.SUPPRESS)
+    ap.add_argument('--snapshot-out', help='also write the records to this JSON file (a working file for a first picture)')
     ap.add_argument('--tsv-dir'); ap.add_argument('--discover', action='store_true'); ap.add_argument('--since')
     ap.add_argument('--umbrellas', action='store_true', help='for an umbrella by title without sub-issues, list the issues its body names')
     ap.add_argument('--relations', action='store_true', help='print every GitHub-native relation between two boxes')
     ap.add_argument('--apply', action='store_true', help='edit the SVG in place: pills, colours, date line, merge line, assignee label, "Closed by PR" note (svg_state.py). Run check_diag.py after it')
     opts = ap.parse_args()
-    repo, svg, snap_path, tsv_dir = opts.repo, opts.svg, opts.snapshot, opts.tsv_dir
+    if opts.old_snapshot:
+        sys.exit('refresh_meta.py no longer takes a snapshot file: the SVG keeps the records (svgmeta.py). For an old diagram, run '
+                 '"svgmeta.py migrate OLD.svg NEW.svg --snapshot %s" once; for a first picture use --snapshot-out FILE.' % opts.old_snapshot)
+    repo, svg, tsv_dir = opts.repo, opts.svg, opts.tsv_dir
     import datetime
     run_start = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     owner, name = repo.split('/')
     text = open(svg).read()
     nums = sorted({int(n) for n in re.findall(r'<g id="n(\d+)"', text)})
     pills, kinds = {}, {}
-    for m in re.finditer(r'<g id="n(\d+)"(.*?)</g>', text, flags=re.S):
+    for m in re.finditer(r'<g id="n(\d+)"[^>]*>(.*?)</g>', text, flags=re.S):
         kinds[int(m.group(1))] = box_header.kind_of(m.group(2)) or '?'
         w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
         pills[int(m.group(1))] = w[-1] if w else '?'
@@ -154,17 +163,18 @@ def main():
         for ln in rep:
             print('  NEEDS A HUMAN: ' + ln)
         pills, kinds = {}, {}
-        for m in re.finditer(r'<g id="n(\d+)"(.*?)</g>', text, flags=re.S):
+        for m in re.finditer(r'<g id="n(\d+)"[^>]*>(.*?)</g>', text, flags=re.S):
             kinds[int(m.group(1))] = box_header.kind_of(m.group(2)) or '?'
             w =re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
             pills[int(m.group(1))] = w[-1] if w else '?'
 
-    old = json.load(open(snap_path)) if os.path.exists(snap_path) else {}
+    kept = svgmeta.boxes(text)
+    old = {n: kept[n]['github'] for n in nums if kept.get(n, {}).get('github')}
     changed = 0
     for n in nums:
-        o, l = old.get(str(n)), live[n]
+        o, l = old.get(n), live[n]
         if o is None:
-            print('#%d  NEW IN SNAPSHOT (%s, %s)' % (n, l.get('kind'), l.get('state'))) if old else None
+            print('#%d  NO RECORD YET (%s, %s): stored now' % (n, l.get('kind'), l.get('state'))) if old else None
             continue
         if o.get('updatedAt') == l.get('updatedAt'):
             continue
@@ -188,7 +198,8 @@ def main():
     for n in nums:
         if live[n].get('missing'):
             print('#%d  NOT FOUND on GitHub' % n)
-    print('%d boxes checked, %d changed since snapshot, %d pill mismatches.' % (len(nums), changed, len(stale)))
+    print('%d boxes checked, %d changed since the last refresh, %d pill mismatches.%s' % (len(nums), changed, len(stale),
+          '' if old else ' (first refresh of this file: no records to compare with)'))
 
     if opts.relations:       # GitHub's own relations, as arrows between two boxes (compare with the diagram)
         S = set(nums)
@@ -222,14 +233,23 @@ def main():
                 print('#%d  task list names %s | other mentions %s | boxes among them: %s' % (
                     n, task or '-', other or '-', sorted((set(task) | set(other)) & S) or '-'))
 
-    meta = old.get('_meta', {'ignored': []})
+    meta = svgmeta.read(text)
     if opts.discover:
-        discover(repo, text, live, opts.since or meta.get('lastRun') or max(v['updatedAt'] for v in live.values() if 'updatedAt' in v), meta)
-    if not opts.since:          # an explicit window is a look-back, it must not hide candidates from the next run
-        meta['lastRun'] = run_start
-    out_snap = {str(n): live[n] for n in nums}
-    out_snap['_meta'] = meta
-    json.dump(out_snap, open(snap_path, 'w'), indent=1, sort_keys=True)
+        discover(repo, text, live, opts.since or (meta or {}).get('lastRun') or max(v['updatedAt'] for v in live.values() if 'updatedAt' in v), meta or {})
+    for n in nums:              # the records go back into the boxes they describe
+        if not live[n].get('missing'):
+            text = svgmeta.set_box(text, n, github=live[n])
+    if meta is not None:
+        if not opts.since:      # an explicit window is a look-back, it must not hide candidates from the next run
+            meta['lastRun'] = run_start
+        text = svgmeta.write(text, meta)
+    else:
+        print('NOTE: %s has no metadata block, so lastRun is not kept: run svgmeta.py migrate on the next revision' % svg)
+    open(svg, 'w').write(text)
+    if opts.snapshot_out:
+        out_snap = {str(n): live[n] for n in nums}
+        out_snap['_meta'] = {'lastRun': run_start, 'ignored': (meta or {}).get('ignored', [])}
+        json.dump(out_snap, open(opts.snapshot_out, 'w'), indent=1, sort_keys=True)
     if tsv_dir:
         with open(os.path.join(tsv_dir, 'assignees.tsv'), 'w') as f:
             for n in nums:

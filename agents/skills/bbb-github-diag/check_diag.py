@@ -44,7 +44,7 @@ def width(cls, text):
 
 # ---- parse
 boxes = {int(m.group(1)): tuple(float(v) for v in m.groups()[1:]) for m in re.finditer(
-    r'<g id="n(\d+)">\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', new)}
+    r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', new)}
 labels = [tuple(float(v) for v in m.groups()) for m in re.finditer(
     r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="4" fill="#fffdf7"', new)]
 paths = []
@@ -76,7 +76,7 @@ for pos, tag in _tags:
         _d -= 1
 _script = new.find('<script')
 _coll = {int(m.group(1)): (float(m.group(2)), float(m.group(3)), m.group(4)) for m in re.finditer(
-    r'<g id="n(\d+)">\s*<rect x="([\d.]+)" y="([\d.]+)"[^>]*data-collapsed="1" data-keywords="([^"]*)"', new)}
+    r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>\s*<rect x="([\d.]+)" y="([\d.]+)"[^>]*data-collapsed="1" data-keywords="([^"]*)"', new)}
 for n, (cx_, cy_, kw) in sorted(_coll.items()):
     kwt = kw.replace('&amp;', '&').replace('&quot;', '"').replace('&lt;', '<')
     if width('ttl', kwt) > 232:
@@ -93,7 +93,8 @@ for n, (cx_, cy_, kw) in sorted(_coll.items()):
         fail(f'pop-up of #{n} is not a sibling of its box (depth {_depth.get(f"pop{n}")} vs {_depth.get(f"n{n}")}): the hover rule needs siblings')
     if f'#n{n}:hover~#pop{n}' not in new:
         fail(f'no hover rule for the pop-up of #{n}')
-    if not re.search(r'<g id="n%d">.*?<title>' % n, new[new.find('<g id="n%d">' % n):new.find('<g id="n%d">' % n) + 3000], re.S):
+    _bm = re.search(r'<g id="n%d"(?: data-[\w-]+="[^"]*")*>' % n, new)
+    if not _bm or '<title>' not in new[_bm.end():_bm.end() + 3000]:
         fail(f'collapsed #{n} has no <title> tooltip with its full title')
 for pm in re.finditer(r'<g id="pop(\d+)" class="pop">', new):
     if int(pm.group(1)) not in _coll:
@@ -123,7 +124,7 @@ for n, (bx, by, bw, bh) in boxes.items():
 #      a second kind text (the arrow and the name on their own line) must end inside the box
 import box_header
 for n, (bx, by, bw, bh) in boxes.items():
-    g = re.search(r'<g id="n%d">(.*?)</g>' % n, new, re.S).group(1)
+    g = re.search(r'<g id="n%d"(?: data-[\w-]+="[^"]*")*>(.*?)</g>' % n, new, re.S).group(1)
     texts = list(box_header.KIND_TEXT.finditer(g))
     if not texts or box_header.who_of(g) is None:
         continue
@@ -140,7 +141,7 @@ for n, (bx, by, bw, bh) in boxes.items():
 
 # ---- old form (a separate name text and arrow polyline): the name must not run into the pill or the red cross, and must be at least 9px
 for n, (bx, by, bw, bh) in boxes.items():
-    g = re.search(r'<g id="n%d">(.*?)</g>' % n, new, re.S).group(1)
+    g = re.search(r'<g id="n%d"(?: data-[\w-]+="[^"]*")*>(.*?)</g>' % n, new, re.S).group(1)
     k = re.search(r'<text class="kind" x="([\d.]+)" y="([\d.]+)"', g)
     nm = re.search(r'<text class="meta" x="([\d.]+)" y="([\d.]+)" style="[^"]*font-size:([\d.]+)px[^"]*">([^<]*)</text>', g)
     pill = re.search(r'<rect x="([\d.]+)" y="[\d.]+" width="[\d.]+" height="20" rx="10"', g)
@@ -282,8 +283,8 @@ for n in sorted(boxes):
         fail(f'#{n} has no link')
 print('new pills', len(re.findall(r'rotate\(-45 ([\d.]+) ([\d.]+)\)', new)))
 if old:
-    ob = {int(m.group(1)) for m in re.finditer(r'<g id="n(\d+)">', old)}
-    nb = {int(m.group(1)) for m in re.finditer(r'<g id="n(\d+)">', new)}
+    ob = {int(m.group(1)) for m in re.finditer(r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>', old)}
+    nb = {int(m.group(1)) for m in re.finditer(r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>', new)}
     if ob != nb:
         print('note: boxes added', sorted(nb - ob), 'removed', sorted(ob - nb))
 
@@ -294,7 +295,7 @@ if old:
                 if abs(float(m.group(1)) - (px + 3)) < 2 and abs(float(m.group(2)) - (py + 3)) < 2:
                     got.add(n)
         return got
-    old_boxes = {int(m.group(1)): tuple(float(v) for v in m.groups()[1:]) for m in re.finditer(r'<g id="n(\d+)">\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', old)}
+    old_boxes = {int(m.group(1)): tuple(float(v) for v in m.groups()[1:]) for m in re.finditer(r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', old)}
     have, kept = pill_boxes(new, boxes), pill_boxes(old, old_boxes)
     added = nb - ob
     if '--keep-new' in sys.argv:                  # the user asked to keep the old pills: the pills of the old file stay, and every added box has one
@@ -344,5 +345,13 @@ if _lg:
         print(f'WARN legend right edge {_lx + _lw:.0f} (top {_ly:.0f}) should be in the top row and reach the farthest right node edge {_right:.0f}: move it to the top right of the chart')
 if best[0]:
     print(f'largest empty rectangle {best[3][0] * G}x{best[3][1] * G}px at ({best[1] * G},{best[2] * G})')
+# ---- what the file keeps about itself (svgmeta.py): each box's frame and GitHub record, each arrow's two boxes and kind, the block
+import svgmeta
+for _lvl, _msg in svgmeta.problems(new):
+    if _lvl == 'error':
+        fail('metadata: ' + _msg)
+    else:
+        print('WARN metadata: ' + _msg)
+
 print('FAILS', fails)
 sys.exit(1 if fails else 0)

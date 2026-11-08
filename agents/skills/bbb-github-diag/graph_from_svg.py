@@ -9,6 +9,8 @@ What it reads (the structure draw.py writes; check_diag.py relies on the same):
   A collapsed box keeps its keywords (`data-keywords`); its full lines are read from its pop-up `#popN`.
 - its dotted frame: the smallest frame that contains the box.
 - every arrow: its tail and tip boxes, and its kind from its label (the word on it), or from its arrowhead when it has no label.
+- what the file keeps about itself (svgmeta.py): a box's data-frame and data-github, an arrow's data-from/data-to/data-kind, and the
+  <metadata> block, which wins over the geometry when present and goes into graph.json as "github" and "meta".
 - the page title and the repository line.
 `new` pills are dropped unless --keep-new. Nothing is judged here: the boxes, frames and arrows are the old diagram's. Then run
 `build.py graph.json new.svg` and `check_diag.py new.svg old.svg` (the box and arrow sets must match).
@@ -16,7 +18,7 @@ What it reads (the structure draw.py writes; check_diag.py relies on the same):
 import argparse, html, json, os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import box_header, collapse, draw, model, route
+import box_header, collapse, draw, model, route, svgmeta
 
 MARK = {'h-child': 'child', 'h-closed': 'closed by', 'h-work': 'work done by', 'h-evid': 'evidence, does not close', 'h-cross': 'supersedes',
         'h-blocked': 'blocked by', 'h-led': 'led to', 'h-ref': 'related'}
@@ -78,6 +80,8 @@ def main():
     text = open(o.svg, encoding='utf-8').read()
     lines, box, pop, frame = collapse.parse(text)
     sc, info = model.read(text)
+    kept = svgmeta.boxes(text)
+    diagram = svgmeta.read(text)
     rawpops = {int(m.group(1)): m.group(0) for m in re.finditer(r'<g id="pop(\d+)" class="pop">.*?\n</g>', text, re.S)}
     nodes = []
     for n, b in box.items():
@@ -118,6 +122,10 @@ def main():
         if inside:
             f = min(inside, key=lambda f: f['w'] * f['h'])
             node['frame'] = plain(lines[f['tl']]) if 'tl' in f else html.unescape(f['name'])     # the visible title (no tooltip text)
+        if kept.get(n, {}).get('frame'):
+            node['frame'] = kept[n]['frame']
+        if kept.get(n, {}).get('github'):
+            node['github'] = kept[n]['github']
         nodes.append(node)
 
     # arrows: tail and tip boxes; the kind from the label on the arrow, else from the arrowhead
@@ -129,6 +137,10 @@ def main():
     edges, unknown = [], 0
     for ln in lines:
         if not (ln.startswith('<path d="M') and 'marker-end' in ln):
+            continue
+        at = svgmeta.arrow_of(ln)
+        if at:
+            edges.append({'from': at[0], 'to': at[1], 'kind': at[2]})
             continue
         pts = model.arrow_points(ln)
         ends = [next((n for n, r in sc.boxes.items() if model._side(p, r)), None) for p in (pts[0], pts[-1])]
@@ -148,7 +160,9 @@ def main():
     repo = re.search(r'Repository: ([^<]+)', text)
     spec = {'repo': repo.group(1).strip() if repo else re.search(r'github\.com/([^/"]+/[^/"]+)/(?:issues|pull)/', text).group(1),
             'title': plain(h1.group(1)) if h1 else 'Lineage diagram', 'date': o.date,
-            'roots': [int(r) for r in o.roots.replace('#', '').split(',') if r.strip()], 'nodes': nodes, 'edges': edges}
+            'roots': [int(r) for r in o.roots.replace('#', '').split(',') if r.strip()] or (diagram or {}).get('roots', []), 'nodes': nodes, 'edges': edges}
+    if diagram:
+        spec['meta'] = {k: v for k, v in diagram.items() if k not in ('format', 'repo', 'roots')}
     json.dump(spec, open(o.out, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
     print('%d boxes (%d collapsed, %d in frames), %d arrows%s' % (len(nodes), sum(1 for n in nodes if n.get('collapsed')),
           sum(1 for n in nodes if n.get('frame')), len(edges), ('; %d paths with no box at either end were left out (an old legend draws its sample arrows as paths)' % unknown) if unknown else ''))

@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2789" height="1130" viewBox="0 0 2789 1130" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
 <title>Checkout rework: what grew out of umbrella #100</title>
 <desc>Example for the bbb-github-diag skill: an umbrella with three children, the pull requests that closed or replaced them, follow-ups, a block and a related pair.</desc>
+<metadata id="diagram">{"decisions": [], "format": 1, "ignored": [], "lastRun": null, "nopath": [], "notes": "", "repo": "acme/shop", "roots": []}</metadata>
 <defs>
 <marker id="h-child" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#1c2430"/></marker>
 <marker id="h-closed" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#1d4e89"/></marker>
@@ -19,20 +20,20 @@
 <text class="h2" x="80" y="148">Facts as of 2026-03-22. Dotted frames name an area of work only; the arrows carry the relationships.</text>
 <rect x="454" y="595" width="826.5" height="455" rx="18" fill="#ffffff" fill-opacity="0.5" stroke="#8d877e" stroke-width="1.6" stroke-dasharray="2 6" stroke-linecap="round"/>
 <text class="ftl" x="470" y="619">guest checkout</text>
-<path d="M774,804 L854,804 L854,701 L990.5,701" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-work)"/>
-<path d="M774,820 L840,820 L840,923 L990.5,923" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M1120.5,863 L1120.5,763" fill="none" stroke="#b02a2a" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-cross)"/>
-<path d="M774,288.5 L979,288.5" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M774,432.5 L979,432.5" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M1239,288.5 L1444,288.5" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
-<path d="M1239,432.5 L1444,432.5" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)"/>
-<path d="M1704,471 L1909,471" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)"/>
-<path d="M1574,411 L1574,311" fill="none" stroke="#8a3030" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-blocked)"/>
-<path d="M340,602.2 L400,602.2 L400,288.5 L514,288.5" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
-<path d="M340,618.2 L414,618.2 L414,432.5 L514,432.5" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
-<path d="M340,634.2 L414,634.2 L414,808 L514,808" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
-<path d="M340,650.2 L400,650.2 L400,964 L514,964" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)"/>
-<path d="M1109,508.5 L1109,641" fill="none" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-ref)"/>
+<path d="M774,804 L854,804 L854,701 L990.5,701" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-work)" data-from="103" data-to="112" data-kind="work done by"/>
+<path d="M774,820 L840,820 L840,923 L990.5,923" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)" data-from="103" data-to="113" data-kind="closed by"/>
+<path d="M1120.5,863 L1120.5,763" fill="none" stroke="#b02a2a" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-cross)" data-from="113" data-to="112" data-kind="supersedes"/>
+<path d="M774,288.5 L979,288.5" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)" data-from="101" data-to="110" data-kind="closed by"/>
+<path d="M774,432.5 L979,432.5" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)" data-from="102" data-to="111" data-kind="closed by"/>
+<path d="M1239,288.5 L1444,288.5" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)" data-from="110" data-to="120" data-kind="follow-up"/>
+<path d="M1239,432.5 L1444,432.5" fill="none" stroke="#8a4b12" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-led)" data-from="111" data-to="121" data-kind="led to"/>
+<path d="M1704,471 L1909,471" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-closed)" data-from="121" data-to="122" data-kind="closed by"/>
+<path d="M1574,411 L1574,311" fill="none" stroke="#8a3030" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-blocked)" data-from="121" data-to="120" data-kind="blocked by"/>
+<path d="M340,602.2 L400,602.2 L400,288.5 L514,288.5" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)" data-from="100" data-to="101" data-kind="child"/>
+<path d="M340,618.2 L414,618.2 L414,432.5 L514,432.5" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)" data-from="100" data-to="102" data-kind="child"/>
+<path d="M340,634.2 L414,634.2 L414,808 L514,808" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)" data-from="100" data-to="103" data-kind="child"/>
+<path d="M340,650.2 L400,650.2 L400,964 L514,964" fill="none" stroke="#1c2430" stroke-width="1.9" stroke-linejoin="round" marker-end="url(#h-child)" data-from="100" data-to="104" data-kind="child"/>
+<path d="M1109,508.5 L1109,641" fill="none" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-ref)" data-from="111" data-to="112" data-kind="related"/>
 <g id="n100">
 <rect x="80" y="558.2" width="260" height="136" rx="10" fill="#f8e8e4" stroke="#8a3030" stroke-width="2.6"/>
 <rect x="84" y="562.2" width="252" height="128" rx="7" fill="none" stroke="#8a3030" stroke-width="0.9"/>
@@ -132,7 +133,7 @@
 <text class="meta" x="1923" y="506">opened 2026-03-22 &#183; draft</text>
 <text class="note" x="1923" y="520">Closes <a href="https://github.com/acme/shop/issues/121" xlink:href="https://github.com/acme/shop/issues/121" target="_blank"><title>coupon line shows the old total after stacking</title><tspan style="text-decoration:underline">#121</tspan></a>.</text>
 </g>
-<g id="n103">
+<g id="n103" data-frame="guest checkout">
 <rect x="514" y="748" width="260" height="128" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
 <text class="kind" x="528" y="776.0" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/103" xlink:href="https://github.com/acme/shop/issues/103" target="_blank"><title>Guest checkout fails on payment retry</title><tspan style="text-decoration:underline">#103</tspan></a> <tspan style="font-size:15px;letter-spacing:0">→</tspan> <tspan style="font-size:11.5px;font-weight:600;letter-spacing:0">alice</tspan></text>
 <rect x="699.6" y="761" width="62.4" height="20" rx="10" fill="#4e4b48"/>
@@ -143,7 +144,7 @@
 <text class="note" x="528" y="842">Work started in PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a>,</text>
 <text class="note" x="528" y="856">finished in PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</text>
 </g>
-<g id="n104">
+<g id="n104" data-frame="guest checkout">
 <rect x="514" y="904" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
 <text class="kind" x="528" y="932.0" style="fill:#6e6a64">ISSUE <a href="https://github.com/acme/shop/issues/104" xlink:href="https://github.com/acme/shop/issues/104" target="_blank"><title>Guest checkout: gift cards without an account</title><tspan style="text-decoration:underline">#104</tspan></a> <tspan style="font-size:15px;letter-spacing:0">→</tspan> <tspan style="font-size:11.5px;font-weight:600;letter-spacing:0">carol</tspan></text>
 <rect x="699.6" y="917" width="62.4" height="20" rx="10" fill="#4e4b48"/>
@@ -156,7 +157,7 @@
 <text class="meta" x="528" y="999">opened 2026-03-10 &#183; closed 2026-03-19</text>
 <text class="note" x="528" y="1013">Closed as not planned; no pull request.</text>
 </g>
-<g id="n112">
+<g id="n112" data-frame="guest checkout">
 <rect x="990.5" y="641" width="260" height="122" rx="10" fill="#eceae6" stroke="#6e6a64" stroke-width="1.6"/>
 <text class="kind" x="1004.5" y="669.0" style="fill:#6e6a64">PR <a href="https://github.com/acme/shop/pull/112" xlink:href="https://github.com/acme/shop/pull/112" target="_blank"><title>checkout: keep the guest cart on retry (#103)</title><tspan style="text-decoration:underline">#112</tspan></a></text>
 <text class="kind" x="1004.5" y="682" style="fill:#6e6a64"><tspan style="font-size:11.5px;font-weight:600;letter-spacing:0">by chris-petersen</tspan></text>
@@ -172,7 +173,7 @@
 <text class="meta" x="1004.5" y="736">opened 2026-03-12 &#183; closed 2026-03-17</text>
 <text class="note" x="1004.5" y="750"><tspan style="font-weight:700">Not merged: superseded by PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a>.</tspan></text>
 </g>
-<g id="n113">
+<g id="n113" data-frame="guest checkout">
 <rect x="990.5" y="863" width="260" height="136" rx="10" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.6"/>
 <text class="kind" x="1004.5" y="891.0" style="fill:#1d4e89">PR <a href="https://github.com/acme/shop/pull/113" xlink:href="https://github.com/acme/shop/pull/113" target="_blank"><title>checkout: retry reuses the guest cart and the payment key (#103)</title><tspan style="text-decoration:underline">#113</tspan></a> <tspan style="font-size:11.5px;font-weight:600;letter-spacing:0">by alice</tspan></text>
 <rect x="1176.1" y="876" width="62.4" height="20" rx="10" fill="#163e73"/>

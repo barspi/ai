@@ -13,7 +13,7 @@ import os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fonts import load
-import box_header
+import box_header, svgmeta
 
 PAGE, INK, INK2 = '#ebe5d7', '#1c2430', '#3b4350'   # the page is a step darker than a frame's inside (FRAME_FILL_OPACITY)
 FRAME_FILL_OPACITY = '0.5'                          # white over the page: a frame reads as a lighter panel among many arrows
@@ -169,7 +169,7 @@ def box(ctx, b, x, y, min_h=0):
     title, notes = box_lines(b)
     t = len(title)
     h = box_height(b, min_h)
-    o = ['<g id="n%s">' % num,
+    o = [svgmeta.box_open(num, b.get('frame'), b.get('github')),      # with the box's frame and GitHub record (svgmeta.py)
          '<rect x="%s" y="%s" width="260" height="%s" rx="10" fill="%s" stroke="%s" stroke-width="%s"%s/>' % (
              fmt(x), fmt(y), fmt(h), st['fill'], st['stroke'], 2.6 if umb else 1.6, ' stroke-dasharray="6 4"' if st.get('dashed') else '')]
     if umb:                                                  # the double border of an umbrella
@@ -215,11 +215,13 @@ def new_pill(x, y):
             '</g>']
 
 
-def arrow(pts, kind):
-    """The path of one arrow. Points are final coordinates; hops.py adds the jump arcs afterwards."""
+def arrow(pts, kind, a=None, b=None):
+    """The path of one arrow from box a to box b. Points are final coordinates; hops.py adds the jump arcs afterwards. With a and b the
+    path carries data-from, data-to and data-kind (svgmeta.py), so the arrow's meaning never depends on reading its geometry."""
     col, dash, mk = EDGE[kind][:3]
     d = 'M' + ' L'.join('%s,%s' % (fmt(px), fmt(py)) for px, py in pts)
-    return '<path d="%s" fill="none" stroke="%s" stroke-width="1.9"%s stroke-linejoin="round" marker-end="url(#%s)"/>' % (d, col, ' stroke-dasharray="7 5"' if dash else '', mk)
+    return '<path d="%s" fill="none" stroke="%s" stroke-width="1.9"%s stroke-linejoin="round" marker-end="url(#%s)"%s/>' % (d, col, ' stroke-dasharray="7 5"' if dash else '', mk,
+                                                                                                         svgmeta.arrow_attrs(a, b, kind) if a is not None else '')
 
 
 def label(kind, cx, cy):

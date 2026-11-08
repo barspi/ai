@@ -11,8 +11,14 @@ graph.json (the example next to the sample: example/sample-graph.json):
   "nodes": [ {"num": 123, "state": "open|closed|handclosed|merged|waiting|draft|prclosed",
               "title": "...", "meta": "opened 2026-01-05 · still open", "notes": ["line", ...], "mono": "merge abc1234 (a, b)",
               "assignees": ["login"]  (issue)   "author": "login"  (pull request),
-              "umbrella": true, "new": true, "frame": "name of the dotted frame", "collapsed": "keywords (on request only)"} ],
-  "edges": [ {"from": 10, "to": 12, "kind": "closed by"} ] }        (kinds: the arrow vocabulary in SKILL.md; read A, kind, B)
+              "umbrella": true, "new": true, "frame": "name of the dotted frame", "collapsed": "keywords (on request only)",
+              "github": {...the box's record from refresh_meta.py; graph_from_snapshot.py fills it}} ],
+  "edges": [ {"from": 10, "to": 12, "kind": "closed by"} ],        (kinds: the arrow vocabulary in SKILL.md; read A, kind, B)
+  "meta": {"ignored": [...], "decisions": [...], "notes": "...", "lastRun": "..."} }   (optional: the svgmeta.py block)
+
+The SVG it writes is the diagram's only file from then on: each box carries its frame and GitHub record, each arrow its two boxes and
+its kind, and the <metadata> block the rest (svgmeta.py); an arrow with NO PATH goes into the block's "nopath". graph.json is a working
+file for this one build: do not keep it.
 
 What it does, with the skill's own modules and nothing else: layout.py puts the boxes in columns and rows and draws the easy arrows;
 route.py finds a path for every other arrow in the picture as it is; hops.py draws the jump arcs; collapse.py collapses the boxes
@@ -24,7 +30,7 @@ sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycach
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import draw, layout, route, hops, collapse
+import draw, layout, route, hops, collapse, svgmeta
 from fonts import load
 
 
@@ -90,9 +96,6 @@ def main():
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">' % (W, H, W, H),
         '<title>%s</title>' % draw.esc(re.sub(r'\s+', ' ', spec.get('title', 'Lineage diagram'))),
         '<desc>%s</desc>' % draw.esc(spec.get('desc', 'Issues and pull requests of %s: what spawned, closed or replaced what.' % spec['repo'])),
-    ] + ([   # how this picture was made (make_diagram.py): its inputs, options, the user's decisions, the skill version
-        '<metadata id="provenance">%s</metadata>' % draw.esc(json.dumps(spec['provenance'], ensure_ascii=False, sort_keys=True)),
-    ] if spec.get('provenance') else []) + [
         draw.defs(),
         '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (W, H, draw.PAGE),
         '<text class="h1" x="80" y="70">%s</text>' % ctx.rich(spec.get('title', 'Lineage diagram')),
@@ -120,11 +123,11 @@ def main():
     pills = [(rect[n['num']][0] + 3 - 26, rect[n['num']][1] + 3 - 26, 52, 52) for n in nodes if n.get('new')]
     titles = [(fx, fy, fw_title + 32, 30) for (name, fx, fy, fw, fh), fw_title in ((f, ftl.getlength(f[0]) / 4) for f in P['frames'])]
     sc = route.Scene(rect, [(f[1], f[2], f[3], f[4]) for f in P['frames']], titles, pills, [], bounds=(30, layout.TOP - 25, LX - 25, int(P['bottom']) + 60))
-    arrow_lines, label_lines, problems = [], [], []
+    arrow_lines, label_lines, problems, nopath = [], [], [], []
 
     def add(a, b, kind, pts):
         sc.arrows.append(list(pts))
-        arrow_lines.append(draw.arrow(pts, kind))
+        arrow_lines.append(draw.arrow(pts, kind, a, b))
 
     easy = P['easy']
     for a, b, kind, pts in easy:
@@ -147,7 +150,8 @@ def main():
     for a, b, kind in sorted(P['hard'], key=lambda e: (-draw.IMPORTANCE.get(e[2], 2), span(e))):
         pts = route.route(sc, a, b, '*', '*')        # one search over every side of both boxes: fewest bends and crossings win
         if not pts:
-            problems.append('NO PATH for #%s %s #%s: leave it out of the picture, name it in the box note, and say what would have to move' % (a, kind, b))
+            problems.append('NO PATH for #%s %s #%s: kept in the metadata ("nopath"); name it in the box note, and say what would have to move' % (a, kind, b))
+            nopath.append((a, b, kind))
             continue
         add(a, b, kind, pts)
         lab = route.place_label(sc, pts, kind)
@@ -164,6 +168,11 @@ def main():
     text, moved, failed = model.relabel(text, hop_pad=20)
     for x, y, why in failed:
         problems.append('label near (%d,%d): %s' % (x, y, why))
+    meta = svgmeta.new_meta(spec['repo'], spec.get('roots') or ())     # the facts with no box or arrow of their own (svgmeta.py)
+    meta.update({k: v for k, v in (spec.get('meta') or {}).items() if k not in ('format', 'repo', 'roots')})
+    for a, b, kind in nopath:
+        svgmeta.add_nopath(meta, a, b, kind, 'no clean path when the diagram was built')
+    text = svgmeta.write(text, meta)
     open(out_path, 'w', encoding='utf-8').write(text)
     print('wrote %s: %dx%d, %d boxes, %d arrows (%d by the layout, %d by the router), %d jump arcs' % (
         out_path, W, H, len(nodes), len(arrow_lines), len(easy), len(arrow_lines) - len(easy), added))
