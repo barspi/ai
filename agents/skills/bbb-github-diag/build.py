@@ -93,9 +93,9 @@ def main():
     frame_lines = []
     for name, fx, fy, fw, fh in P['frames']:
         frame_lines += draw.frame(fx, fy, fw, fh, name)
-    script = open(os.path.join(HERE, 'find-box.js'), encoding='utf-8').read()
-    text = '\n'.join(head + frame_lines + ['<!--ARROWS-->'] + boxes + ['<!--LABELS-->', '<!--legend-->'] + leg + ['<!--/legend-->',
-                     '<script type="text/javascript"><![CDATA[\n' + script + '\n]]></script>', '</svg>', ''])
+    import refresh_scripts                        # the find box script, then the click highlight script (refresh_scripts.py)
+    text = refresh_scripts.refresh('\n'.join(head + frame_lines + ['<!--ARROWS-->'] + boxes + ['<!--LABELS-->', '<!--legend-->'] + leg +
+                                             ['<!--/legend-->', '</svg>', '']))
 
     # ---------------------------------------------------------------- collapsed boxes, on request only
     sets = {n['num']: n['collapsed'] for n in nodes if n.get('collapsed')}

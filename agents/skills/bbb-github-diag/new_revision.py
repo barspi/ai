@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Start a new revision of a lineage diagram: copy the file and drop every `new` pill. Nothing else changes.
+"""Start a new revision of a lineage diagram: copy the file and drop every `new` pill. The page scripts (find box, click highlight) are
+replaced by the skill's current ones (refresh_scripts.py). Nothing else changes.
 
 usage: new_revision.py old.svg new.svg [--keep-new]
 
@@ -29,6 +30,9 @@ def main():
     else:
         out, n = pat.subn('', s)
         print('%s -> %s: %d new pills dropped' % (old, new, n))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import refresh_scripts                                    # the find box and click highlight as the skill has them now
+    out = refresh_scripts.refresh(out)
     open(new, 'w', encoding='utf-8').write(out)
     print('next: refresh_meta.py ... --apply, then check_diag.py %s %s' % (new, old))
 
