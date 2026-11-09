@@ -43,7 +43,9 @@
   scroller.appendChild(inner); host.appendChild(scroller);
 
   var box = document.createElementNS(HTMLNS, 'div');
-  box.setAttribute('style', 'position:absolute;left:12px;bottom:30px;z-index:10;box-sizing:border-box;width:' + W + 'px;padding:8px 10px;background:#163e73;border:2px solid #0e2b52;border-radius:10px;box-shadow:0 3px 12px rgba(14,43,82,.45);font:12px Helvetica,Arial,sans-serif;color:#fff');
+  box.setAttribute('style', 'position:absolute;left:12px;bottom:30px;z-index:10;box-sizing:border-box;width:' + W + 'px;padding:8px 10px;background:rgba(22,62,115,.55);border:2px solid rgba(14,43,82,.55);border-radius:10px;box-shadow:0 3px 12px rgba(14,43,82,.25);font:12px Helvetica,Arial,sans-serif;color:#fff;opacity:.75;transition:opacity .2s');
+  /* Half transparent like the Shift + scroll hint (shift-zoom.js): background at 55%, the whole box at 75%; full while the pointer is
+     on it or the field has the focus, so typing is never faint. */
   var row = document.createElementNS(HTMLNS, 'div');
   row.setAttribute('style', 'display:flex;gap:6px;align-items:center');
   var input = document.createElementNS(HTMLNS, 'input');
@@ -62,6 +64,11 @@
   note.textContent = 'press / to search';
   row.appendChild(input); row.appendChild(prev); row.appendChild(next); row.appendChild(clear);
   box.appendChild(row); box.appendChild(note); host.appendChild(box);
+  var hover = false;
+  function shade() { box.style.opacity = (hover || document.activeElement === input) ? '1' : '.75'; }
+  box.addEventListener('mouseenter', function () { hover = true; shade(); });
+  box.addEventListener('mouseleave', function () { hover = false; shade(); });
+  input.addEventListener('focus', shade); input.addEventListener('blur', shade);
   fo.appendChild(host); svg.appendChild(fo);
   svg.style.overflow = 'hidden';
   /* Size everything in explicit pixels from the window size. Percentages are not re-resolved by every browser
