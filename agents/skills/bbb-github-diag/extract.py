@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cut an extract out of a finished diagram: keep some boxes where they are, with the arrows between them; drop everything else.
 
-usage: extract.py IN.svg OUT.svg --keep N,N,... [--title TEXT]
+usage: extract.py IN.svg OUT.svg --keep N,N,... [--title TEXT] [--tab-title TEXT] [--compact [ANCHOR]] [--no-legend]
 
 Built by selecting from the finished diagram, never by drawing again (SKILL.md, "Extracts"): every kept box, pop-up, link, label and arrow
 route is the one the user saw and approved.
@@ -12,7 +12,8 @@ route is the one the user saw and approved.
    into a neighbour). A frame that lost nothing is not touched.
 4. Jump arcs and red crosses are redone (hops.py), the canvas shrinks to what is left (the header and the legend stay where they are),
    and the page scripts are the skill's current ones (refresh_scripts.py).
---title replaces the text of the page title (the first line of the header). --no-legend leaves out the "How to read this graph" block
+--title replaces the text of the page title (the first line of the header) and of the browser tab (the <title> under the root);
+--tab-title gives the tab its own text. --no-legend leaves out the "How to read this graph" block
 (the user asked for it when the legend sat over arrows; a handout for someone who knows the work may not need it).
 A number in --keep that is not a box of IN is printed and skipped. Run check_diag.py OUT.svg afterwards.
 """
@@ -22,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collapse, draw, hops, model, move, refresh_scripts, route, svgmeta
 
 
-def extract(text, keep, title=None, no_legend=False):
+def extract(text, keep, title=None, no_legend=False, tab_title=None):
     """Returns (text, report lines)."""
     report = []
     lines, box, _, _ = collapse.parse(text)
@@ -88,6 +89,9 @@ def extract(text, keep, title=None, no_legend=False):
     text, _, _ = hops.add_hops(text)
     if title:
         text = re.sub(r'(<text class="h1"[^>]*>).*?(</text>)', lambda m: m.group(1) + draw.esc(title) + m.group(2), text, count=1, flags=re.S)
+    tab = tab_title or title
+    if tab:                                                 # the browser tab: the <title> right under the root <svg> (line 2)
+        text = re.sub(r'\A(<svg[^>]*>\n)<title>.*?</title>', lambda m: m.group(1) + '<title>%s</title>' % draw.esc(tab), text, count=1, flags=re.S)
     lines, box, _, frames = collapse.parse(text)
     right = [b['x'] + b['w'] for b in box.values()] + [f['x'] + f['w'] for f in frames]
     bottom = [b['y'] + b['h'] for b in box.values()] + [f['y'] + f['h'] for f in frames]
@@ -288,10 +292,11 @@ def main():
     title = argv[argv.index('--title') + 1] if '--title' in argv else None
     anchor = argv[argv.index('--compact') + 1] if '--compact' in argv and argv.index('--compact') + 1 < len(argv) \
         and not argv[argv.index('--compact') + 1].startswith('--') else None
-    pos = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] not in ('--keep', '--title', '--compact'))]
+    pos = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] not in ('--keep', '--title', '--compact', '--tab-title'))]
     src, out = pos[0], pos[1]
     text = open(src, encoding='utf-8').read()
-    res, report = extract(text, keep, title, '--no-legend' in argv)
+    tab = argv[argv.index('--tab-title') + 1] if '--tab-title' in argv else None
+    res, report = extract(text, keep, title, '--no-legend' in argv, tab)
     if '--compact' in argv:
         res, more = compact(res, anchor)
         report += more
