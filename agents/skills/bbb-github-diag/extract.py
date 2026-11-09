@@ -12,7 +12,8 @@ route is the one the user saw and approved.
    into a neighbour). A frame that lost nothing is not touched.
 4. Jump arcs and red crosses are redone (hops.py), the canvas shrinks to what is left (the header and the legend stay where they are),
    and the page scripts are the skill's current ones (refresh_scripts.py).
---title replaces the text of the page title (the first line of the header).
+--title replaces the text of the page title (the first line of the header). --no-legend leaves out the "How to read this graph" block
+(the user asked for it when the legend sat over arrows; a handout for someone who knows the work may not need it).
 A number in --keep that is not a box of IN is printed and skipped. Run check_diag.py OUT.svg afterwards.
 """
 import os, re, sys, tempfile
@@ -21,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collapse, draw, hops, model, move, refresh_scripts, route, svgmeta
 
 
-def extract(text, keep, title=None):
+def extract(text, keep, title=None, no_legend=False):
     """Returns (text, report lines)."""
     report = []
     lines, box, _, _ = collapse.parse(text)
@@ -80,6 +81,9 @@ def extract(text, keep, title=None):
         lines[f['tl']] = move.shift_line(lines[f['tl']], nx0 - x, ny0 - y)
         report.append('frame shrunk: %s (%d of %d boxes)' % (f['name'], len(now), len(had)))
     text = '\n'.join(l for k, l in enumerate(lines) if k not in drop)
+    if no_legend and '<!--legend-->' in text:               # its markers stay (empty), so later scripts still find its place
+        text = re.sub(r'(<!--legend-->).*?(<!--/legend-->)', r'\1\n\2', text, count=1, flags=re.S)
+        report.append('legend left out')
     # 4. arcs, crosses, title, canvas, scripts
     text, _, _ = hops.add_hops(text)
     if title:
@@ -287,7 +291,7 @@ def main():
     pos = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] not in ('--keep', '--title', '--compact'))]
     src, out = pos[0], pos[1]
     text = open(src, encoding='utf-8').read()
-    res, report = extract(text, keep, title)
+    res, report = extract(text, keep, title, '--no-legend' in argv)
     if '--compact' in argv:
         res, more = compact(res, anchor)
         report += more
