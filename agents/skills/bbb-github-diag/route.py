@@ -36,6 +36,7 @@ TURN_COST, CROSS_COST, SIDE_COST = 30, 35, 20
 FRAME_COST = 60     # per border crossed of a frame that holds neither end: going through it costs 120
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
+LAST_COST = None    # the cost of the last path _route() found
 OUT = {'R': 0, 'L': 2, 'B': 1, 'T': 3}               # direction numbers: 0 east, 1 south, 2 west, 3 north
 DX, DY = (1, 0, -1, 0), (0, 1, 0, -1)
 
@@ -310,6 +311,8 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False):
                 heappush(pq, (c2 + max(0, gi_lo - ni, ni - gi_hi) + max(0, gj_lo - nj, nj - gj_hi), c2, s2))
     if end is None:
         return None
+    global LAST_COST
+    LAST_COST = dist[end]                                        # what this path cost the search (selftest() reads it)
     path = [end]
     while prev[path[-1]] >= 0:
         path.append(prev[path[-1]])
@@ -530,3 +533,73 @@ def path_cost(sc, pts, a, b):
         border = [('h', y, x, x + w), ('h', y + h, x, x + w), ('v', x, y, y + h), ('v', x + w, y, y + h)]
         cost += (FRAME_OWN_COST if own else FRAME_COST) * _crossings(segs, border)
     return cost
+
+
+def selftest():
+    """Small fixed scenes, one per rule, so a rule that silently stops working fails here. (The frame border cost once never applied,
+    because each step looked at the wrong axis, and nothing measured it.) Prints one line per check; exits 1 on a failure."""
+    import sys, time
+    import svgmeta
+    bad = []
+    BOUNDS = (-600, -600, 3000, 3000)                            # a real diagram always has bounds: the canvas
+
+    def Sc(boxes, frames=(), arrows=()):
+        return Scene(boxes, frames, arrows=arrows, bounds=BOUNDS)
+
+    def check(name, ok, detail=''):
+        print('%s %s%s' % ('ok  ' if ok else 'FAIL', name, (': ' + detail) if detail and not ok else ''))
+        if not ok:
+            bad.append(name)
+
+    A, B = (0, 200, 100, 60), (800, 200, 100, 60)
+    # 1. a frame between the two boxes costs FRAME_COST per border; a frame that holds an end costs FRAME_OWN_COST per border
+    wall = (400, -2000, 100, 4200)
+    p = _route(Sc({1: A, 2: B}, [wall]), 1, 2, 'R', 'L', 260)
+    check('a frame that holds neither end costs 2 x FRAME_COST to go through', p is not None and LAST_COST >= 2 * FRAME_COST + 100,
+          'cost %s' % LAST_COST)
+    base = LAST_COST
+    p = _route(Sc({1: A, 2: B}, [wall, (-100, 100, 450, 200)]), 1, 2, 'R', 'L', 260)
+    check('a frame that holds one end costs FRAME_OWN_COST to leave', p is not None and abs(LAST_COST - base - FRAME_OWN_COST) < 10,
+          'cost %s, without that frame %s' % (LAST_COST, base))
+    # 2. two horizontal arrows keep HARD_H apart
+    A2, B2 = (0, 0, 100, 60), (800, 400, 100, 60)
+    other = [(150, 200), (750, 200)]
+    p = route(Sc({1: A2, 2: B2}, arrows=[other]), 1, 2, '*', '*')
+    near = [s for s in segments(p or []) if s[0] == 'h' and abs(s[1] - 200) < HARD_H and s[2] < 750 and s[3] > 150]
+    check('a horizontal keeps %dpx from another horizontal' % HARD_H, p is not None and not near, 'path %s' % p)
+    # 3. no crossing within END_CLEAR of the end of another line
+    stub = [(450, -100), (450, 215)]
+    p = route(Sc({1: A, 2: B}, arrows=[stub]), 1, 2, 'R', 'L')
+    close = [s for s in segments(p or []) if s[0] == 'h' and s[2] < 450 < s[3] and 215 - END_CLEAR < s[1] < 215 + END_CLEAR]
+    check('no crossing within %dpx of a line end' % END_CLEAR, p is not None and not close, 'path %s' % p)
+    # 4. a box walled in: no path, and the walk back proves it at once (the whole-canvas search would visit every state)
+    ring = {1: (500, 500, 100, 60), 2: (2000, 500, 100, 60), 3: (380, 380, 340, 60), 4: (380, 620, 340, 60), 5: (380, 380, 60, 300),
+            6: (660, 380, 60, 300)}
+    t = time.time()
+    p = route(Sc(ring), 1, 2, '*', '*')
+    check('no path is proved fast', p is None and time.time() - t < 5, 'path %s, %.1fs' % (p, time.time() - t))
+    # 5. a straight arrow's label sits in the middle of its shaft
+    sc = Sc({1: A, 2: B})
+    pts = [(100, 230), (800, 230)]
+    lab = place_label(sc, pts, 'follow-up')
+    check('a straight arrow has its label in the middle', lab is not None and abs(lab[0] - (100 + 800 - 11) / 2) < 1, 'label %s' % (lab,))
+    # 6. a pinned arrow is still an arrow to every script
+    ln = '<path d="M1,2 L3,2" fill="none" marker-end="url(#h-led)" data-from="1" data-to="2" data-kind="led to"/>'
+    pl = svgmeta.pin(ln)
+    check('pin keeps the arrow readable', svgmeta.is_arrow(pl) and svgmeta.is_pinned(pl) and svgmeta.arrow_of(pl) == (1, 2, 'led to')
+          and svgmeta.pin(pl, False) == ln)
+    # 7. path_cost: a jog shorter than 30px costs JOG_COST
+    c1 = path_cost(Sc({1: A, 2: B}), [(100, 230), (400, 230), (400, 245), (800, 245)], 1, 2)
+    c2 = path_cost(Sc({1: A, 2: B}), [(100, 230), (400, 230), (400, 275), (800, 275)], 1, 2)
+    check('a short jog costs JOG_COST', abs((c1 - c2) - (JOG_COST - 30 / G)) < .01, '%s vs %s' % (c1, c2))   # 15px jog vs 45px
+    print('route self-test %s' % ('OK' if not bad else 'FAILED: %d' % len(bad)))
+    if bad:
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    import sys
+    if sys.argv[1:] == ['selftest']:
+        selftest()
+    else:
+        sys.exit('usage: route.py selftest   (as a module: see the docstring)')

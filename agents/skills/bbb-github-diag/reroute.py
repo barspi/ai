@@ -46,6 +46,17 @@ def costs(text):
     return out
 
 
+def bends_of(text):
+    """{(a, b): (bends, corner points)} of every drawn arrow."""
+    out = {}
+    for ln in text.split('\n'):
+        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+        if at:
+            p = route.straight(model.arrow_points(ln))
+            out[at[:2]] = (len(p) - 2, tuple(p))
+    return out
+
+
 def reroute(text, pairs, improve=False):
     """Returns (text, done, failed). improve: keep a new path only when route.path_cost says it costs less than the old one."""
     done, failed = [], []
@@ -149,6 +160,15 @@ def main():
     open(out, 'w', encoding='utf-8').write(res)
     for a, b, bends, left, old_bends in done:
         print('#%d -> #%d: %d bends (was %d)%s' % (a, b, bends, old_bends, ' (no path inside their frame: it leaves it)' if left else ''))
+    if passes:                                             # what the user should look at: the arrows that took more bends
+        b0, b1 = bends_of(text), bends_of(res)
+        changed = [p for p in b1 if p in b0 and b0[p][1] != b1[p][1]]
+        more = sorted((p for p in changed if b1[p][0] > b0[p][0]), key=lambda p: b0[p][0] - b1[p][0])
+        print('%d arrows changed: %d with fewer bends, %d with as many, %d with more (each traded bends for crossings, frame borders or '
+              'length: show these to the user, and pin a route the user prefers before the next --improve):'
+              % (len(changed), sum(1 for p in changed if b1[p][0] < b0[p][0]), sum(1 for p in changed if b1[p][0] == b0[p][0]), len(more)))
+        for p in more:
+            print('  MORE BENDS #%d -> #%d: %d (was %d)' % (p[0], p[1], b1[p][0], b0[p][0]))
     for a, b, why in failed:
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
     for x, y, why in bad:
