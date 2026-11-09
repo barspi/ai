@@ -154,6 +154,8 @@ def remove_boxes(s, nums):
         if n in pop:
             for k in range(pop[n][0], pop[n][1] + 1):
                 out[k] = None
+    rule = re.compile(r'#n(%s):hover~#pop\1,#pop\1:hover\{[^}]*\}' % '|'.join(str(n) for n in nums))
+    out = [rule.sub('', l) if l is not None and '<style>' in l else l for l in out]     # their hover rules go too
     return '\n'.join(l for l in out if l is not None)
 
 

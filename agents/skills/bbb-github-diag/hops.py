@@ -39,8 +39,9 @@ def is_arrow(ln):
     return ln.startswith('<path d="M') and 'marker-end' in ln
 
 
-def add_hops(text):
-    """Repeat until nothing changes (an arrow that had an arc removed can have a new crossing right after it)."""
+def add_hops(text, marks=True):
+    """Repeat until nothing changes (an arrow that had an arc removed can have a new crossing right after it). Then, unless marks is
+    False, xmarks.redo() (that adds lines: a caller that keeps line numbers across the call passes marks=False)."""
     total_added = total_removed = 0
     for _ in range(5):
         text, added, removed = _once(text)
@@ -48,11 +49,46 @@ def add_hops(text):
         total_removed += removed
         if not added and not removed:
             break
-    return text, total_added, total_removed
+    import xmarks                                  # the red crosses go on top of the boxes again (xmarks.py)
+    return (xmarks.redo(text) if marks else text), total_added, total_removed
+
+
+def unparse(seg):
+    out = []
+    for c, (x, y), nums in seg:
+        if c == 'A':
+            out.append('A%s %s,%s' % (' '.join(fmt(v) for v in nums[:5]), fmt(x), fmt(y)))
+        else:
+            out.append('%s%s,%s' % (c, fmt(x), fmt(y)))
+    return ' '.join(out)
+
+
+def merge_runs(seg):
+    """Drop a plain point that lies inside one straight run (the run goes on the same way after it): a removed arc leaves its two ends
+    behind as such points. The line looks the same, but route.py keeps other arrows away from every point of a path and this step
+    skips a crossing near one, so a left-over point can close a channel. The start of an arc and the end of one are kept."""
+    out = [seg[0]]
+    for i in range(1, len(seg) - 1):
+        (pc, p, _), (cc, c, _), (nc, n, _) = out[-1], seg[i], seg[i + 1]
+        if cc == 'L' and nc == 'L':
+            if abs(p[1] - c[1]) < .01 and abs(c[1] - n[1]) < .01 and (p[0] - c[0]) * (c[0] - n[0]) > 0:
+                continue
+            if abs(p[0] - c[0]) < .01 and abs(c[0] - n[0]) < .01 and (p[1] - c[1]) * (c[1] - n[1]) > 0:
+                continue
+        out.append(seg[i])
+    return out + seg[-1:]
 
 
 def _once(text):
     lines = text.split('\n')
+    for k, ln in enumerate(lines):                # first, the points left by arcs removed earlier
+        if is_arrow(ln):
+            d = ln.split('"')[1]
+            seg = parse(d)
+            if len(seg) > 2:
+                m = merge_runs(seg)
+                if len(m) < len(seg):
+                    lines[k] = ln.replace('d="%s"' % d, 'd="%s"' % unparse(m), 1)
     verts, horiz = [], []                      # vertical and horizontal runs of every arrow
     for k, ln in enumerate(lines):
         if not is_arrow(ln):

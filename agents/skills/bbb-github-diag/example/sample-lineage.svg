@@ -214,6 +214,9 @@
 <text class="lbl" x="400.0" y="727.5" text-anchor="middle" style="fill:#1c2430">child</text>
 <rect x="1081.0" y="560.2" width="56.1" height="18.0" rx="4" fill="#fffdf7" stroke="#6e6a64" stroke-width="0.9"/>
 <text class="lbl" x="1109.0" y="573.2" text-anchor="middle" style="fill:#6e6a64">related</text>
+<g id="xmarks">
+<path class="xmark" d="M1115.0,757.5 L1126.0,768.5 M1126.0,757.5 L1115.0,768.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/>
+</g>
 <!--legend-->
 <rect x="2229.0" y="190" width="500" height="468" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
 <text class="lgb" x="2245.0" y="220" style="font-size:16px">How to read this graph</text>
