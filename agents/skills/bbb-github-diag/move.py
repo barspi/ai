@@ -10,6 +10,8 @@ N@X,Y        the new top-left corner of box N (its pop-up moves with it). X or Y
 --reroute    an arrow to route again although neither of its boxes moved (A>B, as reroute.py).
 --sides      A>B=SA,SB: the sides (R, L, T, B, or * for any) this arrow must leave A and enter B by, when the user chose a channel
              (3240>3238=R,R: up the right side of a column). Without it the search picks the sides.
+--keep-out   X,Y,W,H: a rectangle the arrows routed here keep out of, as if it were a box, when the user chose the corridor (go
+             below a row, not over it). Nothing is drawn there; the other arrows are not touched.
 
 Steps, in order:
 1. the boxes move and the frames grow; each moved box gets the data-frame of the smallest frame that now holds it (svgmeta.py);
@@ -116,7 +118,7 @@ def take_out(lines, i):
     return [i]
 
 
-def move(text, moves, grows=(), extra=(), sides=None):
+def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
     """Returns (text, routed [(a, b, bends, left its frame)], failed [(a, b, why)], place problems)."""
     lines = text.split('\n')
     todo = []
@@ -144,7 +146,11 @@ def move(text, moves, grows=(), extra=(), sides=None):
     for i, (a, b, kind) in order:
         text = '\n'.join(lines)
         sc, _ = model.read(text)
+        for k, r in enumerate(keep_out):                  # an obstacle like a box, under a key no box has
+            sc.boxes[-1 - k] = tuple(r)
         pts = route.route(sc, a, b, *(sides or {}).get((a, b), ('*', '*')))
+        for k in range(len(keep_out)):
+            del sc.boxes[-1 - k]
         if not pts:
             failed.append((a, b, 'no path: the arrow is left out'))
             continue
@@ -167,11 +173,14 @@ def move(text, moves, grows=(), extra=(), sides=None):
 
 def main():
     argv = sys.argv[1:]
-    args, grows, extra, sides = [], [], [], {}
+    args, grows, extra, sides, keep_out = [], [], [], {}, []
     k = 0
     while k < len(argv):
         a = argv[k]
-        if a == '--sides':
+        if a == '--keep-out':
+            keep_out.append(tuple(float(v) for v in argv[k + 1].split(',')))
+            k += 2
+        elif a == '--sides':
             pair, ss = argv[k + 1].split('=')
             sides[tuple(int(x.lstrip('#')) for x in pair.split('>'))] = tuple(ss.split(','))
             k += 2
@@ -199,7 +208,7 @@ def main():
         n = int(n.lstrip('#'))
         moves[n] = (place(box[n]['x'], sx), place(box[n]['y'], sy))
     before = model.repair(text, count_only=True)[1]
-    res, routed, failed, where = move(text, moves, grows, extra, sides)
+    res, routed, failed, where = move(text, moves, grows, extra, sides, keep_out)
     res, _, _ = hops.add_hops(res)
     res, _, bad = model.relabel(res, hop_pad=20)
     after = model.repair(res, count_only=True)[1]
