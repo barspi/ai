@@ -161,6 +161,18 @@ def replace_labels(old, new, idxs):
     return '\n'.join(l for l in keep if l is not None), problems
 
 
+def off_middle(pts, cx, cy, tol=6):
+    """Is the label at (cx, cy) more than tol px from the middle of a straight arrow's shaft (tail to the base of the head)? check_diag.py
+    fails 12.5px. An arrow with a bend is never off its middle here."""
+    p = route.straight([tuple(x) for x in pts])
+    if len(p) != 2:
+        return False
+    (x0, y0), (x1, y1) = p
+    if abs(y0 - y1) < .01:
+        return abs(cx - (x0 + x1 - 11 * (1 if x1 > x0 else -1)) / 2) > tol
+    return abs(cy - (y0 + y1 - 11 * (1 if y1 > y0 else -1)) / 2) > tol
+
+
 def relabel(text, hop_pad=0, redo=()):
     """Put every label that does not sit well on its arrow (it covers another arrow, a box or a label, or is off its arrow) on a better
     straight stretch. Returns (text, fixed, failed): the number of labels moved, and (x, y, reason) for each label that found no good place.
@@ -213,7 +225,8 @@ def relabel(text, hop_pad=0, redo=()):
                 labelled.add(k)
         others = route.Scene(sc.boxes, sc.frames, [l for l in sc.labels if tuple(l) != rect], sc.pills, sc.arrows, sc.bounds)
         others.hops = sc.hops
-        if own is not None and not orphan and own_k not in redo_k and not route._hit(rect, others, own=own, hop_pad=hop_pad):
+        if own is not None and not orphan and own_k not in redo_k and not route._hit(rect, others, own=own, hop_pad=hop_pad) \
+                and not off_middle(own, cx, cy):
             continue
         if own is None or word not in route.draw.EDGE:
             failed.append((round(cx), round(cy), 'no arrow of this word to attach the label to'))

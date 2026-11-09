@@ -156,6 +156,8 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
             continue
         old, lab_at = slots[i]
         lines[i] = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), old, count=1)
+        if (a, b) in (sides or {}) or (a, b) in extra:   # the user named this arrow's route: reroute.py --improve leaves it alone
+            lines[i] = svgmeta.pin(lines[i])
         sc.arrows.append(list(pts))
         lab = route.place_label(sc, pts, kind)
         if lab:

@@ -9,24 +9,33 @@ Scene, so it adapts to the crossings and the free space of the current diagram. 
     lab = place_label(sc, pts, 'closed by')               (cx, cy) of the label, or None
     sc.add(pts, 'closed by', lab)                         remember both, so the next arrow sees them
 
-Rules it keeps (SKILL.md, "Hard arrows"): a path never goes under a box (26px clear) or a label (10px clear); never runs parallel to another
-arrow closer than 14px (between 14 and 36px it may, at a cost per step) or to a frame border closer than 30px; crosses a line only at a
-right angle, away from either line's ends; never turns within 40px of a box edge (so it leaves and enters straight); has as few
-crossings, bends and frame-border crossings as it can. An arrow whose two boxes are in the same frame is searched inside that frame
-first and leaves it only when no path exists inside (route() then records the pair in sc.left_frame). It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
-The search is Dijkstra/A* on a 5px grid inside a window around the two boxes (the window grows when nothing is found).
+Rules it keeps (SKILL.md, "Hard arrows"): a path never goes under a box (26px clear) or a label (7px clear); two horizontal arrows are
+never closer than 22px (HARD_H: their 18px labels then fit one above the other with a 4px gap); two vertical arrows never closer than
+14px (HARD_V), and closer than 42px (LABEL_ROOM, room for a label between them) only at a cost per step; a frame border keeps 30px; a
+line is crossed only at a right angle, 30px or more from either of its ends (END_CLEAR); never turns within 40px of a box edge (so it
+leaves and enters straight). Costs: a step 1, a bend 30, a crossing 35, a side other than the facing one 20, a border of a frame that
+holds neither end 60, of a frame that holds an end 75 (so leaving such a frame and coming back costs 150). An arrow whose two boxes are
+in the same frame is searched inside that frame first and leaves it only when no path exists inside (route() then records the pair in
+sc.left_frame). It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
+The search is A* on a 5px grid inside a window around the two boxes (the window grows when nothing is found); place_label() keeps a
+label 7px from every other arrow.
 """
 import heapq, math
+from array import array
 
 import draw
 
 G = 5
-BOXM, LABM, PROX, FPROX, TURN_FREE, EDGE_MARGIN = 26, 10, 36, 30, 40, 24
-TURN_COST, CROSS_COST, SIDE_COST = 30, 50, 20
-HARD = 14           # closer than this to another arrow is never allowed (check_diag.py asks 13.5px between parallel lines)
-NEAR_COST = 4       # per 5px cell run parallel to, or turned within, PROX of another arrow but no closer than HARD: allowed, at a cost,
-                    # so a tight but short way wins over a long detour around the picture
-FRAME_COST = 60     # per frame border crossed: an arrow does not wander through other frames for free
+BOXM, LABM, FPROX, TURN_FREE, EDGE_MARGIN = 26, 7, 30, 40, 24
+HARD_H = 22         # two horizontal arrows are never closer: their labels (18px tall) then fit one above the other with a 4px gap
+HARD_V = 14         # two vertical arrows are never closer (check_diag.py asks 13.5px); their labels go at different heights
+LABEL_ROOM = 42     # beside a vertical arrow closer than this there is no room for a label (half a 70px label plus LABM): it may, at
+NEAR_COST = 1       # NEAR_COST per 5px step, so a tight but short way still wins over a long detour around the picture
+END_CLEAR = 30      # no crossing closer than this to either end of a line (a bend, a tail, a tip): it would look like a touch
+TURN_COST, CROSS_COST, SIDE_COST = 30, 35, 20
+FRAME_COST = 60     # per border crossed of a frame that holds neither end: going through it costs 120
+JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
+FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
 OUT = {'R': 0, 'L': 2, 'B': 1, 'T': 3}               # direction numbers: 0 east, 1 south, 2 west, 3 north
 DX, DY = (1, 0, -1, 0), (0, 1, 0, -1)
 
@@ -69,7 +78,40 @@ def _side_cells(r, side, lo_margin):
     return a, b
 
 
-def _route(sc, a, b, sa, sb, pad, natural=None, inside=None):
+def _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
+    """Can the search reach a goal at all? A breadth-first walk BACK from the goal states (cell and direction) over the same moves the
+    search makes (a cell it may enter, no step along a line it must keep away from, a bend only where bending is allowed), with no costs
+    and no queue order. When it reaches no start state there is no path, and the A* search, which would visit every reachable state
+    before it gives up, is skipped. A failure is usually local (no room to bend before a box), so the walk back ends quickly."""
+    n = NX * NY
+    goal_cells = {j * NX + i for i, j in goals}
+    want = {(j * NX + i) * 4 + OUT[s] for i, j, _, s in starts}
+    seen = bytearray(n * 4)
+    todo = [(j * NX + i) * 4 + d for (i, j), ds in goals.items() for d in ds]
+    for s in todo:
+        seen[s] = 1
+    back = (-1, -NX, 1, NX)                      # a step in direction d (east, south, west, north) came from k + back[d]
+    while todo:
+        s = todo.pop()
+        if s in want:
+            return True
+        k, nd = s >> 2, s & 3
+        if (blk[k] and k not in goal_cells) or (nov if nd & 1 else noh)[k]:
+            continue                             # the search never steps into k this way
+        k0 = k + back[nd]
+        if k0 < 0 or k0 >= n or (not nd & 1 and k0 // NX != k // NX):
+            continue
+        for d in (0, 1, 2, 3):                   # the state before: at k0, going d; it turned to nd unless d == nd
+            if d == (nd + 2) & 3 or (d != nd and nt[k0]):
+                continue
+            p = k0 * 4 + d
+            if not seen[p]:
+                seen[p] = 1
+                todo.append(p)
+    return False
+
+
+def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False):
     ra, rb = sc.boxes[a], sc.boxes[b]
     bx0, by0, bx1, by1 = (int(v) for v in (sc.bounds or (0, 0, 10 ** 6, 10 ** 6)))
     x0 = max(bx0, int(min(ra[0], rb[0]) - pad))
@@ -80,7 +122,7 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None):
         x0, y0, x1, y1 = int(inside[0]) - 2 * G, int(inside[1]) - 2 * G, int(inside[0] + inside[2]) + 2 * G, int(inside[1] + inside[3]) + 2 * G
     NX, NY = (x1 - x0) // G + 1, (y1 - y0) // G + 1
     size = NX * NY
-    blk, noh, nov, nt, crh, crv, sh, sv, st_, frh, frv = (bytearray(size) for _ in range(11))
+    blk, noh, nov, nt, crh, crv, sv, frh, frv = (bytearray(size) for _ in range(9))
 
     def rng(lo, hi, o, n):                       # grid indices with lo < coordinate < hi
         i1 = max(0, int(math.floor((lo - o) / G)) + 1)
@@ -104,36 +146,52 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None):
     for (x, y, w, h) in sc.pills:
         mark(blk, x, y, x + w, y + h)
 
-    def add_seg(o, c, lo, hi, prox, cost, hard):
+    def line(arr, o, c, lo, hi, v=1):
+        """Mark the one row (o 'h') or column (o 'v') of cells nearest the line at c, from lo to hi: a step across it crosses it once."""
         if o == 'h':
-            mark(noh, lo - hard, c - hard, hi + hard, c + hard)
-            mark(nt, lo - hard, c - hard, hi + hard, c + hard)
-            mark(sh, lo - prox, c - prox, hi + prox, c + prox)            # near, not too near: a cost (NEAR_COST)
-            mark(st_, lo - prox, c - prox, hi + prox, c + prox)
-            mark(blk, lo - prox, c - prox, lo + prox, c + prox)          # near the ends no crossing is allowed
-            mark(blk, hi - prox, c - prox, hi + prox, c + prox)
-            if cost:
-                mark(crh, lo, c - G / 2 - .01, hi, c + G / 2 + .01)
+            j = int(round((c - y0) / G))
+            i1, i2 = rng(lo, hi, x0, NX)
+            if 0 <= j < NY and i1 <= i2:
+                arr[j * NX + i1:j * NX + i2 + 1] = bytes([v]) * (i2 - i1 + 1)
         else:
-            mark(nov, c - hard, lo - hard, c + hard, hi + hard)
-            mark(nt, c - hard, lo - hard, c + hard, hi + hard)
-            mark(sv, c - prox, lo - prox, c + prox, hi + prox)
-            mark(st_, c - prox, lo - prox, c + prox, hi + prox)
-            mark(blk, c - prox, lo - prox, c + prox, lo + prox)
-            mark(blk, c - prox, hi - prox, c + prox, hi + prox)
-            if cost:
-                mark(crv, c - G / 2 - .01, lo, c + G / 2 + .01, hi)
+            i = int(round((c - x0) / G))
+            j1, j2 = rng(lo, hi, y0, NY)
+            if 0 <= i < NX:
+                for j in range(max(j1, 0), j2 + 1):
+                    arr[j * NX + i] = v
 
     for pts in sc.arrows:
         for o, c, lo, hi in segments(pts):
-            add_seg(o, c, lo, hi, PROX, True, HARD)
-    for (x, y, w, h) in sc.frames:
+            if o == 'h':                         # another horizontal keeps HARD_H: two labels fit one above the other
+                mark(noh, lo - HARD_H, c - HARD_H, hi + HARD_H, c + HARD_H)
+                mark(nt, lo - HARD_H, c - HARD_H, hi + HARD_H, c + HARD_H)
+            else:                                # another vertical keeps HARD_V; closer than LABEL_ROOM costs per step
+                mark(nov, c - HARD_V, lo - HARD_V, c + HARD_V, hi + HARD_V)
+                mark(nt, c - HARD_V, lo - HARD_V, c + HARD_V, hi + HARD_V)
+                mark(sv, c - LABEL_ROOM, lo, c + LABEL_ROOM, hi)
+            line(crh if o == 'h' else crv, o, c, lo, hi)
+            line(blk, o, c, lo - END_CLEAR, lo + END_CLEAR)        # no crossing near either end of the line
+            line(blk, o, c, hi - END_CLEAR, hi + END_CLEAR)
+
+    def holds(f, r):
+        return f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]
+
+    for f in sc.frames:
+        x, y, w, h = f
+        # A frame that holds one end is crossed an odd number of times, one that holds both an even number: any extra crossings come in
+        # pairs, so FRAME_OWN_COST per crossing makes each excursion out of such a frame and back cost 2 * FRAME_OWN_COST. The constant
+        # part (the one crossing a path must make) is the same for every path and changes nothing.
+        fc = FRAME_OWN_COST if holds(f, ra) or holds(f, rb) else FRAME_COST
         for o, c, lo, hi in (('h', y, x, x + w), ('h', y + h, x, x + w), ('v', x, y, y + h), ('v', x + w, y, y + h)):
-            add_seg(o, c, lo, hi, FPROX, False, FPROX)            # a frame border keeps its full 30px: no running along it
-            if o == 'h':
-                mark(frh, lo, c - G / 2 - .01, hi, c + G / 2 + .01)
+            if o == 'h':                         # a frame border keeps its full 30px: no running along it, no turning near it
+                mark(noh, lo - FPROX, c - FPROX, hi + FPROX, c + FPROX)
+                mark(nt, lo - FPROX, c - FPROX, hi + FPROX, c + FPROX)
             else:
-                mark(frv, c - G / 2 - .01, lo, c + G / 2 + .01, hi)
+                mark(nov, c - FPROX, lo - FPROX, c + FPROX, hi + FPROX)
+                mark(nt, c - FPROX, lo - FPROX, c + FPROX, hi + FPROX)
+            line(frh if o == 'h' else frv, o, c, lo, hi, fc)
+        for cx, cy in ((x, y), (x + w, y), (x, y + h), (x + w, y + h)):
+            mark(blk, cx - FPROX, cy - FPROX, cx + FPROX, cy + FPROX)
     if inside:                                                   # stay in the common frame: everything outside it is blocked
         fx, fy, fw, fh = inside
         mark(blk, x0 - G, y0 - G, fx + 2, y1 + G)
@@ -176,71 +234,86 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None):
             goals.setdefault((i, j), {})[(OUT[s] + 2) % 4] = 0 if s == nat[1] else SIDE_COST   # entered against the side's outward way
     if not starts or not goals:
         return None
-    goalset = goals
+    if prove_none and not _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
+        return None
     gis = [i for i, j in goals]
     gjs = [j for i, j in goals]
     gi_lo, gi_hi, gj_lo, gj_hi = min(gis), max(gis), min(gjs), max(gjs)
 
-    def heur(i, j):
-        return max(0, gi_lo - i, i - gi_hi) + max(0, gj_lo - j, j - gj_hi)
-
-    dist, prev, pq = {}, {}, []
+    # The search state is one int, (i * NY + j) * 4 + direction (it sorts like the tuple (i, j, d), so ties break the same way), and the
+    # costs and back links are flat arrays indexed by it: no tuple is built or hashed per step. The obstacle layers are flat bytearrays
+    # indexed by the cell j * NX + i.
+    heappush, heappop = heapq.heappush, heapq.heappop
+    dist = array('d', [math.inf]) * (size * 4)
+    prev = array('i', [-1]) * (size * 4)
+    goal_extra = {(i * NY + j) * 4 + d: extra for (i, j), ds in goals.items() for d, extra in ds.items()}   # goal state -> side cost
+    goal_cells = {j * NX + i for i, j in goals}
+    pq = []
     for i, j, off, s in starts:
-        st = (i, j, OUT[s])
+        st = (i * NY + j) * 4 + OUT[s]
         c0 = off * 0.15 + (0 if s == nat[0] else SIDE_COST)
-        if c0 < dist.get(st, 1e18):
+        if c0 < dist[st]:
             dist[st] = c0
-            heapq.heappush(pq, (c0 + heur(i, j), c0, st))
+            heappush(pq, (c0 + max(0, gi_lo - i, i - gi_hi) + max(0, gj_lo - j, j - gj_hi), c0, st))
     end = None
-    done_goal = {}                                               # a goal state's cost includes its side cost: settle it when popped
+    done_goal = set()                                            # a goal state's cost includes its side cost: settle it when popped
     while pq:
-        f, cst, st = heapq.heappop(pq)
-        if cst > dist.get(st, 1e18):
+        f, cst, st = heappop(pq)
+        if cst > dist[st]:
             continue
-        i, j, d = st
-        if (i, j) in goals and d in goals[(i, j)]:
+        if st in goal_extra:
             if st in done_goal:
                 end = st
                 break
-            done_goal[st] = True
-            extra = goals[(i, j)][d]
+            done_goal.add(st)
+            extra = goal_extra[st]
             if extra:
-                heapq.heappush(pq, (cst + extra + heur(i, j), cst + extra, st))
+                heappush(pq, (f + extra, cst + extra, st))
                 dist[st] = cst + extra
                 continue
             end = st
             break
-        for nd in range(4):
-            if nd == (d + 2) % 4:
-                continue
-            if nd != d and nt[cell(i, j)]:
+        d = st & 3
+        i, j = divmod(st >> 2, NY)
+        k0 = j * NX + i
+        may_turn = not nt[k0]
+        for nd in (0, 1, 2, 3):
+            if nd == (d + 2) & 3 or (nd != d and not may_turn):
                 continue
             ni, nj = i + DX[nd], j + DY[nd]
-            if not (0 <= ni < NX and 0 <= nj < NY):
+            if ni < 0 or nj < 0 or ni >= NX or nj >= NY:
                 continue
-            k = cell(ni, nj)
-            if blk[k] and (ni, nj) not in goalset:
+            k = nj * NX + ni
+            if blk[k] and k not in goal_cells:
                 continue
-            if nd in (0, 2) and noh[k] or nd in (1, 3) and nov[k]:
-                continue
-            c2 = cst + 1 + (TURN_COST if nd != d else 0)
-            if nd in (1, 3) and crh[k] or nd in (0, 2) and crv[k]:
-                c2 += CROSS_COST
-            if nd in (0, 2) and sh[k] or nd in (1, 3) and sv[k] or nd != d and st_[cell(i, j)]:
-                c2 += NEAR_COST
-            if nd in (1, 3) and frh[k] or nd in (0, 2) and frv[k]:
-                c2 += FRAME_COST
-            s2 = (ni, nj, nd)
-            if c2 < dist.get(s2, 1e18):
+            c2 = cst + 1
+            if nd & 1:                                           # a vertical step (south, north)
+                if nov[k]:
+                    continue
+                if crh[k]:
+                    c2 += CROSS_COST
+                if sv[k]:
+                    c2 += NEAR_COST
+                c2 += frh[k]                                     # the cost of the horizontal frame border it crosses here (0: none)
+            else:                                                # a horizontal step (east, west)
+                if noh[k]:
+                    continue
+                if crv[k]:
+                    c2 += CROSS_COST
+                c2 += frv[k]
+            if nd != d:
+                c2 += TURN_COST
+            s2 = (ni * NY + nj) * 4 + nd
+            if c2 < dist[s2]:
                 dist[s2] = c2
                 prev[s2] = st
-                heapq.heappush(pq, (c2 + heur(ni, nj), c2, s2))
+                heappush(pq, (c2 + max(0, gi_lo - ni, ni - gi_hi) + max(0, gj_lo - nj, nj - gj_hi), c2, s2))
     if end is None:
         return None
     path = [end]
-    while path[-1] in prev:
+    while prev[path[-1]] >= 0:
         path.append(prev[path[-1]])
-    path.reverse()
+    path = [((s >> 2) // NY, (s >> 2) % NY, s & 3) for s in reversed(path)]
     pts = [(x0 + path[0][0] * G, y0 + path[0][1] * G)]
     for k in range(1, len(path) - 1):
         if path[k + 1][2] != path[k][2]:
@@ -343,10 +416,11 @@ def route(sc, a, b, sa='R', sb='L', pad=260):
         pad *= 2
     # Last try: the whole canvas. A long detour (around a fork, over a frame) can leave even the largest window above; NO PATH is
     # reported only when there is truly no path that keeps the rules.
-    return _route(sc, a, b, sa, sb, 10 ** 6, natural)
+    return _route(sc, a, b, sa, sb, 10 ** 6, natural, prove_none=True)
 
 
-def _hit(rect, sc, own=None, pad=2, hop_pad=20):
+def _hit(rect, sc, own=None, pad=2, hop_pad=20, g=LABM):
+    """Does a label at rect touch a box, a label, a pill (pad), a jump arc (hop_pad) or come closer than g to another arrow?"""
     x, y, w, h = rect
     for (bx, by, bw, bh) in list(sc.boxes.values()) + sc.labels + sc.pills:
         if bx - pad < x + w and bx + bw + pad > x and by - pad < y + h and by + bh + pad > y:
@@ -358,7 +432,8 @@ def _hit(rect, sc, own=None, pad=2, hop_pad=20):
         if own is not None and pts == list(own):
             continue
         for o, c, lo, hi in segments(pts):
-            if (o == 'h' and y < c < y + h and lo < x + w and hi > x) or (o == 'v' and x < c < x + w and lo < y + h and hi > y):
+            if (o == 'h' and y - g < c < y + h + g and lo < x + w + g and hi > x - g) or \
+                (o == 'v' and x - g < c < x + w + g and lo < y + h + g and hi > y - g):
                 return True
     return False                                                 # (a label is opaque: it may sit over the dotted border of a frame)
 
@@ -369,6 +444,8 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
     and 18px; an existing label of another size (a two-line one is 30px tall) passes its own w and h."""
     w = w if w is not None else draw.label_width(kind)
     best = None
+    own_pts = pts
+    pts = straight([tuple(x) for x in pts])                     # the points a removed jump arc left inside a straight run go
     n = len(pts) - 1
     for k in range(n):
         p, q = pts[k], pts[k + 1]
@@ -390,12 +467,14 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
         pieces.append((s, hi))
         edge_seg = k in (0, n - 1) or bool(cuts)                 # a stretch at the tail, the tip or a jump needs 20px of shaft each side
         margin = (20 if strict else 8) if edge_seg else 8
+        whole = n == 1                                           # a straight arrow: its label belongs in the middle of the shaft
         for plo, phi in pieces:
             if phi - plo < ext + 2 * margin:
                 continue
             mid = (plo + phi) / 2
-            slide = [mid]
-            if not (k == 0 and k == n - 1 and not cuts):         # a straight arrow keeps its label in the middle
+            near = min(max((lo + hi) / 2, plo + ext / 2 + margin), phi - ext / 2 - margin)   # the place in this piece nearest that middle
+            slide = [mid, near]
+            if not (whole and not cuts):
                 t = plo + ext / 2 + margin
                 while t <= phi - ext / 2 - margin:
                     slide.append(t)
@@ -403,9 +482,51 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
             for pos in slide:
                 cx, cy = (pos, p[1]) if horiz else (p[0], pos)
                 rect = (cx - w / 2, cy - h / 2, w, h)
-                if _hit(rect, sc, own=pts, hop_pad=20 if strict else 8):
+                if _hit(rect, sc, own=own_pts, hop_pad=20 if strict else 8):
                     continue
-                score = (phi - plo) + (30 if k == n - 1 else 0) - abs(pos - mid) * 0.5
+                if whole:                                        # check_diag.py fails a straight arrow's label off its middle
+                    score = -abs(pos - (lo + hi) / 2)
+                else:
+                    score = (phi - plo) + (30 if k == n - 1 else 0) - abs(pos - mid) * 0.5
                 if best is None or score > best[0]:
                     best = (score, (cx, cy))
     return best[1] if best else None
+
+
+def straight(pts):
+    """The corners of a path: points inside a straight run (the ends of a removed jump arc) are dropped."""
+    out = [pts[0]]
+    for p, q in zip(pts[1:], pts[2:]):
+        o = out[-1]
+        if (abs(o[0] - p[0]) < .01 and abs(p[0] - q[0]) < .01) or (abs(o[1] - p[1]) < .01 and abs(p[1] - q[1]) < .01):
+            continue
+        out.append(p)
+    return out + [pts[-1]] if len(pts) > 1 else out
+
+
+def _crossings(segs, other):
+    n = 0
+    for o, c, lo, hi in segs:
+        for o2, c2, lo2, hi2 in other:
+            if o != o2 and lo + .5 < c2 < hi - .5 and lo2 + .5 < c < hi2 - .5:
+                n += 1
+    return n
+
+
+def path_cost(sc, pts, a, b):
+    """What the search charges for a drawn path, without the per-step closeness and side costs: 1 per 5px, TURN_COST per bend,
+    CROSS_COST per crossing with another arrow of sc, and the frame border costs; and JOG_COST per jog shorter than 30px. Used to compare an old path with a new one."""
+    p = straight([tuple(x) for x in pts])
+    segs = segments(p)
+    cost = sum(hi - lo for _, _, lo, hi in segs) / G + TURN_COST * (len(p) - 2)
+    cost += JOG_COST * sum(1 for _, _, lo, hi in segs[1:-1] if hi - lo < 30)      # a jog shorter than 30px (SKILL.md: never leave one)
+    for q in sc.arrows:
+        if straight([tuple(x) for x in q]) != p:
+            cost += CROSS_COST * _crossings(segs, segments(straight([tuple(x) for x in q])))
+    ra, rb = sc.boxes[a], sc.boxes[b]
+    for f in sc.frames:
+        x, y, w, h = f
+        own = any(f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3] for r in (ra, rb))
+        border = [('h', y, x, x + w), ('h', y + h, x, x + w), ('v', x, y, y + h), ('v', x + w, y, y + h)]
+        cost += (FRAME_OWN_COST if own else FRAME_COST) * _crossings(segs, border)
+    return cost

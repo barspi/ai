@@ -134,6 +134,17 @@ def is_arrow(line):
     return line.startswith('<path d="M') and 'marker-end' in line
 
 
+def is_pinned(line):
+    """An arrow whose route the user chose (`data-pinned="1"`): reroute.py --improve leaves it alone."""
+    return ' data-pinned="1"' in line
+
+
+def pin(line, on=True):
+    """The arrow line with data-pinned set (on) or removed."""
+    line = line.replace(' data-pinned="1"', '')                # at the end of the tag: every script finds arrows by '<path d="M'
+    return line[:-2] + ' data-pinned="1"/>' if on and line.endswith('/>') else line
+
+
 # ---------------------------------------------------------------- the diagram block
 
 def new_meta(repo='', roots=()):

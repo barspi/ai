@@ -20,7 +20,7 @@ Pure geometry; no SVG text. build.py calls plan() and then draws. The method (al
 """
 import os, sys
 
-import draw
+import draw, route
 
 LEFT, TOP, STACK_GAP, VGAP = 80, 190, 28, 100
 FRAME_TOP, FRAME_BOT, FRAME_L, FRAME_R, BAND_GAP = 46, 24, 60, 30, 34
@@ -330,13 +330,13 @@ def plan(nodes, edges, left=None, top=None, col_override=None, outside=(), degre
     m_in = {n: sum(1 for a, b, k in easy_pairs if b == n) for n in nums}
     H = {n: min_height(info[n]['h'], m_out[n], m_in[n], info[n].get('collapsed')) for n in nums}
     # Room for the arrows the router adds later (to other frames, skipping a column, pointing back). They leave and enter by the left
-    # and right sides (the top and bottom face neighbours 28px away) and keep 36px from each other (route.PROX). Without this a short
+    # and right sides (the top and bottom face neighbours 28px away) and keep 22px from each other (route.HARD_H). Without this a short
     # (collapsed) box with many arrows has full sides, and its most important arrows end as NO PATH. `degree`: all arrows of a box.
     for n in nums:
         routed = (degree or {}).get(n, 0) - m_out[n] - m_in[n]
-        if routed >= 1:                           # per side: its drawn exits (16px apart) or entries (22px), 36px clear of them,
-            r_out, r_in = (routed + 1) // 2, routed // 2                  # then its share of the routed arrows, 36px apart, 20px margins
-            need = lambda m, step, r: 40 + step * max(m - 1, 0) + (36 * r + (36 if m else 0) if r else 0)
+        if routed >= 1:                           # per side: its drawn exits (16px apart) or entries (22px), route.HARD_H clear of them,
+            r_out, r_in = (routed + 1) // 2, routed // 2                  # then its share of the routed arrows, route.HARD_H apart, 20px margins
+            need = lambda m, step, r: 40 + step * max(m - 1, 0) + (route.HARD_H * r + (route.HARD_H if m else 0) if r else 0)
             H[n] = max(H[n], need(m_out[n], 16, r_out), need(m_in[n], 22, r_in))
 
     nbr_left = {n: [] for n in nums}
