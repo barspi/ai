@@ -167,7 +167,10 @@ def compact(text, anchor=None):
     lines, box, pop, frames = collapse.parse(text)
     where = svgmeta.drawn_frames(text)
     members = {f['name']: [n for n in box if where.get(n) == f['name']] for f in frames}
-    A = next((f for f in frames if anchor and f['name'].startswith(anchor)), None) or max(frames, key=lambda f: len(members[f['name']]))
+    held = [f for f in frames if members[f['name']]]
+    if not held:
+        return text, ['--compact: no frame holds a kept box, so there is no anchor frame; the extract is left as cut']
+    A = next((f for f in held if anchor and f['name'].startswith(anchor)), None) or max(held, key=lambda f: len(members[f['name']]))
     inside = set(members[A['name']])
     arrows = [(i, svgmeta.arrow_of(l)) for i, l in enumerate(lines) if svgmeta.is_arrow(l) and svgmeta.arrow_of(l)]
     # 1. the anchor frame and all it holds (boxes, pop-ups, its own arrows and their labels) move as one piece
@@ -188,10 +191,8 @@ def compact(text, anchor=None):
     # 2. the satellites, drawn again: a compact layout of each, then the frames right of the anchor, then below it
     ycentre = {n: box[n]['y'] + dy + box[n]['h'] / 2 for n in inside}
     sats = []
-    for f in frames:
-        nums = members[f['name']]
-        if f is A or not nums:
-            continue
+    free = [n for n in box if not where.get(n)]                # boxes in no frame: a group like a satellite, drawn without a frame
+    for f, nums in [(f, members[f['name']]) for f in held if f is not A] + ([(None, free)] if free else []):
         own = [(a, b) for _, (a, b, _) in arrows if a in nums and b in nums]
         link = {n: [ycentre[o] for _, (a, b, _) in arrows for o in ((b,) if a == n else (a,) if b == n else ()) if o in ycentre] for n in nums}
         cols = _columns(nums, own, lambda n: (sum(link[n]) / len(link[n]) if link[n] else 1e9, box[n]['y']))
@@ -202,7 +203,7 @@ def compact(text, anchor=None):
                 pos[n] = (x, y)
                 y += box[n]['h'] + ROWGAP
             x += max(box[n]['w'] for n in c) + COLGAP
-        w = max(x - COLGAP + FSIDE, collapse.tw(f['name'], 15) + 2 * FSIDE)   # never narrower than its title (class ftl, 15px)
+        w = max(x - COLGAP + FSIDE, (collapse.tw(f['name'], 15) + 2 * FSIDE) if f else 0)   # never narrower than its title (ftl, 15px)
         h = max(pos[n][1] + box[n]['h'] for n in nums) + FBOTTOM
         weight = sum(len(link[n]) for n in nums)
         sats.append(dict(f=f, pos=pos, w=w, h=h, weight=weight))
@@ -233,14 +234,15 @@ def compact(text, anchor=None):
         else:                                                  # then the row below
             fx, fy = bx, by
             bx += s['w'] + FGAP
-        r = lines[f['rl']]
-        for k, v in (('x', fx), ('y', fy), ('width', s['w']), ('height', s['h'])):
-            r = re.sub(r'\b%s="[\d.-]+"' % k, '%s="%s"' % (k, collapse.fmt(v)), r, count=1)
-        lines[f['rl']] = r
-        lines[f['tl']] = move.shift_line(lines[f['tl']], fx - f['x'], fy - f['y'])
+        if f:
+            r = lines[f['rl']]
+            for k, v in (('x', fx), ('y', fy), ('width', s['w']), ('height', s['h'])):
+                r = re.sub(r'\b%s="[\d.-]+"' % k, '%s="%s"' % (k, collapse.fmt(v)), r, count=1)
+            lines[f['rl']] = r
+            lines[f['tl']] = move.shift_line(lines[f['tl']], fx - f['x'], fy - f['y'])
         for n, (px, py) in s['pos'].items():
             moves[n] = (fx + px, fy + py)
-        report.append('satellite drawn again at (%d, %d), %dx%d: %s (%d boxes)' % (fx, fy, s['w'], s['h'], f['name'], len(s['pos'])))
+        report.append('satellite drawn again at (%d, %d), %dx%d: %s (%d boxes)' % (fx, fy, s['w'], s['h'], f['name'] if f else '(boxes in no frame)', len(s['pos'])))
     if leg and col_right > rx + leg[4]:                        # the legend's right edge on the right column's (check_diag.py: top right)
         a, z = leg[0], leg[1]
         lines[a:z] = [move.shift_line(ln, col_right - rx - leg[4], 0) for ln in lines[a:z]]
