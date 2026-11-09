@@ -118,6 +118,161 @@ def extract(text, keep, title=None):
 
 MARGIN = 60          # the most a shrunk frame keeps between its boxes and its left, right and bottom border
 
+# --compact: the anchor frame moves whole to the top-left; the other frames (satellites) are drawn again, compact, right of it and below it
+LEFT = 40            # the anchor frame's left edge
+GAP = 260            # between the anchor frame and the satellites: the channel for the arrows that join them
+FGAP = 60            # between two satellite frames
+COLGAP = 200         # between two columns of boxes inside a satellite (SKILL.md: about 200px between neighbours)
+ROWGAP = 50          # between two boxes of one column
+FTOP, FSIDE, FBOTTOM = 60, 60, 40   # satellite frame margins (the top one holds the title)
+
+
+def _shift(line, dx, dy):
+    """One line of markup moved by dx, dy: attributes (move.shift_line) and the points of a path."""
+    line = move.shift_line(line, dx, dy)
+    if line.startswith('<path ') and ' d="' in line:
+        d = line.split(' d="', 1)[1].split('"', 1)[0]
+        nd = re.sub(r'(-?[\d.]+),(-?[\d.]+)', lambda m: '%s,%s' % (collapse.fmt(float(m.group(1)) + dx), collapse.fmt(float(m.group(2)) + dy)), d)
+        line = line.replace(' d="%s"' % d, ' d="%s"' % nd, 1)
+    return line
+
+
+def _canvas(text, W, H):
+    m = re.search(r'<svg[^>]*width="(\d+)" height="(\d+)" viewBox="0 0 (\d+) (\d+)"', text)
+    text = text.replace(m.group(0), m.group(0).replace('width="%s" height="%s" viewBox="0 0 %s %s"' % m.groups(),
+                                                       'width="%d" height="%d" viewBox="0 0 %d %d"' % (W, H, W, H)), 1)
+    return re.sub(r'<rect x="0" y="0" width="[\d.]+" height="[\d.]+"', '<rect x="0" y="0" width="%d" height="%d"' % (W, H), text, count=1)
+
+
+def _columns(nums, edges, y_of):
+    """Columns of a satellite: the longest chain of its own arrows that reaches each box (layout.py's rule, in small); in a column, boxes
+    in the order of y_of (the mean height of the anchor boxes they join, so their arrows cross less)."""
+    col = {n: 0 for n in nums}
+    for _ in range(len(nums)):
+        changed = False
+        for a, b in edges:
+            if col[b] < col[a] + 1 and col[a] + 1 < len(nums):
+                col[b], changed = col[a] + 1, True
+        if not changed:
+            break
+    cols = {}
+    for n in nums:
+        cols.setdefault(col[n], []).append(n)
+    return [sorted(cols[c], key=y_of) for c in sorted(cols)]
+
+
+def compact(text, anchor=None):
+    """Returns (text, report lines). Run on an extract (after extract())."""
+    report = []
+    lines, box, pop, frames = collapse.parse(text)
+    where = svgmeta.drawn_frames(text)
+    members = {f['name']: [n for n in box if where.get(n) == f['name']] for f in frames}
+    A = next((f for f in frames if anchor and f['name'].startswith(anchor)), None) or max(frames, key=lambda f: len(members[f['name']]))
+    inside = set(members[A['name']])
+    arrows = [(i, svgmeta.arrow_of(l)) for i, l in enumerate(lines) if svgmeta.is_arrow(l) and svgmeta.arrow_of(l)]
+    # 1. the anchor frame and all it holds (boxes, pop-ups, its own arrows and their labels) move as one piece
+    hdr = [float(m.group(1)) for m in re.finditer(r'<text class="h[12]" x="[\d.]+" y="([\d.]+)"', text)]
+    dx, dy = LEFT - A['x'], (max(hdr) if hdr else 0) + 50 - A['y']
+    idx = {A['rl'], A['tl']}
+    for n in inside:
+        idx.update(range(box[n]['a'], box[n]['b'] + 1))
+        if n in pop:
+            idx.update(range(pop[n][0], pop[n][1] + 1))
+    for i, at in arrows:
+        if at[0] in inside and at[1] in inside:
+            idx.update(move.take_out(lines, i))
+    for k in idx:
+        lines[k] = _shift(lines[k], dx, dy)
+    ax0, ay0, ax1, ay1 = LEFT, A['y'] + dy, LEFT + A['w'], A['y'] + dy + A['h']
+    report.append('anchor frame moved whole to (%d, %d): %s (%d boxes)' % (ax0, ay0, A['name'], len(inside)))
+    # 2. the satellites, drawn again: a compact layout of each, then the frames right of the anchor, then below it
+    ycentre = {n: box[n]['y'] + dy + box[n]['h'] / 2 for n in inside}
+    sats = []
+    for f in frames:
+        nums = members[f['name']]
+        if f is A or not nums:
+            continue
+        own = [(a, b) for _, (a, b, _) in arrows if a in nums and b in nums]
+        link = {n: [ycentre[o] for _, (a, b, _) in arrows for o in ((b,) if a == n else (a,) if b == n else ()) if o in ycentre] for n in nums}
+        cols = _columns(nums, own, lambda n: (sum(link[n]) / len(link[n]) if link[n] else 1e9, box[n]['y']))
+        pos, x = {}, FSIDE
+        for c in cols:
+            y = FTOP
+            for n in c:
+                pos[n] = (x, y)
+                y += box[n]['h'] + ROWGAP
+            x += max(box[n]['w'] for n in c) + COLGAP
+        w = max(x - COLGAP + FSIDE, collapse.tw(f['name'], 15) + 2 * FSIDE)   # never narrower than its title (class ftl, 15px)
+        h = max(pos[n][1] + box[n]['h'] for n in nums) + FBOTTOM
+        weight = sum(len(link[n]) for n in nums)
+        sats.append(dict(f=f, pos=pos, w=w, h=h, weight=weight))
+    sats.sort(key=lambda s: -s['weight'])                     # the most joined to the anchor go nearest its top-right
+    # the legend first, at the top of the right column
+    leg = None
+    if '<!--legend-->' in lines:
+        a, z = lines.index('<!--legend-->'), lines.index('<!--/legend-->')
+        rr = [re.match(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', ln) for ln in lines[a:z]]
+        rr = [tuple(float(v) for v in m.groups()) for m in rr if m]
+        if rr:
+            lx, ly = min(r[0] for r in rr), min(r[1] for r in rr)
+            lw, lh = max(r[0] + r[2] for r in rr) - lx, max(r[1] + r[3] for r in rr) - ly
+            leg = (a, z, lx, ly, lw, lh)
+    rx, ry = ax1 + GAP, ay0
+    if leg:
+        a, z, lx, ly, lw, lh = leg
+        lines[a:z] = [move.shift_line(ln, rx - lx, ry - ly) for ln in lines[a:z]]
+        ry += lh + FGAP
+    bx, by = ax0, ay1 + GAP
+    moves, col_right = {}, rx
+    for s in sats:
+        f = s['f']
+        if ry + s['h'] <= ay1 + GAP / 2:                      # the right column, as far down as the anchor frame reaches
+            fx, fy = rx, ry
+            ry += s['h'] + FGAP
+            col_right = max(col_right, rx + s['w'])
+        else:                                                  # then the row below
+            fx, fy = bx, by
+            bx += s['w'] + FGAP
+        r = lines[f['rl']]
+        for k, v in (('x', fx), ('y', fy), ('width', s['w']), ('height', s['h'])):
+            r = re.sub(r'\b%s="[\d.-]+"' % k, '%s="%s"' % (k, collapse.fmt(v)), r, count=1)
+        lines[f['rl']] = r
+        lines[f['tl']] = move.shift_line(lines[f['tl']], fx - f['x'], fy - f['y'])
+        for n, (px, py) in s['pos'].items():
+            moves[n] = (fx + px, fy + py)
+        report.append('satellite drawn again at (%d, %d), %dx%d: %s (%d boxes)' % (fx, fy, s['w'], s['h'], f['name'], len(s['pos'])))
+    if leg and col_right > rx + leg[4]:                        # the legend's right edge on the right column's (check_diag.py: top right)
+        a, z = leg[0], leg[1]
+        lines[a:z] = [move.shift_line(ln, col_right - rx - leg[4], 0) for ln in lines[a:z]]
+        rx = col_right - leg[4]
+    text = '\n'.join(lines)
+    # 3. every arrow with an end on a satellite box is routed again in the new picture (move.py: the most important first), then
+    #    one improve pass over them (reroute.py: a cheaper path, a jog under 30px counts against a path)
+    text, routed, failed, _ = move.move(text, moves)
+    import reroute
+    text, _, _ = hops.add_hops(text, marks=False)
+    text, better, _ = reroute.reroute(text, [(a, b) for a, b, _, _ in routed], improve=True)
+    if better:
+        report.append('%d of them improved by a second pass' % len(better))
+    text, _, _ = hops.add_hops(text)
+    text, _, bad = model.relabel(text, hop_pad=20)
+    report.append('%d arrows routed again, %d with no path (left out, in nopath)' % (len(routed), len(failed)))
+    for a, b, why in failed:
+        report.append('NO PATH #%d -> #%d: %s' % (a, b, why))
+    for x, y, why in bad:
+        report.append('label near (%d,%d): %s' % (x, y, why))
+    lines, box, _, frames = collapse.parse(text)
+    right = [b['x'] + b['w'] for b in box.values()] + [f['x'] + f['w'] for f in frames] + ([rx + leg[4]] if leg else [])
+    bottom = [b['y'] + b['h'] for b in box.values()] + [f['y'] + f['h'] for f in frames] + ([ay0 + leg[5]] if leg else [])
+    for ln in lines:
+        if svgmeta.is_arrow(ln):
+            p = model.arrow_points(ln)
+            right += [x for x, _ in p]
+            bottom += [y for _, y in p]
+    W, H = int(max(right) + 60), int(max(bottom) + 60)
+    report.append('canvas %dx%d' % (W, H))
+    return refresh_scripts.refresh(_canvas(text, W, H)), report
+
 
 def main():
     argv = sys.argv[1:]
@@ -125,10 +280,15 @@ def main():
         sys.exit(__doc__)
     keep = [int(x.lstrip('#')) for x in re.split(r'[,\s]+', argv[argv.index('--keep') + 1]) if x]
     title = argv[argv.index('--title') + 1] if '--title' in argv else None
-    pos = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] not in ('--keep', '--title'))]
+    anchor = argv[argv.index('--compact') + 1] if '--compact' in argv and argv.index('--compact') + 1 < len(argv) \
+        and not argv[argv.index('--compact') + 1].startswith('--') else None
+    pos = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] not in ('--keep', '--title', '--compact'))]
     src, out = pos[0], pos[1]
     text = open(src, encoding='utf-8').read()
     res, report = extract(text, keep, title)
+    if '--compact' in argv:
+        res, more = compact(res, anchor)
+        report += more
     open(out, 'w', encoding='utf-8').write(res)
     for r in report:
         print(r)
