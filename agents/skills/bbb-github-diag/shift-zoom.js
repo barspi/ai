@@ -17,7 +17,8 @@
 
   var hint = document.createElementNS(HTMLNS, 'div');
   hint.setAttribute('style', 'position:absolute;left:16px;top:16px;z-index:10;padding:5px 10px;border-radius:8px;' +
-    'background:rgba(22,62,115,.55);color:#fff;font:12px Helvetica,Arial,sans-serif;cursor:pointer;user-select:none;' +
+    'background:rgba(159,45,45,.55);' +                 /* the red of the "open" pill (#9f2d2d, draw.STY), half transparent */
+    'color:#fff;font:12px Helvetica,Arial,sans-serif;cursor:pointer;user-select:none;' +
     'opacity:.75;transition:opacity .2s;white-space:nowrap');
   hint.title = 'Click: back to the start scale';
   host.appendChild(hint);
