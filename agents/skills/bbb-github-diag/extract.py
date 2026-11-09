@@ -85,6 +85,8 @@ def extract(text, keep, title=None, no_legend=False, tab_title=None):
     if no_legend and '<!--legend-->' in text:               # its markers stay (empty), so later scripts still find its place
         text = re.sub(r'(<!--legend-->).*?(<!--/legend-->)', r'\1\n\2', text, count=1, flags=re.S)
         report.append('legend left out')
+    text, tidy = draw.set_header(text, None)                # no lines on which way arrows run (header, legend)
+    report += tidy
     # 4. arcs, crosses, title, canvas, scripts
     text, _, _ = hops.add_hops(text)
     if title:

@@ -273,11 +273,7 @@ def legend(lx, ly, kinds, states):
     """The 'How to read this graph' block: pills for the states in use, the marks, one line per arrow word in use. Returns (lines, height)."""
     lg, y = [], ly + 30
     lg.append('<text class="lgb" x="%s" y="%s" style="font-size:16px">How to read this graph</text>' % (lx + 16, y))
-    y += 24
-    lg.append('<text class="lg" x="%s" y="%s">Arrows run from the earlier item to the later one;</text>' % (lx + 16, y))
-    y += 18
-    lg.append('<text class="lg" x="%s" y="%s">blocked by, supersedes and related may point back.</text>' % (lx + 16, y))
-    y += 26
+    y += 28                                                      # no line on which way arrows run: each reads as its label says
     shown = [k for k in ('open', 'closed', 'merged', 'waiting', 'draft') if k in states] or ['open', 'closed', 'merged']
     for i, k in enumerate(shown):
         c = STY[k]
@@ -331,9 +327,10 @@ def facts(repo, sha=None, branch=None, date=''):
     return 'Facts as of %s. %s' % (at, FACTS_REST)
 
 
-def set_header(text, repo, sha, branch):
-    """Rewrite the header of an existing diagram: the facts line says the commit and branch; the old line on how to read the arrows
-    (the arrows follow their labels, which need no explanation) goes, and the lines below it move up. Returns (text, log)."""
+def set_header(text, repo, sha=None, branch=None):
+    """Rewrite the header of an existing diagram: the facts line says the commit and branch (when sha is given); the old line on how to
+    read the arrows (the arrows follow their labels, which need no explanation) goes, and the lines below it move up. The legend's
+    matching lines go too (drop_legend_reading). Returns (text, log)."""
     log = []
     lines = text.split('\n')
     old = [i for i, l in enumerate(lines) if l.startswith('<text class="h2"') and 'Arrows point from the earlier item' in l]
@@ -347,10 +344,37 @@ def set_header(text, repo, sha, branch):
         log.append('header: the line on how to read the arrows removed')
     for k, l in enumerate(lines):
         m = re.match(r'(<text class="h2" x="[\d.]+" y="[\d.]+">)Facts as of .*</text>$', l)
-        if m:
+        if m and sha:                                         # no commit known (no refresh yet): the facts line stays as it is
             new = m.group(1) + facts(repo, sha, branch) + '</text>'
             if new != l:
                 lines[k] = new
                 log.append('header: facts as of %s / %s' % (sha[:9], branch))
             break
-    return '\n'.join(lines), log
+    text, more = drop_legend_reading('\n'.join(lines))
+    return text, log + more
+
+
+LEGEND_READING = ('Arrows run from the earlier item to the later one;', 'blocked by, supersedes and related may point back.')
+LEGEND_READING_H = 40          # the height those two lines took in the legend (legend() no longer writes them)
+
+
+def drop_legend_reading(text):
+    """Remove the legend's two lines on which way arrows run (an older file has them; each arrow reads as its label says): the rest of
+    the legend moves up LEGEND_READING_H and its box gets as much shorter. Returns (text, log)."""
+    lines = text.split('\n')
+    if '<!--legend-->' not in lines or '<!--/legend-->' not in lines:
+        return text, []
+    a, z = lines.index('<!--legend-->'), lines.index('<!--/legend-->')
+    hit = [i for i in range(a, z) if any(r in lines[i] for r in LEGEND_READING)]
+    if not hit:
+        return text, []
+    last = max(hit)
+    up = lambda ln: re.sub(r'\b(y|y1|y2)="(-?[\d.]+)"', lambda m: '%s="%s"' % (m.group(1), fmt(float(m.group(2)) - LEGEND_READING_H)), ln)
+    for i in range(last + 1, z):
+        lines[i] = up(lines[i])
+    box = next((i for i in range(a, z) if lines[i].startswith('<rect ')), None)
+    if box is not None:
+        lines[box] = re.sub(r'height="([\d.]+)"', lambda m: 'height="%s"' % fmt(float(m.group(1)) - LEGEND_READING_H), lines[box], count=1)
+    for i in sorted(hit, reverse=True):
+        del lines[i]
+    return '\n'.join(lines), ['legend: the lines on which way arrows run removed']

@@ -217,48 +217,46 @@
 <path class="xmark" d="M1115.0,757.5 L1126.0,768.5 M1126.0,757.5 L1115.0,768.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/>
 </g>
 <!--legend-->
-<rect x="2229.0" y="190" width="500" height="468" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
+<rect x="2229.0" y="190" width="500" height="428" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
 <text class="lgb" x="2245.0" y="220" style="font-size:16px">How to read this graph</text>
-<text class="lg" x="2245.0" y="244">Arrows run from the earlier item to the later one;</text>
-<text class="lg" x="2245.0" y="262">blocked by, supersedes and related may point back.</text>
-<rect x="2245.0" y="288" width="88" height="30" rx="7" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.4"/>
-<text class="pill" x="2289.0" y="307" text-anchor="middle" style="fill:#8a3030">open</text>
-<rect x="2341.0" y="288" width="88" height="30" rx="7" fill="#eceae6" stroke="#6e6a64" stroke-width="1.4"/>
-<text class="pill" x="2385.0" y="307" text-anchor="middle" style="fill:#6e6a64">closed</text>
-<rect x="2437.0" y="288" width="88" height="30" rx="7" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.4"/>
-<text class="pill" x="2481.0" y="307" text-anchor="middle" style="fill:#1d4e89">merged</text>
-<rect x="2533.0" y="288" width="88" height="30" rx="7" fill="#ffeb85" stroke="#8f6400" stroke-width="1.4"/>
-<text class="pill" x="2577.0" y="307" text-anchor="middle" style="fill:#8f6400">waiting</text>
-<rect x="2629.0" y="288" width="88" height="30" rx="7" fill="#fff6c9" stroke="#8f6400" stroke-width="1.4" stroke-dasharray="6 4"/>
-<text class="pill" x="2673.0" y="307" text-anchor="middle" style="fill:#8f6400">draft</text>
-<text class="lg" x="2245.0" y="338">Closed pull request, not merged: gray, red stripes, red cross.</text>
-<text class="lg" x="2245.0" y="358">Red cross on a closed issue: closed by hand, the work not done.</text>
-<text class="lg" x="2245.0" y="378">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
-<text class="lg" x="2245.0" y="398"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
-<line x1="2245.0" y1="436" x2="2291.0" y2="436" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
-<text class="lgb" x="2303.0" y="440" style="font-size:12.5px">child</text>
-<text class="lg" x="2429.0" y="440" style="font-size:12px">B is a formal child of umbrella A</text>
-<line x1="2245.0" y1="464" x2="2291.0" y2="464" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
-<text class="lgb" x="2303.0" y="468" style="font-size:12.5px">follow-up</text>
-<text class="lg" x="2429.0" y="468" style="font-size:12px">B was filed for what A left out</text>
-<line x1="2245.0" y1="492" x2="2291.0" y2="492" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
-<text class="lgb" x="2303.0" y="496" style="font-size:12.5px">led to</text>
-<text class="lg" x="2429.0" y="496" style="font-size:12px">work on A produced B</text>
-<line x1="2245.0" y1="520" x2="2291.0" y2="520" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
-<text class="lgb" x="2303.0" y="524" style="font-size:12.5px">closed by</text>
-<text class="lg" x="2429.0" y="524" style="font-size:12px">B is the pull request that closed issue A</text>
-<line x1="2245.0" y1="548" x2="2291.0" y2="548" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
-<text class="lgb" x="2303.0" y="552" style="font-size:12.5px">work done by</text>
-<text class="lg" x="2429.0" y="552" style="font-size:12px">B worked on A without closing it</text>
-<line x1="2245.0" y1="576" x2="2291.0" y2="576" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
-<text class="lgb" x="2303.0" y="580" style="font-size:12.5px">supersedes</text>
-<text class="lg" x="2429.0" y="580" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
-<line x1="2245.0" y1="604" x2="2291.0" y2="604" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
-<text class="lgb" x="2303.0" y="608" style="font-size:12.5px">blocked by</text>
-<text class="lg" x="2429.0" y="608" style="font-size:12px">A cannot finish until B is done</text>
-<line x1="2245.0" y1="632" x2="2291.0" y2="632" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
-<text class="lgb" x="2303.0" y="636" style="font-size:12.5px">related</text>
-<text class="lg" x="2429.0" y="636" style="font-size:12px">related work, neither is the parent</text>
+<rect x="2245.0" y="248" width="88" height="30" rx="7" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.4"/>
+<text class="pill" x="2289.0" y="267" text-anchor="middle" style="fill:#8a3030">open</text>
+<rect x="2341.0" y="248" width="88" height="30" rx="7" fill="#eceae6" stroke="#6e6a64" stroke-width="1.4"/>
+<text class="pill" x="2385.0" y="267" text-anchor="middle" style="fill:#6e6a64">closed</text>
+<rect x="2437.0" y="248" width="88" height="30" rx="7" fill="#e7f0fb" stroke="#1d4e89" stroke-width="1.4"/>
+<text class="pill" x="2481.0" y="267" text-anchor="middle" style="fill:#1d4e89">merged</text>
+<rect x="2533.0" y="248" width="88" height="30" rx="7" fill="#ffeb85" stroke="#8f6400" stroke-width="1.4"/>
+<text class="pill" x="2577.0" y="267" text-anchor="middle" style="fill:#8f6400">waiting</text>
+<rect x="2629.0" y="248" width="88" height="30" rx="7" fill="#fff6c9" stroke="#8f6400" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text class="pill" x="2673.0" y="267" text-anchor="middle" style="fill:#8f6400">draft</text>
+<text class="lg" x="2245.0" y="298">Closed pull request, not merged: gray, red stripes, red cross.</text>
+<text class="lg" x="2245.0" y="318">Red cross on a closed issue: closed by hand, the work not done.</text>
+<text class="lg" x="2245.0" y="338">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
+<text class="lg" x="2245.0" y="358"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
+<line x1="2245.0" y1="396" x2="2291.0" y2="396" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
+<text class="lgb" x="2303.0" y="400" style="font-size:12.5px">child</text>
+<text class="lg" x="2429.0" y="400" style="font-size:12px">B is a formal child of umbrella A</text>
+<line x1="2245.0" y1="424" x2="2291.0" y2="424" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="2303.0" y="428" style="font-size:12.5px">follow-up</text>
+<text class="lg" x="2429.0" y="428" style="font-size:12px">B was filed for what A left out</text>
+<line x1="2245.0" y1="452" x2="2291.0" y2="452" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="2303.0" y="456" style="font-size:12.5px">led to</text>
+<text class="lg" x="2429.0" y="456" style="font-size:12px">work on A produced B</text>
+<line x1="2245.0" y1="480" x2="2291.0" y2="480" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
+<text class="lgb" x="2303.0" y="484" style="font-size:12.5px">closed by</text>
+<text class="lg" x="2429.0" y="484" style="font-size:12px">B is the pull request that closed issue A</text>
+<line x1="2245.0" y1="508" x2="2291.0" y2="508" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
+<text class="lgb" x="2303.0" y="512" style="font-size:12.5px">work done by</text>
+<text class="lg" x="2429.0" y="512" style="font-size:12px">B worked on A without closing it</text>
+<line x1="2245.0" y1="536" x2="2291.0" y2="536" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
+<text class="lgb" x="2303.0" y="540" style="font-size:12.5px">supersedes</text>
+<text class="lg" x="2429.0" y="540" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
+<line x1="2245.0" y1="564" x2="2291.0" y2="564" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
+<text class="lgb" x="2303.0" y="568" style="font-size:12.5px">blocked by</text>
+<text class="lg" x="2429.0" y="568" style="font-size:12px">A cannot finish until B is done</text>
+<line x1="2245.0" y1="592" x2="2291.0" y2="592" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
+<text class="lgb" x="2303.0" y="596" style="font-size:12.5px">related</text>
+<text class="lg" x="2429.0" y="596" style="font-size:12px">related work, neither is the parent</text>
 <!--/legend-->
 <!-- collapsed boxes: data-collapsed and data-keywords on the first rect of a box group; run collapse.py again after an edit. Pop-ups (g id="popN") are siblings of the boxes and come before the script element: keep boxes and pop-ups direct children of the root, or the hover rule stops working. -->
 <g id="pop101" class="pop">
@@ -308,9 +306,10 @@
   var W = 330;
   var inner = document.createElementNS(SVGNS, 'svg');
   ['width', 'height', 'viewBox', 'font-family'].forEach(function (a) { if (svg.hasAttribute(a)) inner.setAttribute(a, svg.getAttribute(a)); });
-  /* The drawing opens at 75% of its drawn size (data-scale on the root <svg> overrides it): at 100% a box fills too much of the
-     window and its text reads large. The browser zoom still works on top of it. */
-  var SCALE = parseFloat(svg.getAttribute('data-scale')) || 0.75, W0 = svg.getAttribute('width'), H0 = svg.getAttribute('height');
+  /* The drawing opens at 65% of its drawn size (data-scale on the root <svg> overrides it): at 100% a box fills too much of the
+     window and its text reads large. That start size is the reader's 100% (shift-zoom.js counts from it). The browser zoom still
+     works on top of it. */
+  var SCALE = parseFloat(svg.getAttribute('data-scale')) || 0.65, W0 = svg.getAttribute('width'), H0 = svg.getAttribute('height');
   if (W0 && H0 && svg.hasAttribute('viewBox')) { inner.setAttribute('width', +W0 * SCALE); inner.setAttribute('height', +H0 * SCALE); }
   inner.setAttribute('style', 'display:block');
   [].slice.call(svg.childNodes).forEach(function (n) {
@@ -681,6 +680,82 @@
                               box: function (n) { showBox(String(n)); return litBoxes.map(function (g) { return g.id; }); },
                               clear: clear,
                               unlabeled: function () { return A.filter(function (a) { return !a.labs.length; }).map(function (a) { return a.from + '>' + a.to; }); } };
+})();
+]]></script>
+<script type="text/javascript" id="shift-zoom"><![CDATA[
+/* Shift + scroll zoom for the lineage diagram. Runs after find-box.js, which has put the drawing (an inner <svg>) in a scrollable
+   container. Hold Shift and turn the mouse wheel, or scroll up or down on a trackpad: the drawing grows or shrinks around the pointer.
+   It changes only the size of the inner <svg>; the browser zoom and find-box.js's handling of it are left alone.
+   A small hint, at the top-left right under the page header (where the header ends when the page opens), says so and shows the scale,
+   counted from the size the page opens at (that is 100%); a click on it goes back to it. It keeps the same size on screen when the
+   browser zoom changes, like the find box (it reads window.lineageZoom()). */
+(function () {
+  var HTMLNS = 'http://www.w3.org/1999/xhtml';
+  var inner = document.querySelector('svg svg');
+  if (!inner || !inner.parentNode || inner.parentNode.namespaceURI !== HTMLNS) return;    /* no find box host: nothing to zoom in */
+  var scroller = inner.parentNode, host = scroller.parentNode;
+  var vb = (inner.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+  if (vb.length !== 4 || !vb[2]) return;
+  var VW = vb[2], VH = vb[3];
+  var start = (+inner.getAttribute('width') || VW) / VW, s = start;
+  var MIN = 0.1, MAX = 3;
+
+  var hint = document.createElementNS(HTMLNS, 'div');
+  hint.setAttribute('style', 'position:absolute;left:16px;top:16px;z-index:10;padding:5px 10px;border-radius:8px;' +
+    'background:rgba(22,62,115,.55);color:#fff;font:12px Helvetica,Arial,sans-serif;cursor:pointer;user-select:none;' +
+    'opacity:.75;transition:opacity .2s;white-space:nowrap');
+  hint.title = 'Click: back to the start scale';
+  host.appendChild(hint);
+  hint.addEventListener('mouseenter', function () { hint.style.opacity = '1'; });
+  hint.addEventListener('mouseleave', function () { hint.style.opacity = '.75'; });
+  function label() { hint.textContent = 'Shift + scroll to zoom · ' + Math.round(s / start * 100) + '%'; }   /* the start size is 100% */
+  label();
+
+  function zoomTo(ns, px, py) {            /* px, py: the point of the window that stays put (pointer), in the scroller's pixels */
+    ns = Math.min(MAX, Math.max(MIN, ns));
+    if (Math.abs(ns - s) < 1e-4) return;
+    var cx = (scroller.scrollLeft + px) / s, cy = (scroller.scrollTop + py) / s;     /* the drawing point under it */
+    s = ns;
+    inner.setAttribute('width', VW * s); inner.setAttribute('height', VH * s);
+    scroller.scrollLeft = cx * s - px; scroller.scrollTop = cy * s - py;
+    label();
+  }
+  scroller.addEventListener('wheel', function (e) {
+    if (!e.shiftKey) return;
+    e.preventDefault();
+    /* With Shift held, most browsers turn a vertical scroll into a horizontal one (deltaX): take whichever moved. */
+    var d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (e.deltaMode === 1) d *= 16; else if (e.deltaMode === 2) d *= 400;
+    var r = scroller.getBoundingClientRect();
+    zoomTo(s * Math.exp(-d * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  hint.addEventListener('click', function () {
+    var r = scroller.getBoundingClientRect();
+    zoomTo(start, r.width / 2, r.height / 2);
+  });
+
+  /* Where it sits: under the last line of the page header (the h1 and h2 lines), at the header's left edge, as the page opens. It stays
+     there while the drawing scrolls or zooms, like the find box. */
+  var at = [16, 16];
+  (function () {
+    var hs = [].slice.call(inner.querySelectorAll('text.h1, text.h2'));
+    if (!hs.length) return;
+    var hr = host.getBoundingClientRect(), left = 1e9, bottom = 0;
+    hs.forEach(function (t) { var r = t.getBoundingClientRect(); left = Math.min(left, r.left - hr.left); bottom = Math.max(bottom, r.bottom - hr.top); });
+    at = [Math.max(8, left), bottom + 10];
+  })();
+  var z0 = 0;                              /* keep the hint the same size on screen under the browser zoom, like the find box */
+  function keep() {
+    var z = window.lineageZoom ? (window.lineageZoom().zoom || 1) : 1;
+    if (Math.abs(z - z0) < 0.005) return;
+    z0 = z;
+    hint.style.transformOrigin = 'left top';
+    hint.style.transform = 'scale(' + (1 / z) + ')';
+    hint.style.left = at[0] + 'px'; hint.style.top = at[1] + 'px';
+  }
+  keep();
+  setInterval(keep, 300);
+  window.lineageShiftZoom = { scale: function () { return s; }, zoomTo: zoomTo };
 })();
 ]]></script>
 </svg>

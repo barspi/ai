@@ -21,9 +21,10 @@
   var W = 330;
   var inner = document.createElementNS(SVGNS, 'svg');
   ['width', 'height', 'viewBox', 'font-family'].forEach(function (a) { if (svg.hasAttribute(a)) inner.setAttribute(a, svg.getAttribute(a)); });
-  /* The drawing opens at 75% of its drawn size (data-scale on the root <svg> overrides it): at 100% a box fills too much of the
-     window and its text reads large. The browser zoom still works on top of it. */
-  var SCALE = parseFloat(svg.getAttribute('data-scale')) || 0.75, W0 = svg.getAttribute('width'), H0 = svg.getAttribute('height');
+  /* The drawing opens at 65% of its drawn size (data-scale on the root <svg> overrides it): at 100% a box fills too much of the
+     window and its text reads large. That start size is the reader's 100% (shift-zoom.js counts from it). The browser zoom still
+     works on top of it. */
+  var SCALE = parseFloat(svg.getAttribute('data-scale')) || 0.65, W0 = svg.getAttribute('width'), H0 = svg.getAttribute('height');
   if (W0 && H0 && svg.hasAttribute('viewBox')) { inner.setAttribute('width', +W0 * SCALE); inner.setAttribute('height', +H0 * SCALE); }
   inner.setAttribute('style', 'display:block');
   [].slice.call(svg.childNodes).forEach(function (n) {

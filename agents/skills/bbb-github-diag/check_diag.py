@@ -62,6 +62,10 @@ for i, (ax, ay, aw, ah) in enumerate(frames):
         if ax < bx_ + bw_ - 1 and bx_ < ax + aw - 1 and ay < by_ + bh_ - 1 and by_ < ay + ah - 1:
             fail(f'frames at ({ax:.0f},{ay:.0f}) and ({bx_:.0f},{by_:.0f}) overlap')
 
+# ---- no line on which way arrows run, in the header or the legend: each arrow reads as its label says (draw.set_header removes them)
+if 'Arrows point from the earlier item' in new or 'Arrows run from the earlier item' in new:
+    print('WARN the header or the legend still explains which way arrows run: refresh_meta.py --apply (or draw.set_header) removes it')
+
 # ---- collapsed boxes: keywords fit on one line, the pop-up exists, sits at the same corner, comes before the script and is a sibling of its box
 _tags = [(m.start(), m.group(0)) for m in re.finditer(r'<g[\s>]|</g>|<script', new)]
 _depth, _d, _at = {}, 0, {}

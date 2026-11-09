@@ -33,6 +33,10 @@ def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import refresh_scripts                                    # the find box and click highlight as the skill has them now
     out = refresh_scripts.refresh(out)
+    import draw                                               # no lines on which way arrows run (header, legend)
+    out, tidy = draw.set_header(out, None)
+    for ln in tidy:
+        print(ln)
     open(new, 'w', encoding='utf-8').write(out)
     print('next: refresh_meta.py ... --apply, then check_diag.py %s %s' % (new, old))
 

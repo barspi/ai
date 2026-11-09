@@ -196,10 +196,9 @@ def main():
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import svg_state
         text, log, rep = svg_state.apply(text, live, repo)
-        if head:                # the header says which commit of which branch the facts were read against (draw.set_header)
-            import draw
-            text, hlog = draw.set_header(text, repo, head['sha'], head['branch'])
-            log += hlog
+        import draw             # the header says which commit of which branch the facts were read against; no lines on arrow direction
+        text, hlog = draw.set_header(text, repo, (head or {}).get('sha'), (head or {}).get('branch'))
+        log += hlog
         open(svg, 'w').write(text)
         print('--- applied to %s (%d edits) ---' % (svg, len(log)))
         for ln in log:
