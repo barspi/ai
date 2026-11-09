@@ -314,3 +314,43 @@ def defs():
            '.note{font-size:11px;font-style:italic;fill:%s}.pill{font-size:10.5px;font-weight:700;letter-spacing:.6px}.lbl{font-size:11.5px;font-weight:600}.ftl{font-size:15px;font-style:italic;fill:#6e6a64;letter-spacing:.4px}'
            '.h1{font-size:30px;font-weight:700;fill:%s}.h2{font-size:15px;fill:%s}.lg{font-size:13px;fill:%s}.lgb{font-size:13px;font-weight:700;fill:%s}') % (INK, INK2, INK, INK2, INK, INK2, INK, INK)
     return '<defs>\n' + markers + '<style>' + css + '</style>\n</defs>'
+
+
+# ---------------------------------------------------------------- page header: facts as of a commit
+FACTS_REST = 'Dotted frames name an area of work only; the arrows carry the relationships.'
+
+
+def facts(repo, sha=None, branch=None, date=''):
+    """The text of the header's facts line: the head commit of the default branch the facts were read against, as a link to it, and
+    that branch (`Facts as of 1a2b3c4d5 / main.`); a date only when no commit is known (a first picture before its first refresh)."""
+    if sha:
+        u = 'https://github.com/%s/commit/%s' % (repo, sha)
+        at = '<a href="%s" xlink:href="%s" target="_blank"><tspan style="text-decoration:underline">%s</tspan></a> / %s' % (u, u, sha[:9], esc(branch or ''))
+    else:
+        at = esc(date)
+    return 'Facts as of %s. %s' % (at, FACTS_REST)
+
+
+def set_header(text, repo, sha, branch):
+    """Rewrite the header of an existing diagram: the facts line says the commit and branch; the old line on how to read the arrows
+    (the arrows follow their labels, which need no explanation) goes, and the lines below it move up. Returns (text, log)."""
+    log = []
+    lines = text.split('\n')
+    old = [i for i, l in enumerate(lines) if l.startswith('<text class="h2"') and 'Arrows point from the earlier item' in l]
+    for i in old:
+        y = float(re.search(r' y="([\d.]+)"', lines[i]).group(1))
+        del lines[i]
+        for k, l in enumerate(lines):
+            m = re.match(r'(<text class="h2" x="[\d.]+" y=")([\d.]+)(".*)', l)
+            if m and float(m.group(2)) > y:
+                lines[k] = m.group(1) + ('%g' % (float(m.group(2)) - 24)) + m.group(3)
+        log.append('header: the line on how to read the arrows removed')
+    for k, l in enumerate(lines):
+        m = re.match(r'(<text class="h2" x="[\d.]+" y="[\d.]+">)Facts as of .*</text>$', l)
+        if m:
+            new = m.group(1) + facts(repo, sha, branch) + '</text>'
+            if new != l:
+                lines[k] = new
+                log.append('header: facts as of %s / %s' % (sha[:9], branch))
+            break
+    return '\n'.join(lines), log

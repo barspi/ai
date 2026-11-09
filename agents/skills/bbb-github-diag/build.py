@@ -7,7 +7,6 @@ graph.json (the example next to the sample: example/sample-graph.json):
 { "repo": "owner/name",
   "title": "text for the page title; #N becomes a link",
   "date": "2026-03-22",                                    (the date the facts were read)
-  "reading": "optional second header line",                (default: how to read the arrows)
   "nodes": [ {"num": 123, "state": "open|closed|handclosed|merged|waiting|draft|prclosed",
               "title": "...", "meta": "opened 2026-01-05 · still open", "notes": ["line", ...], "mono": "merge abc1234 (a, b)",
               "assignees": ["login"]  (issue)   "author": "login"  (pull request),
@@ -78,7 +77,6 @@ def main():
     states = {n['state'] for n in nodes}
     leg, leg_h = draw.legend(LX, layout.TOP, kinds, states)
     H = int(max(P['bottom'], layout.TOP + leg_h) + 80)
-    reading = spec.get('reading') or 'Arrows point from the earlier item to the item it produced, or from an issue to the pull request that closed it. Read left to right.'
     head = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">' % (W, H, W, H),
         '<title>%s</title>' % draw.esc(re.sub(r'\s+', ' ', spec.get('title', 'Lineage diagram'))),
@@ -87,8 +85,8 @@ def main():
         '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (W, H, draw.PAGE),
         '<text class="h1" x="80" y="70">%s</text>' % ctx.rich(spec.get('title', 'Lineage diagram')),
         '<text class="h2" x="80" y="100"><tspan style="font-weight:700">Repository: %s</tspan></text>' % draw.esc(spec['repo']),
-        '<text class="h2" x="80" y="124">%s</text>' % draw.esc(reading),
-        '<text class="h2" x="80" y="148">Facts as of %s. Dotted frames name an area of work only; the arrows carry the relationships.</text>' % draw.esc(spec.get('date', '')),
+        '<text class="h2" x="80" y="124">%s</text>' % draw.facts(spec['repo'], (spec.get('asOf') or {}).get('sha'),
+                                                                   (spec.get('asOf') or {}).get('branch'), spec.get('date', '')),
     ]
     frame_lines = []
     for name, fx, fy, fw, fh in P['frames']:

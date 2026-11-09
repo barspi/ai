@@ -17,8 +17,7 @@
 <rect x="0" y="0" width="2789" height="1126" fill="#ebe5d7"/>
 <text class="h1" x="80" y="70">Checkout rework: what grew out of umbrella <a href="https://github.com/acme/shop/issues/100" xlink:href="https://github.com/acme/shop/issues/100" target="_blank"><title>Checkout rework: cart, coupons and guest retry</title><tspan style="text-decoration:underline">#100</tspan></a></text>
 <text class="h2" x="80" y="100"><tspan style="font-weight:700">Repository: acme/shop</tspan></text>
-<text class="h2" x="80" y="124">Arrows point from the earlier item to the item it produced, or from an issue to the pull request that closed it. Read left to right.</text>
-<text class="h2" x="80" y="148">Facts as of 2026-03-22. Dotted frames name an area of work only; the arrows carry the relationships.</text>
+<text class="h2" x="80" y="124">Facts as of <a href="https://github.com/acme/shop/commit/3f9c2e7a41b0d58c6e2f7a9b1c4d8e0f2a6b3c5d" xlink:href="https://github.com/acme/shop/commit/3f9c2e7a41b0d58c6e2f7a9b1c4d8e0f2a6b3c5d" target="_blank"><tspan style="text-decoration:underline">3f9c2e7a4</tspan></a> / main. Dotted frames name an area of work only; the arrows carry the relationships.</text>
 <rect x="454" y="595" width="826.5" height="451.5" rx="18" fill="#ffffff" fill-opacity="0.5" stroke="#8d877e" stroke-width="1.6" stroke-dasharray="2 6" stroke-linecap="round"/>
 <text class="ftl" x="470" y="619">guest checkout</text>
 <path d="M774,701 L990.5,701" fill="none" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" stroke-linejoin="round" marker-end="url(#h-work)" data-from="103" data-to="112" data-kind="work done by"/>

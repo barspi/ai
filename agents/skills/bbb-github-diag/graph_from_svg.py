@@ -163,6 +163,8 @@ def main():
             'roots': [int(r) for r in o.roots.replace('#', '').split(',') if r.strip()] or (diagram or {}).get('roots', []), 'nodes': nodes, 'edges': edges}
     if diagram:
         spec['meta'] = {k: v for k, v in diagram.items() if k not in ('format', 'repo', 'roots')}
+        if diagram.get('asOf'):
+            spec['asOf'] = diagram['asOf']      # the header's "Facts as of <commit> / <branch>" (draw.facts)
     json.dump(spec, open(o.out, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
     print('%d boxes (%d collapsed, %d in frames), %d arrows%s' % (len(nodes), sum(1 for n in nodes if n.get('collapsed')),
           sum(1 for n in nodes if n.get('frame')), len(edges), ('; %d paths with no box at either end were left out (an old legend draws its sample arrows as paths)' % unknown) if unknown else ''))

@@ -117,12 +117,14 @@ def main():
         w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
         pills[int(m.group(1))] = w[-1] if w else '?'
 
-    q ='query{repository(owner:"%s",name:"%s"){%s}}' % (
+    q ='query{repository(owner:"%s",name:"%s"){head:defaultBranchRef{name target{oid}} %s}}' % (
         owner, name, ' '.join('i%d:issueOrPullRequest(number:%d){%s}' % (n, n, FIELDS) for n in nums))
     out = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=' + q], capture_output=True, text=True)
     if out.returncode:
         sys.exit('gh failed: ' + out.stderr.strip())
     data = json.loads(out.stdout)['data']['repository']
+    hb = data.get('head') or {}      # the same call: the default branch and its head commit, for "Facts as of <commit> / <branch>"
+    head = {'sha': hb['target']['oid'], 'branch': hb['name'], 'read': run_start} if hb.get('target') else None
 
     live = {}
     for n in nums:
@@ -194,10 +196,10 @@ def main():
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import svg_state
         text, log, rep = svg_state.apply(text, live, repo)
-        old_day = re.search(r'Facts as of (\d{4}-\d{2}-\d{2})', text)
-        if old_day and old_day.group(1) != run_start[:10]:             # the header says when the facts were read
-            text = text.replace(old_day.group(0), 'Facts as of ' + run_start[:10], 1)
-            log.append('header: facts as of %s (was %s)' % (run_start[:10], old_day.group(1)))
+        if head:                # the header says which commit of which branch the facts were read against (draw.set_header)
+            import draw
+            text, hlog = draw.set_header(text, repo, head['sha'], head['branch'])
+            log += hlog
         open(svg, 'w').write(text)
         print('--- applied to %s (%d edits) ---' % (svg, len(log)))
         for ln in log:
@@ -284,13 +286,15 @@ def main():
     if meta is not None:
         if not opts.since:      # an explicit window is a look-back, it must not hide candidates from the next run
             meta['lastRun'] = run_start
+        if head:                # the default branch's head when the facts were read (the header's "Facts as of")
+            meta['asOf'] = head
         text = svgmeta.write(text, meta)
     else:
         print('NOTE: %s has no metadata block, so lastRun is not kept: run svgmeta.py migrate on the next revision' % svg)
     open(svg, 'w').write(text)
     if opts.snapshot_out:
         out_snap = {str(n): live[n] for n in nums}
-        out_snap['_meta'] = {'lastRun': run_start, 'ignored': (meta or {}).get('ignored', [])}
+        out_snap['_meta'] = {'lastRun': run_start, 'ignored': (meta or {}).get('ignored', []), 'asOf': head}
         json.dump(out_snap, open(opts.snapshot_out, 'w'), indent=1, sort_keys=True)
     if tsv_dir:
         with open(os.path.join(tsv_dir, 'assignees.tsv'), 'w') as f:

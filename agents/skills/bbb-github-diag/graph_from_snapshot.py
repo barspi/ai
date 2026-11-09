@@ -221,7 +221,7 @@ def main():
         for n in nodes:
             if n['state'] in ('closed', 'handclosed', 'merged', 'prclosed') and n['num'] not in given:
                 n['collapsed'] = title_keywords(n['title'])
-    spec = {'repo': o.repo, 'title': o.title, 'date': o.date, 'roots': [int(r) for r in o.roots.replace('#', '').split(',') if r.strip()], 'nodes': nodes,
+    spec = {'repo': o.repo, 'title': o.title, 'date': o.date, 'asOf': raw.get('_meta', {}).get('asOf'), 'roots': [int(r) for r in o.roots.replace('#', '').split(',') if r.strip()], 'nodes': nodes,
             'edges': [{'from': a, 'to': b, 'kind': k} for a, b, k in sorted(edges)],
             'meta': {'nopath': nopath, 'lastRun': raw.get('_meta', {}).get('lastRun'),
                      'ignored': [x if isinstance(x, dict) else {'num': int(x), 'reason': ''} for x in raw.get('_meta', {}).get('ignored', [])]}}

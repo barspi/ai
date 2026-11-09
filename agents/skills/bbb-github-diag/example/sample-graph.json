@@ -2,6 +2,7 @@
   "repo": "acme/shop",
   "title": "Checkout rework: what grew out of umbrella #100",
   "date": "2026-03-22",
+  "asOf": {"sha": "3f9c2e7a41b0d58c6e2f7a9b1c4d8e0f2a6b3c5d", "branch": "main"},
   "desc": "Example for the bbb-github-diag skill: an umbrella with three children, the pull requests that closed or replaced them, follow-ups, a block and a related pair.",
   "roots": [100],
   "nodes": [
