@@ -99,6 +99,21 @@ for n, (cx_, cy_, kw) in sorted(_coll.items()):
 for pm in re.finditer(r'<g id="pop(\d+)" class="pop">', new):
     if int(pm.group(1)) not in _coll:
         fail(f'pop-up pop{pm.group(1)} has no collapsed box')
+for rm in re.finditer(r'#n(\d+):hover~#pop(\d+)', new):
+    if rm.group(1) != rm.group(2) or int(rm.group(1)) not in _coll:
+        fail(f'hover rule {rm.group(0)} matches no collapsed box with its pop-up')
+# SVG has no z-index: what comes later in the file is painted on top. The pop-ups must come after every box, arrow, label, cross
+# and the legend, or that part covers the open pop-up. After the first pop-up only pop-ups (and the find box script) may follow.
+_first_pop = new.find('<g id="pop')
+if _coll and _first_pop >= 0:
+    if not re.search(r'\.pop\{visibility:hidden;opacity:0;pointer-events:none', new):
+        fail('the CSS rule that hides the pop-ups (.pop{visibility:hidden;opacity:0;pointer-events:none...}) is missing')
+    _end = _script if _script >= 0 else new.rfind('</svg>')
+    _tail = re.sub(r'<g id="pop\d+" class="pop">.*?\n</g>', '', new[_first_pop:_end], flags=re.S)   # a pop-up ends with "</g>" on its own line
+    _left = re.findall(r'<(?:g|path|rect|text|line|circle|polyline|polygon|use|image)\b[^>]{0,60}', _tail)
+    if _left:
+        fail(f'{len(_left)} drawn element(s) come after the first pop-up and paint over the open pop-ups (first: {_left[0][:60]!r}); '
+             'move them before the pop-ups')
 if _coll:
     print(len(_coll), 'collapsed boxes')
 
