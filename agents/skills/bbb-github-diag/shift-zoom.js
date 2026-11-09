@@ -50,15 +50,22 @@
     zoomTo(start, r.width / 2, r.height / 2);
   });
 
-  /* Where it sits: under the last line of the page header (the h1 and h2 lines), at the header's left edge, as the page opens. It stays
-     there while the drawing scrolls or zooms, like the find box. */
+  /* Where it sits: to the right of the page header (the h1 and h2 lines) as the page opens, one hint-width away from its widest line,
+     centred on the header's height; when the window is too narrow for that, under the header at its left edge. It stays there while
+     the drawing scrolls or zooms, like the find box. */
   var at = [16, 16];
   (function () {
     var hs = [].slice.call(inner.querySelectorAll('text.h1, text.h2'));
     if (!hs.length) return;
-    var hr = host.getBoundingClientRect(), left = 1e9, bottom = 0;
-    hs.forEach(function (t) { var r = t.getBoundingClientRect(); left = Math.min(left, r.left - hr.left); bottom = Math.max(bottom, r.bottom - hr.top); });
-    at = [Math.max(8, left), bottom + 10];
+    var hr = host.getBoundingClientRect(), left = 1e9, right = 0, top = 1e9, bottom = 0;
+    hs.forEach(function (t) {
+      var r = t.getBoundingClientRect();
+      left = Math.min(left, r.left - hr.left); right = Math.max(right, r.right - hr.left);
+      top = Math.min(top, r.top - hr.top); bottom = Math.max(bottom, r.bottom - hr.top);
+    });
+    var w = hint.offsetWidth, h = hint.offsetHeight;
+    if (right + 2 * w + 16 <= hr.width) at = [right + w, (top + bottom - h) / 2];
+    else at = [Math.max(8, left), bottom + 10];
   })();
   var z0 = 0;                              /* keep the hint the same size on screen under the browser zoom, like the find box */
   function keep() {
