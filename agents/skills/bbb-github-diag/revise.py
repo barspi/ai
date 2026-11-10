@@ -6,10 +6,12 @@ usage: revise.py OLD.svg NEW.svg [--add N[,N...]] [--keep-new] [--discover] [--a
 Steps (each one is safe to run again, so a second run with --answers continues where the first stopped):
   1. new_revision.py OLD NEW [--keep-new]          (skipped when NEW exists: a rerun continues on it)
   2. refresh_meta.py --apply [--discover]          states, titles, assignees, relations of every box GitHub changed
-  3. the items of --add that are not boxes yet: ONE GraphQL call (refresh_meta.fetch_records); the spec is built from GitHub alone:
-     state, title, date line, author or assignees, umbrella, a `new` pill, and an arrow for each GitHub link (closing reference,
-     sub-issue, parent, blocked by, blocking, closed by) to a box or to another added item; frame and place by rules.frame_for and
-     rules.near_for (add_nodes.py). An item with no such link is not added: it is a decision (which arrow, or skip it).
+  3. the items of --add that are not boxes yet: two GraphQL calls (refresh_meta.fetch_records, fetch_texts); the spec is built
+     from GitHub alone: state, title, date line, author or assignees, umbrella, a `new` pill, and an arrow for each link to a box or
+     to another added item: GitHub's own (closing reference, sub-issue, parent, blocked by, blocking, closed by) or a phrase of the
+     item's body and last comments by the rules of rules.py ("Follow-up to #N", "Blocked by #N", ...; a weak word such as
+     "Related:" is a passing mention, not a link); frame and place by rules.frame_for and rules.near_for (add_nodes.py). An item
+     with no such link is not added: it is a decision (which arrow, or skip it).
   4. add_nodes.py                                  places the boxes, routes the arrows
   5. refresh_meta.py --apply                       stores the records of the new boxes and draws what their texts state (relate.py)
   6. check_diag.py NEW OLD [--keep-new]
@@ -63,24 +65,34 @@ def box_rect(text, n):
     return tuple(float(v) for v in m.groups()) if m else None
 
 
-def spec_for(repo, live, adds, boxes, answers):
-    """The add_nodes.py spec for the items in adds (records in live), and the decisions for the ones GitHub does not link to a box."""
+def spec_for(repo, live, adds, boxes, answers, texts=None, kinds=None):
+    """The add_nodes.py spec for the items in adds (records in live), the decisions for the ones nothing links to a box, and a note
+    for each arrow taken from a text. A link is GitHub's own (relate.native) or a phrase of the item's text (texts {n: [body,
+    comment, ...]}; relate.from_text with the phrase rules of rules.py, "Follow-up to #N", "Blocked by #N", ...); a weak word
+    (relate.WEAK: related, references, mentioned) is a passing mention and is not a link. kinds {n: 'ISSUE'|'PR'} of the boxes."""
     import relate, rules
     rank = {k: i for i, k in enumerate(rules.RANK)}
     ends = set(boxes) | set(adds)
     extra = answers.get('arrows', [])
-    out_boxes, arrows, need, seen = [], [], [], set()
+    kinds = dict(kinds or {})
+    kinds.update({n: (live.get(n) or {}).get('kind') for n in adds})
+    out_boxes, arrows, need, notes, seen = [], [], [], {}, set()
     for n in adds:
         rec = live.get(n) or {}
         if rec.get('missing'):
             need.append('#%d: not found on GitHub: skip it' % n)
             continue
-        rels = sorted((r for r in relate.native(n, rec) if (r[1] if r[0] == n else r[0]) in ends and r[0] != r[1]),
-                      key=lambda r: rank.get(r[2], 99))
+        rels = [r for r in relate.native(n, rec) if (r[1] if r[0] == n else r[0]) in ends and r[0] != r[1]]
+        if (texts or {}).get(n):
+            for k, f, t, rule, a, s in relate.from_text({n: texts[n]}, [n], ends, kinds, repo):
+                if k not in relate.WEAK:
+                    rels.append((f, t, k))
+                    notes.setdefault((f, t, k), 'the text of #%d says: %s' % (a, s[:100]))
+        rels = sorted(rels, key=lambda r: rank.get(r[2], 99))
         rels += [(a['from'], a['to'], a['kind']) for a in extra if n in (a['from'], a['to'])]
         if not rels:
-            need.append('#%d (%s, %s): no GitHub link to a box. Give it an arrow in --answers ("arrows"), or "skip" it'
-                        % (n, rec.get('kind'), rec.get('title', '')[:80]))
+            need.append('#%d (%s, %s): no link to a box, on GitHub or in its text. Give it an arrow in --answers ("arrows"), '
+                        'or "skip" it' % (n, rec.get('kind'), rec.get('title', '')[:80]))
             continue
         pr = rec['kind'] == 'PR'
         st = rec['state']
@@ -109,7 +121,7 @@ def spec_for(repo, live, adds, boxes, answers):
     for a in extra:                                   # arrows between boxes already drawn
         if a['from'] not in adds and a['to'] not in adds and frozenset((a['from'], a['to'])) not in seen:
             arrows.append({'from': a['from'], 'to': a['to'], 'kind': a['kind']})
-    return {'repo': repo, 'boxes': out_boxes, 'arrows': arrows}, need
+    return {'repo': repo, 'boxes': out_boxes, 'arrows': arrows}, need, notes
 
 
 def main():
@@ -150,9 +162,11 @@ def main():
     adds = [n for n in adds if n not in boxes]
     added = []
     if adds:
-        import refresh_meta
+        import refresh_meta, svgmeta
         live, _ = refresh_meta.fetch_records(*repo.split('/'), adds)
-        spec, n_ = spec_for(repo, live, adds, boxes, answers)
+        texts = refresh_meta.fetch_texts(*repo.split('/'), [n for n in adds if not live.get(n, {}).get('missing')])
+        kinds = {b: r['github'].get('kind') for b, r in svgmeta.boxes(text).items() if r.get('github')}
+        spec, n_, notes = spec_for(repo, live, adds, boxes, answers, texts, kinds)
         need += n_
         if spec['boxes'] or spec['arrows']:
             fd, sp = tempfile.mkstemp(suffix='.json')
@@ -164,7 +178,9 @@ def main():
             need += [ln[len('PROBLEM'):].strip(' :') for ln in r.stdout.splitlines() if ln.startswith('PROBLEM')]
             added = [b['num'] for b in spec['boxes']]
             done += ['added #%d (%s), frame by %s' % (b['num'], b['state'], 'answer' if 'frame' in b else 'rule') for b in spec['boxes']]
-            done += ['arrow #%d %s #%d' % (a['from'], a['kind'], a['to']) for a in spec['arrows']]
+            done += ['arrow #%d %s #%d%s' % (a['from'], a['kind'], a['to'],
+                                              ' (%s)' % notes[(a['from'], a['to'], a['kind'])] if (a['from'], a['to'], a['kind']) in notes else '')
+                     for a in spec['arrows']]
             r = run(log, 'refresh_meta.py', repo, o.new, '--apply')          # records of the new boxes; what their texts state
             d, n_, _ = refresh_lines(r.stdout)
             done += [x for x in d if x not in done]; need += [x for x in n_ if x not in need]

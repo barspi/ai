@@ -92,6 +92,20 @@ def discover(repo, svg_text, live, since, meta):
         print('same area only (%s, no link): %s' % (t, ' '.join('#%d' % x for x in sorted(ns))))
     print('%d unrelated, %d only commented/edited, %d ignored (decided not drawn).' % (n_none, n_old, n_ign))
 
+def fetch_texts(owner, name, nums):
+    """ONE GraphQL call: the text of each item in nums, {n: [body, last 5 comments ...]} ({} when nums is empty)."""
+    if not nums:
+        return {}
+    q = 'query{repository(owner:"%s",name:"%s"){%s}}' % (owner, name, ' '.join(
+        'i%d:issueOrPullRequest(number:%d){... on Issue{body comments(last:5){nodes{body}}} ... on PullRequest{body comments(last:5){nodes{body}}}}' % (n, n) for n in nums))
+    r = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=' + q], capture_output=True, text=True)
+    if r.returncode:
+        sys.exit('gh failed: ' + r.stderr.strip())
+    d = json.loads(r.stdout)['data']['repository']
+    return {n: [(d.get('i%d' % n) or {}).get('body') or ''] + [c.get('body') or '' for c in ((d.get('i%d' % n) or {}).get('comments') or {}).get('nodes', [])]
+            for n in nums}
+
+
 def fetch_records(owner, name, nums, run_start=None):
     """ONE GraphQL call: the record of each item in nums (what a box keeps in data-github) and the default branch head.
     Returns (live {n: record, or {'missing': True}}, head {sha, branch, read} or None)."""
@@ -185,16 +199,7 @@ def main():
     old0 = {n: r['github'] for n, r in _sm.boxes(text).items() if r.get('github')}
     touched = [n for n in nums if not live[n].get('missing') and (old0.get(n) or {}).get('updatedAt') != live[n].get('updatedAt')]
     unsettled += [n for n in touched if n not in unsettled]
-    texts = {}
-    if unsettled:
-        q3 = 'query{repository(owner:"%s",name:"%s"){%s}}' % (owner, name, ' '.join(
-            'i%d:issueOrPullRequest(number:%d){... on Issue{body comments(last:5){nodes{body}}} ... on PullRequest{body comments(last:5){nodes{body}}}}' % (n, n) for n in unsettled))
-        r3 = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=' + q3], capture_output=True, text=True)
-        if r3.returncode:
-            sys.exit('gh failed: ' + r3.stderr.strip())
-        d3 = json.loads(r3.stdout)['data']['repository']
-        texts = {n: [(d3.get('i%d' % n) or {}).get('body') or ''] + [c.get('body') or '' for c in ((d3.get('i%d' % n) or {}).get('comments') or {}).get('nodes', [])]
-                 for n in unsettled}
+    texts = fetch_texts(owner, name, unsettled)
     for n in nums:
         v, why = rules.close_verdict(live[n], texts.get(n), decided.get(n))
         if v:
