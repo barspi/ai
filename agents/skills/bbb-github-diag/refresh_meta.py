@@ -199,6 +199,12 @@ def main():
         import draw             # the header says which commit of which branch the facts were read against; no lines on arrow direction
         text, hlog = draw.set_header(text, repo, (head or {}).get('sha'), (head or {}).get('branch'))
         log += hlog
+        if any('taller' in ln or 'box +' in ln or 'box -' in ln for ln in log):     # a box grew: the arrows into its bottom got shorter
+            import model
+            text, moved, bad = model.relabel(text, hop_pad=20)
+            if moved:
+                log.append('labels placed again on arrows a taller box made shorter: %d' % moved)
+            rep += ['label near (%d,%d): %s' % b for b in bad]
         open(svg, 'w').write(text)
         print('--- applied to %s (%d edits) ---' % (svg, len(log)))
         for ln in log:

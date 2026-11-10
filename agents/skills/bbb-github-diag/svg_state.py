@@ -13,7 +13,9 @@ assignee label, merge line or date line is out of date. Everything is a local te
 A change that makes a box taller (a new merge line or note line) is applied only when the 14px below the box
 are free of other boxes and still inside the frame that holds it; otherwise it is reported and left alone.
 What needs thought is only reported: a closed pull request that was not merged (stripes, red cross, supersedes
-arrow), a kind change (ISSUE to UMBRELLA), a changed title, stale note text such as `Fix in PR #N (open)`.
+arrow), a kind change (ISSUE to UMBRELLA), stale note text such as `Fix in PR #N (open)`.
+A changed title is applied (retitle): rewrapped as draw.py wraps it; when it needs more lines the box grows only where
+room_below() allows, else it is reported. Every link's tooltip gets the box's current title (retitle_links).
 
 `apply(svg_text, live, repo)` returns (new_svg_text, log lines, report lines). Pure functions: no network.
 """
@@ -113,6 +115,62 @@ def link(repo, n, pr, title):
     return '<a href="%s" xlink:href="%s" target="_blank"><title>%s</title><tspan style="text-decoration:underline">#%d</tspan></a>' % (u, u, t, n)
 
 
+TTL_SIZE, TTL_STEP = 12.5, 15        # the title lines of a box (draw.py): 12.5px, 15px apart
+
+
+def _rich(text, repo, live):
+    """One title line as draw.py writes it: escaped, every #N a link (with its title as tooltip when it is a box), **bold**."""
+    def esc(t):
+        return t.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    if '**' in text:
+        return ''.join(('<tspan style="font-weight:700">%s</tspan>' % _rich(p, repo, live)) if i % 2 else _rich(p, repo, live)
+                       for i, p in enumerate(text.split('**')) if p)
+    out, pos = '', 0
+    for m in re.finditer(r'#(\d+)', text):
+        n = int(m.group(1))
+        info = live.get(n) or {}
+        pr = info.get('kind') == 'PR' or text[:m.start()].endswith('PR ')
+        out += esc(text[pos:m.start()]) + link(repo, n, pr, info.get('title', ''))
+        pos = m.end()
+    return out + esc(text[pos:])
+
+
+def retitle(blk, title, repo, live):
+    """The box markup with its title lines rewritten for a new title, the lines below them moved by the change in height and the box
+    grown or shrunk by it. Returns (new markup, dy, log text), or (blk, 0, None) when the drawn title already reads so."""
+    import draw, html
+    tl = list(re.finditer(r'<text class="ttl" x="([\d.]+)" y="([\d.]+)">(.*?)</text>', blk, re.S))
+    if not tl:
+        return blk, 0, None
+    drawn = ' '.join(html.unescape(re.sub(r'<title>.*?</title>|<[^>]+>', '', m.group(3))) for m in tl)
+    norm = lambda t: re.sub(r'\s+', ' ', t.replace('**', '')).strip()
+    if norm(drawn) == norm(title):
+        return blk, 0, None
+    rows = draw.wrap_px(title, 'regular', TTL_SIZE)
+    x, y0 = tl[0].group(1), float(tl[0].group(2))
+    new = '\n'.join('<text class="ttl" x="%s" y="%s">%s</text>' % (x, fmt(y0 + TTL_STEP * k), _rich(r, repo, live)) for k, r in enumerate(rows))
+    dy = (len(rows) - len(tl)) * TTL_STEP
+    tail = blk[tl[-1].end():]
+    if dy:
+        tail = re.sub(r'\b(y|y1|y2)="(-?[\d.]+)"', lambda m: '%s="%s"' % (m.group(1), fmt(float(m.group(2)) + dy)), tail)
+    out = blk[:tl[0].start()] + new + tail
+    if dy:
+        out = grow(out, dy)
+    return out, dy, 'title "%s" -> "%s"%s' % (norm(drawn)[:50], norm(title)[:50], (', box %+dpx' % dy) if dy else '')
+
+
+def retitle_links(svg, live, repo):
+    """The tooltip (<title>) of every link to a box, anywhere in the picture, says that box's title as GitHub has it now."""
+    def fix(m):
+        info = live.get(int(m.group(3))) or {}
+        t = info.get('title')
+        if not t:
+            return m.group(0)
+        return m.group(1) + t.replace('&', '&amp;').replace('<', '&lt;') + m.group(5)
+    pat = r'(<a href="https://github\.com/%s/(issues|pull)/(\d+)" xlink:href="[^"]*" target="_blank"><title>)(.*?)(</title>)' % re.escape(repo)
+    return re.sub(pat, fix, svg, flags=re.S)
+
+
 def authors_text(authors):
     return ', '.join(authors) if len(authors) <= 2 else authors[0] + ' et al.'
 
@@ -132,6 +190,10 @@ def apply(svg, live, repo, boxes_live=None):
     log, report = [], []
     svg = _apply(svg, live, repo, log, report, False)
     svg = _apply(svg, live, repo, log, report, True)
+    tips = retitle_links(svg, live, repo)
+    if tips != svg:
+        log.append('link tooltips: titles brought up to date')
+        svg = tips
     return svg, log, sorted(set(report))
 
 
@@ -249,6 +311,14 @@ def _apply(svg, live, repo, log, report, pop):
             if old_label is not None and old_label != esc_label:
                 blk = new_blk
                 log.append('%s: assignee %s -> %s' % (tag, old_label, label))
+        # title: a full box or a pop-up shows it (a collapsed box shows its keywords); rewrapped as draw.py wraps it (12.5px, 232px)
+        if not compact and l.get('title'):
+            nb, dy, msg = retitle(blk, l['title'], repo, live)
+            if msg and dy > 0 and not room_below_(svg, bl, num, dy + rect_of(blk)[3] - h):     # with what this box grew already
+                report.append('#%d: new title needs %dpx more room below the box: move boxes, then refresh again' % (num, dy))
+            elif msg:
+                blk = nb
+                log.append('%s: %s' % (tag, msg))
         # report only: things that need thought
         shown = box_header.kind_of(blk)
         if shown and kind == 'ISSUE':
