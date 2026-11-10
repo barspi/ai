@@ -173,6 +173,10 @@ def main():
     decided = {x['num']: x for x in ((_sm.read(text) or {}).get('closed') or [])}
     unsettled = [n for n in nums if n not in decided and rules.needs_text(live[n])]
     unsettled += [n for n in nums if live[n].get('kind') == 'PR' and live[n].get('state') == 'closed']    # what replaced a closed PR
+    # the boxes GitHub changed since the last refresh (updatedAt): their text is read in the same call, for new relations (relate.py)
+    old0 = {n: r['github'] for n, r in _sm.boxes(text).items() if r.get('github')}
+    touched = [n for n in nums if not live[n].get('missing') and (old0.get(n) or {}).get('updatedAt') != live[n].get('updatedAt')]
+    unsettled += [n for n in touched if n not in unsettled]
     texts = {}
     if unsettled:
         q3 = 'query{repository(owner:"%s",name:"%s"){%s}}' % (owner, name, ' '.join(
@@ -199,6 +203,42 @@ def main():
         import draw             # the header says which commit of which branch the facts were read against; no lines on arrow direction
         text, hlog = draw.set_header(text, repo, (head or {}).get('sha'), (head or {}).get('branch'))
         log += hlog
+        # a box whose updatedAt changed may have new relations on GitHub: the ones with a box at the other end are drawn (relate.py)
+        import relate
+        tt = {n: texts[n] for n in touched if n in texts}
+        out = relate.dropped(text, old0, live, touched, tt, repo)          # a link GitHub no longer has ("unblocked"): its arrow goes
+        if out:
+            import move, hops
+            lines = text.split('\n')
+            gone = set()
+            for i, ln in enumerate(lines):
+                at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+                if at and at in out:
+                    gone |= set(move.take_out(lines, i))
+            text = '\n'.join(l for k, l in enumerate(lines) if k not in gone)
+            text, _, _ = hops.add_hops(text)
+            log += ['arrow taken out: #%d %s #%d (GitHub no longer has that link, and the text does not say it)' % (a, k, b) for a, b, k in out]
+        want, rrep = relate.missing(text, live, touched, tt, repo)
+        from_text = {ln for ln in rrep if ln.startswith('drawn from the text: ')}
+        rep += [ln for ln in rrep if ln not in from_text]            # the rest needs a human (another word drawn, nopath, a mention)
+        if want:
+            fd, tmp_svg = tempfile.mkstemp(suffix='.svg')
+            fs, tmp_spec = tempfile.mkstemp(suffix='.json')
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(text)
+            with os.fdopen(fs, 'w', encoding='utf-8') as f:
+                json.dump({'repo': repo, 'boxes': [], 'arrows': [{'from': a, 'to': b, 'kind': k} for a, b, k in want]}, f)
+            r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add_nodes.py'), tmp_svg, tmp_svg,
+                                tmp_spec], capture_output=True, text=True)
+            if r.returncode == 0:
+                text = open(tmp_svg, encoding='utf-8').read()
+                said = {re.match(r'drawn from the text: #(\d+) (.+?) #(\d+) \((.*)\)$', ln).groups(): ln for ln in from_text}
+                said = {(int(f), int(t), k): why for (f, k, t, why) in said}
+                log += ['arrow drawn: #%d %s #%d (%s)' % (a, k, b, said.get((a, b, k), 'a new link on GitHub')) for a, b, k in want]
+                rep += [ln[len('PROBLEM '):] for ln in r.stdout.splitlines() if ln.startswith('PROBLEM')]
+            else:
+                rep.append('new relations not drawn (add_nodes.py failed): %s' % (r.stderr.strip().splitlines() or ['?'])[-1])
+            os.unlink(tmp_svg); os.unlink(tmp_spec)
         if any('taller' in ln or 'box +' in ln or 'box -' in ln for ln in log):     # a box grew: the arrows into its bottom got shorter
             import model
             text, moved, bad = model.relabel(text, hop_pad=20)
