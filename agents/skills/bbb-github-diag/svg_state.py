@@ -269,11 +269,15 @@ def _apply(svg, live, repo, log, report, pop):
         # a closing pull request that is a box
         if not compact and kind == 'ISSUE' and l['state'] == 'closed' and 'Closed by' not in re.sub(r'<[^>]+>', '', blk):
             prs = [p for p in l.get('rel', {}).get('closedBy', []) if p in live and p != num]
+            # under the last note; a box with no note yet: under its date line or merge line (the lowest line of text)
+            notes = (list(re.finditer(r'<text class="note" x="([\d.]+)" y="([\d.]+)"', blk)) or
+                     sorted(re.finditer(r'<text class="(?:meta|mono)" x="([\d.]+)" y="([\d.]+)"', blk), key=lambda m: float(m.group(2))))
             if prs:
                 if not room_below_(svg, bl, num, 14):
                     report.append('#%d: closed by PR #%s: note line needs 14px more room below the box' % (num, prs[0]))
+                elif not notes:
+                    report.append('#%d: closed by PR #%s: no line of text to put the note under' % (num, prs[0]))
                 else:
-                    notes = list(re.finditer(r'<text class="note" x="([\d.]+)" y="([\d.]+)"', blk))
                     last = notes[-1]
                     end = blk.index('</text>', last.start()) + len('</text>')
                     line = '\n<text class="note" x="%s" y="%s">Closed by PR %s.</text>' % (

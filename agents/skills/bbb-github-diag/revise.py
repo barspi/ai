@@ -182,11 +182,16 @@ def main():
                                               ' (%s)' % notes[(a['from'], a['to'], a['kind'])] if (a['from'], a['to'], a['kind']) in notes else '')
                      for a in spec['arrows']]
             r = run(log, 'refresh_meta.py', repo, o.new, '--apply')          # records of the new boxes; what their texts state
+            if r.returncode:
+                fails.append('FAIL refresh_meta.py (second run) exit %d: %s' % (r.returncode, (r.stderr.strip().splitlines() or ['?'])[-1]))
             d, n_, _ = refresh_lines(r.stdout)
             done += [x for x in d if x not in done]; need += [x for x in n_ if x not in need]
 
     r = run(log, 'check_diag.py', o.new, o.old, *keep)
-    fails = [ln for ln in r.stdout.splitlines() if ln.startswith('FAIL ')]
+    found = [ln for ln in r.stdout.splitlines() if ln.startswith('FAIL ')]
+    fails += found
+    if r.returncode and not found:                   # exit 1 with no FAIL line: it crashed
+        fails.append('FAIL check_diag.py exit %d: %s' % (r.returncode, (r.stderr.strip().splitlines() or ['?'])[-1]))
 
     png = None
     if o.render and added:
