@@ -96,13 +96,13 @@ def reroute(text, pairs, improve=False):
         old_pts = route.straight(model.arrow_points(lines[i]))
         lines[i] = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), lines[i], count=1)
         sc.arrows.append(list(pts))
-        lab = route.place_label(sc, pts, kind)
+        lab = route.place_label_any(sc, pts, kind)
         if lab_at is not None:                            # the old label lines go; the new label takes their place
             n_old = len([k for k in gone if k != i])
-            lines[lab_at:lab_at + n_old] = draw.label(kind, *lab) if lab else []
+            lines[lab_at:lab_at + n_old] = draw.label(kind, lab[0], lab[1], lab[2]) if lab else []
         elif lab:
             k = next((k for k, l in enumerate(lines) if l == '<!--legend-->'), len(lines) - 2)
-            lines[k:k] = draw.label(kind, *lab)
+            lines[k:k] = draw.label(kind, lab[0], lab[1], lab[2])
         text = '\n'.join(lines)
         done.append((a, b, len(pts) - 2, bool(sc.left_frame), len(old_pts) - 2))
     return text, done, failed
@@ -153,6 +153,8 @@ def main():
         res, done, failed = reroute(text, pairs)
     res, _, _ = hops.add_hops(res)
     res, _, bad = model.relabel(res, hop_pad=20)
+    res, _, nolab = model.label_missing(res, [(d[0], d[1]) for d in done])   # a label left off before the arcs were drawn
+    bad += [(0, 0, '#%d %s #%d has no label: no place on it or beside it' % x) for x in nolab]
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))

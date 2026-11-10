@@ -496,6 +496,20 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
     return best[1] if best else None
 
 
+def place_label_any(sc, pts, kind, w=None, h=18.0):
+    """The label of an arrow, in the one order every script uses: on a stretch with 20px of shaft each side; else with 8px (a short
+    arrow: check it by eye); else beside its shaft (place_label_beside). Returns (cx, cy, shift, short): shift is None on the shaft
+    and (dx, dy) beside it (draw.label shift); short is True when only 8px of shaft is left. None when there is no place at all."""
+    lab = place_label(sc, pts, kind, w, h)
+    if lab:
+        return lab[0], lab[1], None, False
+    lab = place_label(sc, pts, kind, w, h, strict=False)
+    if lab:
+        return lab[0], lab[1], None, True
+    bs = place_label_beside(sc, pts, kind, w, h)
+    return (bs[0], bs[1], bs[2:], False) if bs else None
+
+
 BESIDE_GAP = 5.0
 
 

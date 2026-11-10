@@ -119,12 +119,15 @@ TTL_SIZE, TTL_STEP = 12.5, 15        # the title lines of a box (draw.py): 12.5p
 
 
 def _rich(text, repo, live):
-    """One title line as draw.py writes it: escaped, every #N a link (with its title as tooltip when it is a box), **bold**."""
+    """One title or note line as draw.py writes it: escaped, every #N a link (with its title as tooltip when it is a box), **bold**,
+    ~~struck~~."""
+    import draw
+
     def esc(t):
         return t.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    if '**' in text:
-        return ''.join(('<tspan style="font-weight:700">%s</tspan>' % _rich(p, repo, live)) if i % 2 else _rich(p, repo, live)
-                       for i, p in enumerate(text.split('**')) if p)
+    if '**' in text or '~~' in text:
+        return ''.join(('<tspan style="%s">%s</tspan>' % (draw.MARK_STYLE[mk], _rich(p, repo, live))) if mk else _rich(p, repo, live)
+                       for p, mk in draw.marked(text))
     out, pos = '', 0
     for m in re.finditer(r'#(\d+)', text):
         n = int(m.group(1))
@@ -182,6 +185,68 @@ def pill_word(state, kind):
     return 'waiting' if state == 'open' and kind == 'PR' else state
 
 
+NOTE_LINE = re.compile(r'<text class="note" x="([\d.]+)" y="([\d.]+)">(.*?)</text>', re.S)
+NOTE_STEP = 14                       # note lines (draw.py): 11px italic, 14px apart
+
+
+def _plain(markup):
+    import html
+    return html.unescape(re.sub(r'<title>.*?</title>|<[^>]+>', '', markup, flags=re.S))
+
+
+def reblock(blk, box_open, blocker_open, repo, live):
+    """The box markup with every "Blocked by" note rewritten by rules.blocked_notes: one line per blocker, bold while that block
+    holds, struck through once the box or that blocker is closed. A note is the run of note lines from one that starts a sentence to
+    the one that ends it ('.'); a "Blocked by" or "Was blocked by" line always starts one. The lines below a rewritten note move by
+    the change in height. Returns (markup, dy: the change in height, the notes changed as plain text)."""
+    import draw, html, rules
+    lines = list(NOTE_LINE.finditer(blk))
+    if not lines:
+        return blk, 0, []
+    starts = re.compile(r'(?:was\s+)?blocked\s+by\b', re.I)
+    paras, cur = [], []
+    for m in lines:
+        t = _plain(m.group(3)).strip()
+        if cur and starts.match(t):
+            paras.append(cur)
+            cur = []
+        cur.append(m)
+        if t.endswith('.'):
+            paras.append(cur)
+            cur = []
+    if cur:
+        paras.append(cur)
+    links = r'<a href="https://github\.com/[^"]+/(issues|pull)/(\d+)"[^>]*>(?:<title>(.*?)</title>)?'
+
+    def below(s, ymin, d):                                       # move by d what lies at or below ymin (not a pill or cross on top)
+        if not d:
+            return s
+        return re.sub(r'\b(y|y1|y2)="(-?[\d.]+)"',
+                      lambda m: '%s="%s"' % (m.group(1), fmt(float(m.group(2)) + d)) if float(m.group(2)) >= ymin else m.group(0), s)
+
+    top = float(lines[0].group(2))                               # the notes start here: what lies above (pill, cross) never moves
+    out, pos, dy, changed = '', 0, 0, []
+    for para in paras:
+        text = ' '.join(_plain(m.group(3)).strip() for m in para)
+        if not starts.match(text):
+            continue
+        known = dict(live)                                       # kinds and tooltips of items that are not boxes: from the links drawn
+        for kind, n, tip in re.findall(links, ''.join(m.group(3) for m in para)):
+            known.setdefault(int(n), {'kind': 'PR' if kind == 'pull' else 'ISSUE', 'title': html.unescape(tip or '')})
+        notes = rules.blocked_notes(text, box_open, blocker_open)
+        rows = [r for nt in notes for r in draw.wrap_px(nt, 'italic', 11)]
+        x, y0 = para[0].group(1), float(para[0].group(2))
+        new = '\n'.join('<text class="note" x="%s" y="%s">%s</text>' % (x, fmt(y0 + dy + NOTE_STEP * k), _rich(r, repo, known))
+                        for k, r in enumerate(rows))
+        if new != below(blk[para[0].start():para[-1].end()], y0, dy):
+            changed.append(' | '.join(n.replace('**', '*').replace('~~', '~') for n in notes))
+        out += below(blk[pos:para[0].start()], top, dy) + new
+        pos = para[-1].end()
+        dy += (len(rows) - len(para)) * NOTE_STEP
+    out += below(blk[pos:], top, dy)
+    return (out, dy, changed) if changed else (blk, 0, [])
+
+
 def grow(blk, dy):
     return re.sub(r'(<rect x="[\d.]+" y="[\d.]+" width="(?:260|252)(?:\.0)?" height=")([\d.]+)(" rx="(?:10|7)")',
                   lambda m: m.group(1) + fmt(float(m.group(2)) + dy) + m.group(3), blk, count=2)
@@ -190,8 +255,12 @@ def grow(blk, dy):
 def apply(svg, live, repo, boxes_live=None):
     """Two passes. The boxes as drawn (a collapsed box gets only what its compact form shows: colour, pill, assignee), then the
     pop-ups of the collapsed boxes, which are full copies that float over the picture: they get every edit and need no room."""
-    log, report = [], []
-    svg = _apply(svg, live, repo, log, report, False)
+    log, report, bands = [], [], []
+    svg = _apply(svg, live, repo, log, report, False, bands)
+    if bands:                         # boxes whose Blocked by lines had no room: a band of free space under each, then once more
+        for num, more in bands:
+            svg = make_room(svg, num, more, log, report)
+        svg = _apply(svg, live, repo, log, report, False)
     svg = _apply(svg, live, repo, log, report, True)
     tips = retitle_links(svg, live, repo)
     if tips != svg:
@@ -200,7 +269,28 @@ def apply(svg, live, repo, boxes_live=None):
     return svg, log, sorted(set(report))
 
 
-def _apply(svg, live, repo, log, report, pop):
+def make_room(svg, num, more, log, report):
+    """A band of `more` px of free space (band.py) just under box num: below its bottom, above the next box under it in its column and
+    inside its own frame, at the first y that cuts no box, label or jump arc. The box can then grow; nothing else changes shape."""
+    import band
+    bl = blocks(svg)
+    if num not in bl:
+        return svg
+    x, y, w, h = rect_of(svg[bl[num][0]:bl[num][1]])
+    hi = min([ry for n, (a, b) in bl.items() if n != num for rx, ry, rw, rh in [rect_of(svg[a:b])]
+              if rx < x + w and rx + rw > x and ry >= y + h] + [1e18])
+    own = [f for f in frames_of(svg) if f[0] <= x and x + w <= f[0] + f[2] and f[1] <= y and y + h <= f[1] + f[3]]
+    if own:
+        hi = min(hi, min(f[1] + f[3] for f in own))
+    at = band.free_y(svg, y + h + 0.5, hi)
+    if at is None:
+        report.append('#%d: needs %dpx more room below it and no band fits under it: move boxes, then refresh again' % (num, more))
+        return svg
+    log.append('#%d: a band of %dpx inserted at y %s to make room (everything below moved down)' % (num, more, fmt(at)))
+    return band.insert(svg, at, more)
+
+
+def _apply(svg, live, repo, log, report, pop, bands=None):
     bl = blocks(svg, pop)
     room_below_ = (lambda *a: True) if pop else room_below       # a pop-up grows over the picture: nothing to push
     for num in sorted(bl):
@@ -326,6 +416,21 @@ def _apply(svg, live, repo, log, report, pop):
             elif msg:
                 blk = nb
                 log.append('%s: %s' % (tag, msg))
+        # "Blocked by" notes, on EVERY box at each refresh (a blocker that closes changes the boxes it blocked, which GitHub does not
+        # mark as updated): one line per blocker, bold while that block holds, struck once the box or that blocker is closed
+        if not compact:
+            is_open = lambda b: None if b not in live or live[b].get('missing') else live[b]['state'] in ('open', 'draft')
+            nb, dyb, what = reblock(blk, l['state'] in ('open', 'draft'), is_open, repo, live)
+            if what:
+                more = max(dyb, 0)                                      # fewer lines: the box keeps its height
+                if more and not room_below_(svg, bl, num, more + rect_of(blk)[3] - h):
+                    if bands is not None:                               # apply() inserts a band under it, then runs again
+                        bands.append((num, more))
+                    else:
+                        report.append('#%d: its Blocked by lines need %dpx more room below the box: move boxes, then refresh again' % (num, more))
+                else:
+                    blk = grow(nb, more) if more else nb
+                    log.append('%s: Blocked by lines: %s%s' % (tag, '; '.join(what), (', box %+dpx' % more) if more else ''))
         # report only: things that need thought
         shown = box_header.kind_of(blk)
         if shown and kind == 'ISSUE':

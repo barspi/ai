@@ -181,18 +181,66 @@ SELFTEST = [
 ]
 
 
+BLOCKED = re.compile(r'^(?:was\s+)?blocked\s+by\s+((?:(?:PR\s+)?#\d+(?:\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*)?)+)\s*(\([^)]*\))?\s*([:.])?\s*(.*)$',
+                     re.I | re.S)
+
+
+def blocked_notes(note, box_open, blocker_open):
+    """A box note that starts "Blocked by #A, #B and #C (Q1): why" (or "Was blocked by ...", bold or not) as note lines, ONE per
+    blocker, each marked by whether that block still holds: `**Blocked by #A**` (bold) while the box and that blocker are both open,
+    `~~Blocked by #A~~` (struck, normal weight) once either is closed. A closed box is blocked by nothing: all its lines are struck.
+    The qualifier and the colon stay on the last blocker's line, as in the sentence; the explanation after them is never marked.
+    blocker_open(n): True, False, or None when unknown (the line keeps its claim: bold). A note that is not a "Blocked by" line comes
+    back as it was, in a list of one."""
+    plain = re.sub(r'\*\*|~~', '', note).strip()
+    m = BLOCKED.match(plain)
+    if not m:
+        return [note]
+    items = re.findall(r'((?:PR\s+)?)#(\d+)', m.group(1))
+    qual, punct, rest = m.group(2) or '', m.group(3) or '', m.group(4).strip()
+    out = []
+    for i, (pfx, b) in enumerate(items):
+        clause = 'Blocked by %s#%s' % (pfx, b)
+        if i == len(items) - 1:
+            clause += (' ' + qual if qual else '') + punct
+        live = box_open and blocker_open(int(b)) is not False
+        line = ('**%s**' if live else '~~%s~~') % clause
+        if i == len(items) - 1 and rest:
+            line += ' ' + rest
+        out.append(line)
+    return out
+
+
+BLOCKED_SELFTEST = [            # (note, box open, open blockers, want)
+    ('**Blocked by #2 and #3 (Q2):** a hold for any merchant.', True, {3},
+     ['~~Blocked by #2~~', '**Blocked by #3 (Q2):** a hold for any merchant.']),
+    ('Blocked by #2, #3, #4.', True, {2, 3, 4}, ['**Blocked by #2**', '**Blocked by #3**', '**Blocked by #4.**']),
+    ('**Blocked by #2 (Q1, Q2):** (a) or (b).', False, {2}, ['~~Blocked by #2 (Q1, Q2):~~ (a) or (b).']),
+    ('Was blocked by #2.', True, set(), ['~~Blocked by #2.~~']),
+    ('~~Blocked by #2~~', True, {2}, ['**Blocked by #2**']),
+    ('Blocked by PR #7.', True, {7}, ['**Blocked by PR #7.**']),
+    ('Blocks #5.', True, {5}, ['Blocks #5.']),
+]
+
+
 def selftest():
     bad = [(a, b, s, want, match(s, a, b, SELFTEST_KINDS, 'acme', 'shop')) for a, b, s, want in SELFTEST]
     bad = [(a, b, s, want, got[:3] if got else None) for a, b, s, want, got in bad if (got[:3] if got else None) != want]
     for a, b, s, want, got in bad:
         print('FAIL A=#%d B=#%d %r: got %s, want %s' % (a, b, s, got, want))
+    for note, op, opn, want in BLOCKED_SELFTEST:
+        got = blocked_notes(note, op, lambda b: b in opn)
+        if got != want:
+            bad.append(note)
+            print('FAIL blocked %r: got %s, want %s' % (note, got, want))
     rec = {'kind': 'ISSUE', 'state': 'closed', 'stateReason': 'COMPLETED'}
     for t, want in CLOSE_SELFTEST:
         got = close_verdict(rec, [t])[0]
         if got != want:
             bad.append(t)
             print('FAIL close %r: got %s, want %s' % (t, got, want))
-    print('rules self-test %s (%d arrow sentences, %d close sentences)' % ('OK' if not bad else 'FAILED', len(SELFTEST), len(CLOSE_SELFTEST)))
+    print('rules self-test %s (%d arrow sentences, %d close sentences, %d blocked-by notes)' % (
+        'OK' if not bad else 'FAILED', len(SELFTEST), len(CLOSE_SELFTEST), len(BLOCKED_SELFTEST)))
     return not bad
 
 

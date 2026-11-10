@@ -381,6 +381,37 @@ for _lvl, _msg in svgmeta.problems(new):
         fail('metadata: ' + _msg)
     else:
         print('WARN metadata: ' + _msg)
+# ---- a "Blocked by" line names ONE blocker; it is bold while the box and that blocker are open, struck once either is closed
+#      (rules.blocked_notes; refresh_meta.py --apply rewrites them). The states come from the records the file keeps.
+import svg_state as _ss
+_recs = {n: (r.get('github') or {}) for n, r in svgmeta.boxes(new).items()}
+_is_open = lambda n: (_recs[n]['state'] in ('open', 'draft')) if _recs.get(n, {}).get('state') else None
+for _pop in (False, True):
+    for _n, (_a, _b) in _ss.blocks(new, _pop).items():
+        for _m in _ss.NOTE_LINE.finditer(new[_a:_b]):
+            _plain = _ss._plain(_m.group(3)).strip()
+            if re.match(r'was blocked by\b', _plain, re.I):
+                fail('#%d%s: "%s" is the old form: a block that is over is a struck "Blocked by" line (refresh_meta.py --apply)'
+                     % (_n, ' (pop-up)' if _pop else '', _plain[:60]))
+                continue
+            if not re.match(r'blocked by\b', _plain, re.I):
+                continue
+            _clause = re.split(r'[(:]', _plain, 1)[0]
+            _named = [int(x) for x in re.findall(r'#(\d+)', _clause)]
+            _where = '#%d%s: "%s"' % (_n, ' (pop-up)' if _pop else '', _plain[:60])
+            if len(_named) > 1:
+                fail('%s names %d blockers: one line per blocker (refresh_meta.py --apply)' % (_where, len(_named)))
+                continue
+            _bold = re.search(r'font-weight:700">Blocked by', _m.group(3)) is not None
+            _struck = re.search(r'line-through">Blocked by', _m.group(3)) is not None
+            _holds = None if not _named or _is_open(_named[0]) is None or _is_open(_n) is None else (_is_open(_n) and _is_open(_named[0]))
+            if _holds is None:
+                continue
+            if _holds and not _bold:
+                fail('%s: the block holds (both open), so the line is bold (refresh_meta.py --apply)' % _where)
+            elif not _holds and not _struck:
+                fail('%s: the block is over (%s closed), so the line is struck, not bold (refresh_meta.py --apply)'
+                     % (_where, 'the box' if not _is_open(_n) else '#%d' % _named[0]))
 import reroute                                # an arrow between two boxes of one frame stays inside it (route.py; an almost hard rule)
 for _a, _b in reroute.leaves_frame(new):
     fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d (or move a box)' % (_a, _b, _a, _b))

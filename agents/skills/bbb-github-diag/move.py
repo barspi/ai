@@ -159,10 +159,10 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
         if (a, b) in (sides or {}) or (a, b) in extra:   # the user named this arrow's route: reroute.py --improve leaves it alone
             lines[i] = svgmeta.pin(lines[i])
         sc.arrows.append(list(pts))
-        lab = route.place_label(sc, pts, kind)
+        lab = route.place_label_any(sc, pts, kind)
         if lab:
             k = lab_at if lab_at is not None else i
-            lines[k] = '\n'.join(draw.label(kind, *lab))
+            lines[k] = '\n'.join(draw.label(kind, lab[0], lab[1], lab[2]))
         routed.append((a, b, len(pts) - 2, bool(sc.left_frame)))
     text = '\n'.join(l for l in '\n'.join(lines).split('\n') if l != GONE)
     if failed:
@@ -213,6 +213,7 @@ def main():
     res, routed, failed, where = move(text, moves, grows, extra, sides, keep_out)
     res, _, _ = hops.add_hops(res)
     res, _, bad = model.relabel(res, hop_pad=20)
+    res, _, nolab = model.label_missing(res, [(a, b) for a, b, _, _ in routed])   # a label left off before the arcs were drawn
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
@@ -228,6 +229,8 @@ def main():
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
     for x, y, why in bad:
         print('PROBLEM label near (%d,%d): %s' % (x, y, why))
+    for a, k, b in nolab:
+        print('PROBLEM #%d %s #%d has no label: no place on it or beside it' % (a, k, b))
     print('next: check_diag.py %s' % out)
 
 

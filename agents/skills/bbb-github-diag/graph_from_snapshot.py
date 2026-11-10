@@ -197,21 +197,12 @@ def main():
         mine = list(written.get(n['num'], []))
         said = ' '.join(x for x in mine if x.lower().startswith('blocked by'))
         rest = [b for b in sorted(blockers.get(n['num'], [])) if '#%d' % b not in said]
-        live = [b for b in rest if is_open(n['num']) and is_open(b)]
-        over = [b for b in rest if b not in live]     # a block that is over (either side closed) is history, not a live block
-        if live:
-            mine.append('Blocked by %s.' % ', '.join('#%d' % b for b in live))
-        if over:
-            mine.append('Was blocked by %s.' % ', '.join('#%d' % b for b in over))
-        out = []
+        if rest:
+            mine.append('Blocked by %s.' % ', '.join('#%d' % b for b in rest))
+        out = []                                      # one line per blocker: bold while it holds, struck once it is over
+        import rules
         for x in mine:
-            if x.lower().startswith('blocked by') and '**' not in x:
-                named = [int(m) for m in re.findall(r'#(\d+)', x)]
-                if is_open(n['num']) and any(is_open(b) for b in named):
-                    cut = re.search(r'[:.](\s|$)', x)          # bold the block itself ("Blocked by #N (Q1):"), not the explanation after it
-                    k = cut.end(0) if cut else len(x)
-                    x = ('**%s** %s' % (x[:k].strip(), x[k:].strip())).strip()
-            out.append(x)
+            out += rules.blocked_notes(x, is_open(n['num']), lambda b: is_open(b) if b in snap else None)
         n['notes'] = n['notes'] + out
     given = {int(k): kw for k, kw in json.load(open(o.collapsed, encoding='utf-8')).items() if kw} if o.collapsed else {}
     for k, kw in given.items():

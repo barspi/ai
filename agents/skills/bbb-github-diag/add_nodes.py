@@ -222,14 +222,12 @@ def main():
         drawn.add((a['from'], a['to']))
         shift = None
         if not lab:                                               # a short arrow: 8px of shaft, else beside its shaft
-            lab = route.place_label(sc, pts, kind, strict=False)
-            if lab:
-                problems.append('the label of #%s %s #%s fits only with less than 20px of shaft (a short arrow): check it by eye'
-                                % (a.get('from', '?'), kind, a.get('to', '?')))
-            else:
-                bs = route.place_label_beside(sc, pts, kind)
-                if bs:
-                    lab, shift = bs[:2], bs[2:]
+            any_ = route.place_label_any(sc, pts, kind)
+            if any_:
+                lab, shift = any_[:2], any_[2]
+                if any_[3]:
+                    problems.append('the label of #%s %s #%s fits only with less than 20px of shaft (a short arrow): check it by eye'
+                                    % (a.get('from', '?'), kind, a.get('to', '?')))
         if lab:
             label_markup += draw.label(kind, lab[0], lab[1], shift)
             dx, dy = shift or (0, 0)

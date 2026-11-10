@@ -113,10 +113,11 @@ def repair(text, count_only=False):
         if k in labels and word in route.draw.EDGE:
             li = labels[k]
             _, _, w, h, _, _ = route.draw.label_at(lines, li)       # the label keeps its own size (a two-line one is 30px tall)
-            lab = route.place_label(sc, new, word, w, h)
+            lab = route.place_label_any(sc, new, word, w, h)
             if lab:
-                route.draw.move_label(lines, li, lab[0], lab[1])    # the rectangle and its text lines move together
-                sc.labels.append((lab[0] - w / 2, lab[1] - h / 2, w, h))
+                route.draw.move_label(lines, li, lab[0], lab[1], lab[2])    # the rectangle and its text lines move together
+                dx, dy = lab[2] or (0, 0)
+                sc.labels.append((lab[0] + dx - w / 2, lab[1] + dy - h / 2, w, h))
             else:
                 problems.append('no straight stretch for the label of the arrow #%s -> #%s' % (a[0], b[0]))
     return '\n'.join(lines), done, problems
@@ -150,14 +151,14 @@ def replace_labels(old, new, idxs):
         if i not in found or not at:
             continue
         pts = arrow_points(ln_[i])
-        lab = route.place_label(sc, pts, at[2])
-        if not lab:
-            lab = route.place_label(sc, pts, at[2], strict=False)
+        lab = route.place_label_any(sc, pts, at[2])
+        if not lab or lab[3]:
             problems.append('label of #%d %s #%d: %s' % (at[0], at[2], at[1], 'less than 20px of shaft, check it by eye' if lab else 'no straight stretch: it is left off'))
         if lab:
             w = route.draw.label_width(at[2])
-            sc.labels.append((lab[0] - w / 2, lab[1] - 9, w, 18))
-            keep[found[i][0]] = '\n'.join(route.draw.label(at[2], *lab))
+            dx, dy = lab[2] or (0, 0)
+            sc.labels.append((lab[0] + dx - w / 2, lab[1] + dy - 9, w, 18))
+            keep[found[i][0]] = '\n'.join(route.draw.label(at[2], lab[0], lab[1], lab[2]))
     return '\n'.join(l for l in keep if l is not None), problems
 
 
@@ -248,6 +249,43 @@ def relabel(text, hop_pad=0, redo=()):
         sc.labels = [l for l in sc.labels if tuple(l) != rect] + [(new[0] + dx - w / 2, new[1] + dy - h / 2, w, h)]
         fixed += 1
     return '\n'.join(lines), fixed, failed
+
+
+def label_missing(text, pairs):
+    """Give a label to each arrow between the pairs [(a, b)] that has none, in the picture as it is now (route.place_label_any). A
+    script that routes an arrow places its label before hops.py draws the jump arcs, and a straight arrow's label may only sit at its
+    middle: when a crossing line is there, the label found no place and was left off; with the arcs drawn, the arrow is cut in two
+    pieces and one of them may carry it. Run it after hops.py and relabel(). Returns (text, labels added, [(a, kind, b)] still none)."""
+    import svgmeta
+    sc, info = read(text)
+    lines = info['lines']
+    want = {tuple(p) for p in pairs}
+    centres = [(l[0] + l[2] / 2, l[1] + l[3] / 2) for l in
+               (route.draw.label_at(lines, i) for i in range(len(lines))) if l]
+    added, none, ins = 0, [], []
+    for ln in lines:
+        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+        if not at or (at[0], at[1]) not in want or at[2] not in route.draw.EDGE:
+            continue
+        pts = arrow_points(ln)
+        segs = route.segments(route.straight([tuple(p) for p in pts]))
+        if any((o == 'h' and abs(c - cy) < 1 and lo <= cx <= hi) or (o == 'v' and abs(c - cx) < 1 and lo <= cy <= hi)
+               for o, c, lo, hi in segs for cx, cy in centres):
+            continue
+        lab = route.place_label_any(sc, pts, at[2])
+        if not lab:
+            none.append(at)
+            continue
+        w = route.draw.label_width(at[2])
+        dx, dy = lab[2] or (0, 0)
+        sc.labels.append((lab[0] + dx - w / 2, lab[1] + dy - 9, w, 18))
+        ins += route.draw.label(at[2], lab[0], lab[1], lab[2])
+        added += 1
+    if ins:
+        k = next((i for i in range(len(lines)) if route.draw.label_at(lines, i)), None)
+        k = k if k is not None else next((i for i, l in enumerate(lines) if l == '<!--legend-->'), len(lines) - 2)
+        lines[k:k] = ins
+    return '\n'.join(lines), added, none
 
 
 def read(text, bounds=None):

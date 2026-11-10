@@ -81,24 +81,38 @@ def label_width(word):
     return round(_bold.getlength(word) / 4 + 18.4, 1)
 
 
+MARK_STYLE = {'**': 'font-weight:700', '~~': 'text-decoration:line-through'}
+
+
+def marked(text):
+    """The runs of a line with markers: [(part, mark)], mark '**' (bold), '~~' (struck through: a claim that no longer holds) or ''."""
+    out, mark = [], ''
+    for i, p in enumerate(re.split(r'(\*\*|~~)', text)):
+        if i % 2:
+            mark = '' if mark == p else p
+        elif p:
+            out.append((p, mark))
+    return out
+
+
 def wrap_px(text, style, size, maxw=INNER):
     """Greedy word wrap by the measured width of the real font. **bold** words are measured in the bold face, and every wrapped line
-    that holds bold words gets its own pair of markers, so a bold sentence wraps like any other."""
+    that holds bold (or ~~struck~~) words gets its own pair of markers, so a marked sentence wraps like any other."""
     f = load(style, int(size * 4))
     fb = load({'italic': 'bolditalic', 'regular': 'bold'}.get(style, style), int(size * 4))
-    words = [(w, i % 2 == 1) for i, part in enumerate(text.split('**')) for w in part.split()]
+    words = [(w, mk) for part, mk in marked(text) for w in part.split()]
 
     def width(ws):
-        return sum((fb if b else f).getlength(w) for w, b in ws) / 4 + f.getlength(' ') / 4 * max(len(ws) - 1, 0)
+        return sum((fb if b == '**' else f).getlength(w) for w, b in ws) / 4 + f.getlength(' ') / 4 * max(len(ws) - 1, 0)
 
-    def render(ws):                               # runs of plain and bold words; each bold run gets its markers
+    def render(ws):                               # runs of plain and marked words; each marked run gets its markers
         runs = []
         for w, b in ws:
             if runs and runs[-1][1] == b:
                 runs[-1][0].append(w)
             else:
                 runs.append(([w], b))
-        return ' '.join(('**%s**' if b else '%s') % ' '.join(r) for r, b in runs)
+        return ' '.join(('%s%s%s' % (b, ' '.join(r), b)) for r, b in runs)
 
     lines, cur = [], []
     for wb in words:
@@ -123,9 +137,9 @@ class Ctx:
         return '<a href="%s" xlink:href="%s" target="_blank">%s<tspan style="text-decoration:underline">#%s</tspan></a>' % (u, u, tip, num)
 
     def rich(self, t):
-        """Escape a line, link every #N (a `PR #N` links a pull request), and bold **text**."""
-        if '**' in t:
-            return ''.join(('<tspan style="font-weight:700">%s</tspan>' % self.rich(p)) if i % 2 else self.rich(p) for i, p in enumerate(t.split('**')) if p)
+        """Escape a line, link every #N (a `PR #N` links a pull request), bold **text** and strike ~~text~~."""
+        if '**' in t or '~~' in t:
+            return ''.join(('<tspan style="%s">%s</tspan>' % (MARK_STYLE[mk], self.rich(p))) if mk else self.rich(p) for p, mk in marked(t))
         out, pos = '', 0
         for m in re.finditer(r'#(\d+)', t):
             pr = True if t[:m.start()].endswith('PR ') else None
@@ -316,6 +330,8 @@ def legend(lx, ly, kinds, states):
     lg.append('<text class="lg" x="%s" y="%s">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>' % (lx + 16, y))
     y += 20
     lg.append('<text class="lg" x="%s" y="%s"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>' % (lx + 16, y))
+    y += 20
+    lg.append('<text class="lg" x="%s" y="%s"><tspan style="text-decoration:line-through">Struck</tspan> lines no longer hold (a block that is over).</text>' % (lx + 16, y))
     y += 14
     for word in [k for k in EDGE if k in kinds]:
         y += 28
