@@ -59,12 +59,14 @@ FAR_FACTOR = 8.0        # and the arrow is longer than this many times the media
 
 # (name, phrase before the reference to B, kind, direction, condition)
 # direction 'BA': the arrow goes from B to A (A is the item whose text holds the sentence); 'AB': from A to B.
-# condition: None, or 'A_PR' / 'B_PR' / 'A_ISSUE' (the kind of item that end must be for the phrase to mean that relation).
+# condition: None, or one or more of 'A_PR' / 'B_PR' / 'A_ISSUE' / 'B_NOT_PR', space-separated (the kind of item that end must be for
+# the phrase to mean that relation; all must hold).
 PHRASES = [
     # the reference first: "#B (filed from this work)" in A's text means A's work produced B
     ('filed-from-this', None,                                                                    'led to',     'AB', None),
     ('duplicate-of',  r'\b(?:(?:a\s+)?duplicate\s+of|dup(?:e)?\s+of|duplicates)\s*:?\s*',               'duplicate of', 'AB', 'A_ISSUE'),
-    ('closes',        r'\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*',                    'closed by',  'BA', 'A_PR'),
+    # GitHub's closing keywords close issues only: "the closed PR #B" names a pull request, it closes nothing (B_NOT_PR, and ADJECTIVE)
+    ('closes',        r'\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*',                    'closed by',  'BA', 'A_PR B_NOT_PR'),
     ('closed-by',     r'\b(?:closed|fixed|resolved)\s+(?:by|in)\s*:?\s*',                        'closed by',  'AB', 'B_PR'),
     ('superseded-by', r'\bsuperseded\s+by\s*:?\s*',                                              'supersedes', 'BA', None),
     ('supersedes',    r'\b(?:supersedes|replaces)\s*:?\s*',                                      'supersedes', 'AB', None),
@@ -99,6 +101,11 @@ def ref_pattern(owner, name, b):
 
 NEGATION = re.compile(r'(?:\b(?:not|no longer|never|without|instead of|remove[sd]?|drop(?:ped|s)?|rather than)\b[^.;]{0,12}|["\'`\u201c\u2018])\s*$', re.I)
 SUBJECT = re.compile(r'#(\d+)\)?\s*:?\s*$')
+# a participle after a determiner is an adjective, not a verb: "the closed PR #B", "a fixed issue #B", "the resolved #B"
+ADJECTIVE = re.compile(r'\b(?:the|a|an|this|that|these|those|its|their|our|both|already|now)\s+$', re.I)
+PARTICIPLE = re.compile(r'\w+ed\b', re.I)
+KIND_OK = {'A_PR': lambda k, a, b: k.get(a) == 'PR', 'B_PR': lambda k, a, b: k.get(b) == 'PR',
+           'A_ISSUE': lambda k, a, b: k.get(a) == 'ISSUE', 'B_NOT_PR': lambda k, a, b: k.get(b) != 'PR'}
 
 
 def match(sentence, a, b, kinds, owner, name):
@@ -108,7 +115,7 @@ def match(sentence, a, b, kinds, owner, name):
     ref = ref_pattern(owner, name, b)
     sentence = re.sub(r'\*{1,3}|_{2,3}', '', sentence)             # markdown emphasis: "Follow-up:** #N" reads "Follow-up: #N"
     for rule, phrase, kind, direction, cond in PHRASES:
-        if cond == 'A_PR' and kinds.get(a) != 'PR' or cond == 'A_ISSUE' and kinds.get(a) != 'ISSUE' or cond == 'B_PR' and kinds.get(b) != 'PR':
+        if cond and not all(KIND_OK[c](kinds, a, b) for c in cond.split()):
             continue
         if phrase is None:                                   # filed-from-this: the reference, then the phrase
             if re.search(ref + r'\s*\(\s*(?:filed|found|spun off)\s+(?:from|during|in)\s+this\s+(?:work|pr|pull request|issue)\b', sentence, re.I):
@@ -118,6 +125,8 @@ def match(sentence, a, b, kinds, owner, name):
             before = sentence[:m.start()]
             subj = SUBJECT.search(before)
             if NEGATION.search(before) or (subj and int(subj.group(1)) != a):
+                continue
+            if PARTICIPLE.match(m.group(0)) and ADJECTIVE.search(before):
                 continue
             return (kind, b, a, rule) if direction == 'BA' else (kind, a, b, rule)
     return None
@@ -144,6 +153,10 @@ SELFTEST = [
     (3, 2, 'This does not close #2.', None),
     (1, 2, 'Remove "Closes #2" from the description.', None),
     (3, 4, '#5 closed by #4.', None),
+    (1, 4, 'Both pins were on the unmerged branch of the closed PR #4.', None),
+    (1, 4, 'Closes #4.', None),
+    (1, 2, 'Kept as in the closed issue #2.', None),
+    (4, 2, 'This fixes #2.', ('closed by', 2, 4)),
     (3, 2, 'Follow-up to #2: the remaining fields.', ('follow-up', 2, 3)),
     (2, 3, 'Follow-up:** #3', ('follow-up', 2, 3)),
     (4, 3, 'The follow-ups are filed as #5 (the pin) and #3 (the short field).', ('follow-up', 4, 3)),

@@ -92,31 +92,9 @@ def discover(repo, svg_text, live, since, meta):
         print('same area only (%s, no link): %s' % (t, ' '.join('#%d' % x for x in sorted(ns))))
     print('%d unrelated, %d only commented/edited, %d ignored (decided not drawn).' % (n_none, n_old, n_ign))
 
-def main():
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument('repo'); ap.add_argument('svg'); ap.add_argument('old_snapshot', nargs='?', help=argparse.SUPPRESS)
-    ap.add_argument('--snapshot-out', help='also write the records to this JSON file (a working file for a first picture)')
-    ap.add_argument('--tsv-dir'); ap.add_argument('--discover', action='store_true'); ap.add_argument('--since')
-    ap.add_argument('--umbrellas', action='store_true', help='for an umbrella by title without sub-issues, list the issues its body names')
-    ap.add_argument('--relations', action='store_true', help='print every GitHub-native relation between two boxes')
-    ap.add_argument('--apply', action='store_true', help='edit the SVG in place: pills, colours, date line, merge line, assignee label, "Closed by PR" note (svg_state.py). Run check_diag.py after it')
-    opts = ap.parse_args()
-    if opts.old_snapshot:
-        sys.exit('refresh_meta.py no longer takes a snapshot file: the SVG keeps the records (svgmeta.py). For an old diagram, run '
-                 '"svgmeta.py migrate OLD.svg NEW.svg --snapshot %s" once; for a first picture use --snapshot-out FILE.' % opts.old_snapshot)
-    repo, svg, tsv_dir = opts.repo, opts.svg, opts.tsv_dir
-    import datetime
-    run_start = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    owner, name = repo.split('/')
-    text = open(svg).read()
-    nums = sorted({int(n) for n in re.findall(r'<g id="n(\d+)"', text)})
-    pills, kinds = {}, {}
-    for m in re.finditer(r'<g id="n(\d+)"[^>]*>(.*?)</g>', text, flags=re.S):
-        kinds[int(m.group(1))] = box_header.kind_of(m.group(2)) or '?'
-        w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
-        pills[int(m.group(1))] = w[-1] if w else '?'
-
+def fetch_records(owner, name, nums, run_start=None):
+    """ONE GraphQL call: the record of each item in nums (what a box keeps in data-github) and the default branch head.
+    Returns (live {n: record, or {'missing': True}}, head {sha, branch, read} or None)."""
     q ='query{repository(owner:"%s",name:"%s"){head:defaultBranchRef{name target{oid}} %s}}' % (
         owner, name, ' '.join('i%d:issueOrPullRequest(number:%d){%s}' % (n, n, FIELDS) for n in nums))
     out = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=' + q], capture_output=True, text=True)
@@ -166,6 +144,36 @@ def main():
             canon = ((((d.get('dup') or {}).get('nodes') or [{}])[-1] or {}).get('canonical') or {}).get('number')
             if canon:                                  # GitHub's own "marked as duplicate of #N"
                 live[n]['duplicateOf'] = canon
+
+    return live, head
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('repo'); ap.add_argument('svg'); ap.add_argument('old_snapshot', nargs='?', help=argparse.SUPPRESS)
+    ap.add_argument('--snapshot-out', help='also write the records to this JSON file (a working file for a first picture)')
+    ap.add_argument('--tsv-dir'); ap.add_argument('--discover', action='store_true'); ap.add_argument('--since')
+    ap.add_argument('--umbrellas', action='store_true', help='for an umbrella by title without sub-issues, list the issues its body names')
+    ap.add_argument('--relations', action='store_true', help='print every GitHub-native relation between two boxes')
+    ap.add_argument('--apply', action='store_true', help='edit the SVG in place: pills, colours, date line, merge line, assignee label, "Closed by PR" note (svg_state.py). Run check_diag.py after it')
+    opts = ap.parse_args()
+    if opts.old_snapshot:
+        sys.exit('refresh_meta.py no longer takes a snapshot file: the SVG keeps the records (svgmeta.py). For an old diagram, run '
+                 '"svgmeta.py migrate OLD.svg NEW.svg --snapshot %s" once; for a first picture use --snapshot-out FILE.' % opts.old_snapshot)
+    repo, svg, tsv_dir = opts.repo, opts.svg, opts.tsv_dir
+    import datetime
+    run_start = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    owner, name = repo.split('/')
+    text = open(svg).read()
+    nums = sorted({int(n) for n in re.findall(r'<g id="n(\d+)"', text)})
+    pills, kinds = {}, {}
+    for m in re.finditer(r'<g id="n(\d+)"[^>]*>(.*?)</g>', text, flags=re.S):
+        kinds[int(m.group(1))] = box_header.kind_of(m.group(2)) or '?'
+        w = re.findall(r'>(open|closed|merged|waiting|draft)<', m.group(2))
+        pills[int(m.group(1))] = w[-1] if w else '?'
+
+    live, head = fetch_records(owner, name, nums, run_start)
 
     # why each closed issue was closed (rules.close_verdict): the user's recorded answer, GitHub's reason and closer, then the last
     # comments, read in ONE extra call and only for the issues the record alone does not settle

@@ -150,13 +150,16 @@ def retitle(blk, title, repo, live):
     x, y0 = tl[0].group(1), float(tl[0].group(2))
     new = '\n'.join('<text class="ttl" x="%s" y="%s">%s</text>' % (x, fmt(y0 + TTL_STEP * k), _rich(r, repo, live)) for k, r in enumerate(rows))
     dy = (len(rows) - len(tl)) * TTL_STEP
+    kept = ''
+    if dy < 0:          # never shrink: arrows touch the bottom edge and the sides below; a short gap under the title is harmless
+        dy, kept = 0, ', box kept its height'
     tail = blk[tl[-1].end():]
     if dy:
         tail = re.sub(r'\b(y|y1|y2)="(-?[\d.]+)"', lambda m: '%s="%s"' % (m.group(1), fmt(float(m.group(2)) + dy)), tail)
     out = blk[:tl[0].start()] + new + tail
     if dy:
         out = grow(out, dy)
-    return out, dy, 'title "%s" -> "%s"%s' % (norm(drawn)[:50], norm(title)[:50], (', box %+dpx' % dy) if dy else '')
+    return out, dy, 'title "%s" -> "%s"%s' % (norm(drawn)[:50], norm(title)[:50], (', box %+dpx' % dy) if dy else kept)
 
 
 def retitle_links(svg, live, repo):
