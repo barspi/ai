@@ -220,9 +220,20 @@ def main():
         sc.arrows.append(list(pts))
         path_markup.append(draw.arrow(pts, kind, a['from'], a['to']))
         drawn.add((a['from'], a['to']))
+        shift = None
+        if not lab:                                               # a short arrow: 8px of shaft, else beside its shaft
+            lab = route.place_label(sc, pts, kind, strict=False)
+            if lab:
+                problems.append('the label of #%s %s #%s fits only with less than 20px of shaft (a short arrow): check it by eye'
+                                % (a.get('from', '?'), kind, a.get('to', '?')))
+            else:
+                bs = route.place_label_beside(sc, pts, kind)
+                if bs:
+                    lab, shift = bs[:2], bs[2:]
         if lab:
-            label_markup += draw.label(kind, *lab)
-            sc.labels.append((lab[0] - draw.label_width(kind) / 2, lab[1] - 9, draw.label_width(kind), 18.0))
+            label_markup += draw.label(kind, lab[0], lab[1], shift)
+            dx, dy = shift or (0, 0)
+            sc.labels.append((lab[0] + dx - draw.label_width(kind) / 2, lab[1] + dy - 9, draw.label_width(kind), 18.0))
         else:
             problems.append('no free straight stretch for the label of #%s %s #%s' % (a.get('from', '?'), kind, a.get('to', '?')))
         for px, py in pts:

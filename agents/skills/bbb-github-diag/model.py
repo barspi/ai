@@ -211,8 +211,9 @@ def relabel(text, hop_pad=0, redo=()):
         if not lab:
             continue
         x, y, w, h, _, word = lab
-        rect = (x, y, w, h)
-        cx, cy = x + w / 2, y + h / 2
+        rect = route.draw.label_box(lines, i)                  # as drawn: a label beside its shaft is shifted
+        shift = route.draw.label_shift(ln)
+        cx, cy = x + w / 2, y + h / 2                          # on the shaft, for every label
         own, orphan, own_k = None, False, None
         for k in range(len(sc.arrows)):
             if on_arrow(k, cx, cy) and (kinds[k] == word or own is None):
@@ -226,20 +227,25 @@ def relabel(text, hop_pad=0, redo=()):
         others = route.Scene(sc.boxes, sc.frames, [l for l in sc.labels if tuple(l) != rect], sc.pills, sc.arrows, sc.bounds)
         others.hops = sc.hops
         if own is not None and not orphan and own_k not in redo_k and not route._hit(rect, others, own=own, hop_pad=hop_pad) \
-                and not off_middle(own, cx, cy):
-            continue
+                and (not off_middle(own, cx, cy) if not shift else route.place_label(others, own, word, w, h, strict=False) is None):
+            continue                                        # sits well (a label beside its shaft: while the shaft is still too short)
         if own is None or word not in route.draw.EDGE:
             failed.append((round(cx), round(cy), 'no arrow of this word to attach the label to'))
             continue
-        new = route.place_label(others, own, word, w, h)
+        new, nshift = route.place_label(others, own, word, w, h), None
         if not new:                                         # no place with the full 20px of shaft: take the best place with 8px and say so
             new = route.place_label(others, own, word, w, h, strict=False)
-            if not new:
-                failed.append((round(cx), round(cy), 'no straight stretch long enough: move a box or route that arrow again'))
-                continue
-            failed.append((round(new[0]), round(new[1]), 'the label fits only with less than 20px of shaft (a short arrow): check it by eye'))
-        route.draw.move_label(lines, i, new[0], new[1])
-        sc.labels = [l for l in sc.labels if tuple(l) != rect] + [(new[0] - w / 2, new[1] - h / 2, w, h)]
+            if new:
+                failed.append((round(new[0]), round(new[1]), 'the label fits only with less than 20px of shaft (a short arrow): check it by eye'))
+            else:                                           # a shaft too short for any label: beside it
+                bs = route.place_label_beside(others, own, word, w, h)
+                if not bs:
+                    failed.append((round(cx), round(cy), 'no straight stretch long enough: move a box or route that arrow again'))
+                    continue
+                new, nshift = bs[:2], bs[2:]
+        route.draw.move_label(lines, i, new[0], new[1], nshift)
+        dx, dy = nshift or (0, 0)
+        sc.labels = [l for l in sc.labels if tuple(l) != rect] + [(new[0] + dx - w / 2, new[1] + dy - h / 2, w, h)]
         fixed += 1
     return '\n'.join(lines), fixed, failed
 
@@ -250,9 +256,9 @@ def read(text, bounds=None):
     frames = [(f['x'], f['y'], f['w'], f['h']) for f in frame]
     labels = []
     for i, ln in enumerate(lines):
-        lab = route.draw.label_at(lines, i)
+        lab = route.draw.label_box(lines, i)
         if lab:
-            labels.append(lab[:4])                                  # the real height: a two-line label is 30px
+            labels.append(lab)                                      # as drawn (beside its shaft too); the real height: a two-line label is 30px
         m = re.match(r'<text class="ftl" x="([\d.-]+)" y="([\d.-]+)">([^<]*)', ln)
         if m:
             labels.append((float(m.group(1)) - 4, float(m.group(2)) - 20, 8.5 * len(m.group(3)) + 40, 30.0))

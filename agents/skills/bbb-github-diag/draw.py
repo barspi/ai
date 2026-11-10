@@ -225,14 +225,34 @@ def arrow(pts, kind, a=None, b=None):
                                                                                                          svgmeta.arrow_attrs(a, b, kind) if a is not None else '')
 
 
-def label(kind, cx, cy):
-    """The opaque label of an arrow, centred on cx, cy: a rectangle and its text (two lines of markup)."""
+def label(kind, cx, cy, shift=None):
+    """The opaque label of an arrow, centred on cx, cy: a rectangle and its text (two lines of markup).
+    shift (dx, dy): a label BESIDE its shaft (an arrow too short to carry one, route.place_label_beside). Its x and y stay on the shaft,
+    so every script finds its arrow the usual way; a transform draws it shift px away. label_box gives the rectangle as drawn."""
     col, w = EDGE[kind][0], label_width(kind)
-    return ['<rect x="%.1f" y="%.1f" width="%s" height="18.0" rx="4" fill="#fffdf7" stroke="%s" stroke-width="0.9"/>' % (cx - w / 2, cy - 9, w, col),
-            '<text class="lbl" x="%.1f" y="%.1f" text-anchor="middle" style="fill:%s">%s</text>' % (cx, cy + 4, col, esc(kind))]
+    tr = ' transform="translate(%.1f,%.1f)"' % shift if shift else ''
+    return ['<rect x="%.1f" y="%.1f" width="%s" height="18.0" rx="4" fill="#fffdf7" stroke="%s" stroke-width="0.9"%s/>' % (cx - w / 2, cy - 9, w, col, tr),
+            '<text class="lbl" x="%.1f" y="%.1f" text-anchor="middle" style="fill:%s"%s>%s</text>' % (cx, cy + 4, col, tr, esc(kind))]
 
 
 LABEL_RECT = re.compile(r'<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)" rx="4" fill="#fffdf7"')
+LABEL_SHIFT = re.compile(r' transform="translate\(([-\d.]+),([-\d.]+)\)"')
+
+
+def label_shift(line):
+    """(dx, dy) of a label drawn beside its shaft (draw.label shift), else None."""
+    m = LABEL_SHIFT.search(line)
+    return (float(m.group(1)), float(m.group(2))) if m else None
+
+
+def label_box(lines, i):
+    """The rectangle of the label at lines[i] as it is drawn (x, y, w, h): label_at's, moved by its shift. Use it for what a label
+    covers; use label_at's x, y (on the shaft) to find its arrow."""
+    lab = label_at(lines, i)
+    if not lab:
+        return None
+    dx, dy = label_shift(lines[i]) or (0.0, 0.0)
+    return lab[0] + dx, lab[1] + dy, lab[2], lab[3]
 
 
 def label_at(lines, i):
@@ -251,13 +271,19 @@ def label_at(lines, i):
     return x, y, w, h, n, word
 
 
-def move_label(lines, i, cx, cy):
+def move_label(lines, i, cx, cy, shift=None):
     """Put the label at lines[i] with its centre on (cx, cy): the rectangle and every text line move by the same amount, so a label of any
-    height stays whole. Edits `lines` in place."""
+    height stays whole. shift: drawn beside the shaft (see label); without it, a label that was beside its shaft is on it again.
+    Edits `lines` in place."""
     x, y, w, h, n, _ = label_at(lines, i)
     dx, dy = (cx - w / 2) - x, (cy - h / 2) - y
+    tr = ' transform="translate(%.1f,%.1f)"' % shift if shift else ''
     for k in range(i, i + 1 + n):
-        lines[k] = re.sub(r'x="([\d.-]+)" y="([\d.-]+)"', lambda m: 'x="%.1f" y="%.1f"' % (float(m.group(1)) + dx, float(m.group(2)) + dy), lines[k], count=1)
+        s = LABEL_SHIFT.sub('', lines[k])
+        s = re.sub(r'x="([\d.-]+)" y="([\d.-]+)"', lambda m: 'x="%.1f" y="%.1f"' % (float(m.group(1)) + dx, float(m.group(2)) + dy), s, count=1)
+        if tr:
+            s = re.sub(r'(/?>)', tr + r'\1', s, count=1)
+        lines[k] = s
 
 
 def frame(x, y, w, h, title):

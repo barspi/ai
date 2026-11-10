@@ -496,6 +496,38 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
     return best[1] if best else None
 
 
+BESIDE_GAP = 5.0
+
+
+def place_label_beside(sc, pts, kind, w=None, h=18.0):
+    """For an arrow whose shaft is too short to carry its label (place_label finds no place, not even with 8px of shaft): the label
+    BESIDE the middle of its longest stretch, BESIDE_GAP px from the line: right of a vertical stretch (else left), above a horizontal
+    one (else below), where it touches nothing (_hit). Returns (cx, cy, dx, dy): the centre on the shaft, and the shift to where it is
+    drawn (draw.label shift), or None."""
+    w = w if w is not None else draw.label_width(kind)
+    p = straight([tuple(x) for x in pts])
+    n = len(p) - 1
+    stretches = []
+    for k in range(n):
+        a, b = p[k], p[k + 1]
+        horiz = abs(a[1] - b[1]) < .01
+        lo, hi = (a[0], b[0]) if horiz else (a[1], b[1])
+        if k == n - 1:
+            hi -= 11 * (1 if hi > lo else -1)                    # the shaft ends at the base of the arrowhead
+        stretches.append((abs(hi - lo), horiz, (lo + hi) / 2, a[1] if horiz else a[0]))
+    if any(length >= (w if horiz else h) + 16 for length, horiz, _, _ in stretches):
+        return None                                              # only a SHORT arrow: a long stretch that is blocked is a routing problem
+    for length, horiz, mid, c in sorted(stretches, reverse=True):
+        if length <= 0:
+            continue
+        cx, cy = (mid, c) if horiz else (c, mid)
+        sides = ((0, -(h / 2 + BESIDE_GAP)), (0, h / 2 + BESIDE_GAP)) if horiz else ((w / 2 + BESIDE_GAP, 0), (-(w / 2 + BESIDE_GAP), 0))
+        for dx, dy in sides:
+            if not _hit((cx + dx - w / 2, cy + dy - h / 2, w, h), sc, own=pts):
+                return cx, cy, dx, dy
+    return None
+
+
 def straight(pts):
     """The corners of a path: points inside a straight run (the ends of a removed jump arc) are dropped."""
     out = [pts[0]]
@@ -592,6 +624,13 @@ def selftest():
     c1 = path_cost(Sc({1: A, 2: B}), [(100, 230), (400, 230), (400, 245), (800, 245)], 1, 2)
     c2 = path_cost(Sc({1: A, 2: B}), [(100, 230), (400, 230), (400, 275), (800, 275)], 1, 2)
     check('a short jog costs JOG_COST', abs((c1 - c2) - (JOG_COST - 30 / G)) < .01, '%s vs %s' % (c1, c2))   # 15px jog vs 45px
+    # 8. a short vertical arrow (38px between two boxes): no place on its shaft, its label is drawn beside it; a long one never is
+    up = [(50, 238), (50, 200)]
+    s8 = Sc({1: (0, 100, 100, 100), 2: (0, 238, 100, 60)}, arrows=[up])
+    bs = place_label_beside(s8, up, 'follow-up')
+    check('a short arrow has its label beside its shaft', place_label(s8, up, 'follow-up', strict=False) is None and bs is not None
+          and bs[:2] == (50, 224.5) and bs[2] > 0 and bs[3] == 0, str(bs))      # the shaft runs 238 to 211 (the head is 11px)
+    check('a long arrow never has its label beside its shaft', place_label_beside(Sc({1: A, 2: B}), [(100, 230), (800, 230)], 'led to') is None)
     print('route self-test %s' % ('OK' if not bad else 'FAILED: %d' % len(bad)))
     if bad:
         sys.exit(1)

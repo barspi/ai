@@ -45,8 +45,13 @@ def width(cls, text):
 # ---- parse
 boxes = {int(m.group(1)): tuple(float(v) for v in m.groups()[1:]) for m in re.finditer(
     r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', new)}
-labels = [tuple(float(v) for v in m.groups()) for m in re.finditer(
-    r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="4" fill="#fffdf7"', new)]
+labels, shifts = [], []          # each label as drawn; and its shift when it is drawn beside its shaft (draw.label shift), else None
+for m in re.finditer(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="4" fill="#fffdf7"[^>]*>', new):
+    sh = re.search(r' transform="translate\(([-\d.]+),([-\d.]+)\)"', m.group(0))
+    sh = (float(sh.group(1)), float(sh.group(2))) if sh else None
+    x, y, w, h = (float(v) for v in m.groups())
+    labels.append((x + sh[0], y + sh[1], w, h) if sh else (x, y, w, h))
+    shifts.append(sh)
 paths = []
 for m in re.finditer(r'<path d="M([^"]+)" fill="none"', new):
     d = m.group(1)
@@ -236,21 +241,26 @@ for k, (x, y, w, h) in enumerate(labels):
         if x - 2 < x2 + w2 and x + w + 2 > x2 and y - 2 < y2 + h2 and y + h + 2 > y2:
             fail(f'labels {k} and {k2} overlap near ({x:.0f},{y:.0f})')
     own = None
+    sx, sy = (x - shifts[k][0], y - shifts[k][1]) if shifts[k] else (x, y)      # a label beside its shaft: its place on the shaft
     for sg in segs:
         i, o, c, lo, hi, _ = sg
-        if o == 'h' and y < c < y + h and lo < x + w and hi > x and abs(c - (y + h / 2)) < 1:
+        if o == 'h' and sy < c < sy + h and lo < sx + w and hi > sx and abs(c - (sy + h / 2)) < 1:
             own = sg
-        elif o == 'v' and x < c < x + w and lo < y + h and hi > y and abs(c - (x + w / 2)) < 1:
+        elif o == 'v' and sx < c < sx + w and lo < sy + h and hi > sy and abs(c - (sx + w / 2)) < 1:
             own = sg
     for sg in segs:
         i, o, c, lo, hi, _ = sg
-        if own is not None and i == own[0]:
+        if own is not None and i == own[0] and not shifts[k]:       # a label beside its shaft covers no line, its own included
             continue
         if (o == 'h' and y < c < y + h and lo < x + w and hi > x) or (o == 'v' and x < c < x + w and lo < y + h and hi > y):
             fail(f'label {k} at ({x:.0f},{y:.0f}) covers another path (path {i})')
     if own is None:
         fail(f'label {k} at ({x:.0f},{y:.0f}) is not centered on a straight stretch')
         continue
+    if shifts[k]:
+        if (abs(shifts[k][0]) > w / 2 + 12) or (abs(shifts[k][1]) > h / 2 + 12):
+            fail(f'label {k} at ({x:.0f},{y:.0f}) is drawn more than 12px beside its shaft')
+        continue                                                     # beside a short shaft: the 20px shaft rule does not apply
     i, o, c, lo, hi, _ = own
     pts = paths[i][0]
     a, b = (x, x + w) if o == 'h' else (y, y + h)
