@@ -345,7 +345,7 @@
   }
   var prev = btn('◀', 'previous match (Shift+Enter)'), next = btn('▶', 'next match (Enter)'), clear = btn('✕', 'clear (Esc)');
   var note = document.createElementNS(HTMLNS, 'div');
-  note.setAttribute('style', 'margin-top:4px;font-size:11px;color:#cfe0f5');
+  note.setAttribute('style', 'margin-top:11px;font-size:11px;color:#cfe0f5');   /* 4px + half a 13px row */
   note.textContent = 'press / to search';
   row.appendChild(input); row.appendChild(prev); row.appendChild(next); row.appendChild(clear);
   box.appendChild(row); box.appendChild(note); host.appendChild(box);
@@ -501,9 +501,16 @@
                           top: Math.max(0, scroller.scrollTop + (r.top - sr.top) + r.height / 2 - scroller.clientHeight / 2), behavior: jump === 'instant' ? 'auto' : 'smooth' });
     }
   }
+  /* The field's colour tells the result: white when empty (spaces trimmed), pale green on a match, pale pink with a red border on
+     none. Red border: the buttons' hsl(213,65%,33%) at hue 0. Green hsl(120,45%,86%) and pink hsl(350,45%,86%): equally strong. */
+  function paint(state) {
+    var c = { empty: ['#0e2b52', '#fff'], hit: ['#0e2b52', '#cdeccd'], miss: ['#8b1d1d', '#ebcbd0'] }[state];
+    input.style.borderColor = c[0]; input.style.backgroundColor = c[1];
+  }
   function run(q, jump) {
     reset();
     hits = find(q);
+    paint(!q.trim() ? 'empty' : hits.length ? 'hit' : 'miss');
     if (!q.trim()) { note.textContent = 'press / to search'; return; }
     if (!hits.length) { note.textContent = 'no match'; return; }
     svg.classList.add('q-on');
