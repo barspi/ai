@@ -97,12 +97,7 @@ def repair(text, count_only=False):
             problems.append('an arrow near (%d,%d) ends on no box: draw it again with add_nodes.py' % pts[0])
             sc.arrows.append(pts)
             continue
-        tries = [(a[1], b[1])] + [s for s in route.sides_for(sc.boxes[a[0]], sc.boxes[b[0]]) if s != (a[1], b[1])]
-        new = None
-        for sa, sb in tries:
-            new = route.route(sc, a[0], b[0], sa, sb)
-            if new:
-                break
+        new = route.route(sc, a[0], b[0], '*', '*')        # the cheapest path over every pair of sides, never the first pair that fits
         if not new:
             problems.append('NO PATH for the arrow #%s -> #%s near (%d,%d): it stays as it was; move a box or leave it out' % (a[0], b[0], pts[0][0], pts[0][1]))
             sc.arrows.append(pts)

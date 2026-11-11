@@ -106,6 +106,15 @@ def fetch_texts(owner, name, nums):
             for n in nums}
 
 
+def local_day(ts):
+    """YYYY-MM-DD of a GitHub timestamp (UTC, `...Z`) in the reader's time zone: this machine's, or the TZ environment variable.
+    Cutting the UTC string gives the next day for anything done in the evening west of Greenwich."""
+    if not ts:
+        return ''
+    import datetime
+    return datetime.datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone().date().isoformat()
+
+
 def fetch_records(owner, name, nums, run_start=None):
     """ONE GraphQL call: the record of each item in nums (what a box keeps in data-github) and the default branch head.
     Returns (live {n: record, or {'missing': True}}, head {sha, branch, read} or None)."""
@@ -146,8 +155,8 @@ def fetch_records(owner, name, nums, run_start=None):
             'mergeSha': d['mergeCommit']['oid'][:9] if pr and d.get('mergeCommit') else '',
             'mergedBy': (d.get('mergedBy') or {}).get('login', '') if pr else '',
             'authors': authors,
-            'createdAt': (d.get('createdAt') or '')[:10],
-            'closedAt': (d.get('closedAt') or '')[:10], 'mergedAt': (d.get('mergedAt') or '')[:10] if pr else '',
+            'createdAt': local_day(d.get('createdAt')),
+            'closedAt': local_day(d.get('closedAt')), 'mergedAt': local_day(d.get('mergedAt')) if pr else '',
         }
         if not pr and d['state'] == 'CLOSED':          # why it was closed: GitHub's reason and what closed it (rules.close_verdict)
             ev = ((d.get('timelineItems') or {}).get('nodes') or [{}])[-1] or {}

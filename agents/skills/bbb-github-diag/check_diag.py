@@ -386,6 +386,7 @@ for _lvl, _msg in svgmeta.problems(new):
 import svg_state as _ss
 _recs = {n: (r.get('github') or {}) for n, r in svgmeta.boxes(new).items()}
 _is_open = lambda n: (_recs[n]['state'] in ('open', 'draft')) if _recs.get(n, {}).get('state') else None
+_stated = _ss.blocks_stated(new)
 for _pop in (False, True):
     for _n, (_a, _b) in _ss.blocks(new, _pop).items():
         for _m in _ss.NOTE_LINE.finditer(new[_a:_b]):
@@ -396,7 +397,7 @@ for _pop in (False, True):
                 continue
             if not re.match(r'blocked by\b', _plain, re.I):
                 continue
-            _clause = re.split(r'[(:]', _plain, 1)[0]
+            _clause = re.split(r'[(:]', _plain, maxsplit=1)[0]
             _named = [int(x) for x in re.findall(r'#(\d+)', _clause)]
             _where = '#%d%s: "%s"' % (_n, ' (pop-up)' if _pop else '', _plain[:60])
             if len(_named) > 1:
@@ -404,14 +405,16 @@ for _pop in (False, True):
                 continue
             _bold = re.search(r'font-weight:700">Blocked by', _m.group(3)) is not None
             _struck = re.search(r'line-through">Blocked by', _m.group(3)) is not None
-            _holds = None if not _named or _is_open(_named[0]) is None or _is_open(_n) is None else (_is_open(_n) and _is_open(_named[0]))
+            _bh = _ss.blocker_holds(_n, _named[0], _recs, _stated) if _named else None
+            _holds = None if _bh is None or _is_open(_n) is None else (_is_open(_n) and _bh)
             if _holds is None:
                 continue
             if _holds and not _bold:
                 fail('%s: the block holds (both open), so the line is bold (refresh_meta.py --apply)' % _where)
             elif not _holds and not _struck:
-                fail('%s: the block is over (%s closed), so the line is struck, not bold (refresh_meta.py --apply)'
-                     % (_where, 'the box' if not _is_open(_n) else '#%d' % _named[0]))
+                fail('%s: the block is over (%s), so the line is struck, not bold (refresh_meta.py --apply)'
+                     % (_where, 'the box is closed' if not _is_open(_n) else '#%d is closed' % _named[0] if not _is_open(_named[0])
+                        else 'GitHub no longer links #%d as a blocker and no arrow states it' % _named[0]))
 import reroute                                # an arrow between two boxes of one frame stays inside it (route.py; an almost hard rule)
 for _a, _b in reroute.leaves_frame(new):
     fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d (or move a box)' % (_a, _b, _a, _b))

@@ -19,6 +19,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 GROUP = re.compile(r'<g id="(n|pop)(\d+)"')
 RECT = re.compile(r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"')
+PAGE = re.compile(r'<rect x="0" y="0" width="[\d.]+" height="[\d.]+" fill="#[0-9a-f]{6}"/>')   # the page background: the canvas itself
+
+
+def _is_page(ln, svg_h):
+    """The background rect that fills the canvas: it is never cut, it grows with the canvas."""
+    r = RECT.search(ln)
+    return bool(PAGE.match(ln.strip())) and r is not None and abs(float(r.group(4)) - svg_h) < 1
+
+
+def _svg_h(lines):
+    m = next((re.search(r'\bheight="([\d.]+)"', l) for l in lines if l.startswith('<svg ')), None)
+    return float(m.group(1)) if m else -1.0
 
 
 def fmt(v):
@@ -71,8 +83,9 @@ def blockers(svg, y):
     groups, script = _parse(lines)
     inside = {k for (kind, n), (a, b, _, _) in groups.items() for k in range(a, b + 1)}
     cut = ['box #%d' % n for (kind, n), (_, _, t, bt) in groups.items() if kind == 'n' and t < y < bt]
+    svg_h = _svg_h(lines)
     for i, ln in enumerate(lines):
-        if i in inside or i in script:
+        if i in inside or i in script or _is_page(ln, svg_h):
             continue
         r = RECT.search(ln)
         if r and 'rx="18"' not in ln and float(r.group(2)) < y < float(r.group(2)) + float(r.group(4)):
@@ -105,8 +118,12 @@ def insert(svg, y, d):
     for (kind, n), (a, b, t, _) in groups.items():
         for k in range(a, b + 1):
             owner[k] = (kind, n)
+    svg_h = _svg_h(lines)
     for i, ln in enumerate(lines):
         if i in script:
+            continue
+        if _is_page(ln, svg_h):                                  # the page background grows with the canvas
+            lines[i] = re.sub(r'height="([\d.]+)"', lambda m: 'height="%s"' % fmt(float(m.group(1)) + d), ln, count=1)
             continue
         if i in owner:                                           # a box and its pop-up move as one piece, or not at all
             if owner[i][1] in moving:

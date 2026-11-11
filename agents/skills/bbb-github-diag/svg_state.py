@@ -194,6 +194,37 @@ def _plain(markup):
     return html.unescape(re.sub(r'<title>.*?</title>|<[^>]+>', '', markup, flags=re.S))
 
 
+def blocks_stated(svg):
+    """{(a, b)}: the blocks the picture states, "a blocked by b": a drawn `blocked by` arrow, or one in the metadata's nopath list (a
+    true block the picture could not draw)."""
+    import svgmeta
+    out = set()
+    for ln in svg.split('\n'):
+        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+        if at and at[2] == 'blocked by':
+            out.add(at[:2])
+    for e in (svgmeta.read(svg) or {}).get('nopath', []):
+        if isinstance(e, dict) and e.get('kind') == 'blocked by':
+            out.add((e.get('from'), e.get('to')))
+    return out
+
+
+def blocker_holds(n, b, records, stated):
+    """Whether #b still blocks box n, as far as #b goes: True, False, or None when not known (#b is not a box with a record). Over
+    when #b is closed, and also while #b is open when GitHub no longer links #b as a blocker of n (n's record knows its links) and
+    the picture states no such block either (blocks_stated): the link was removed, so the note's claim is stale. A block known only
+    from a text has its arrow (or a nopath entry) and keeps its claim."""
+    rb = records.get(b) or {}
+    if not rb.get('state') or rb.get('missing'):
+        return None
+    if rb['state'] not in ('open', 'draft'):
+        return False
+    rel = (records.get(n) or {}).get('rel')
+    if rel is not None and b not in (rel.get('blockedBy') or []) and (n, b) not in stated:
+        return False
+    return True
+
+
 def reblock(blk, box_open, blocker_open, repo, live):
     """The box markup with every "Blocked by" note rewritten by rules.blocked_notes: one line per blocker, bold while that block
     holds, struck through once the box or that blocker is closed. A note is the run of note lines from one that starts a sentence to
@@ -292,6 +323,7 @@ def make_room(svg, num, more, log, report):
 
 def _apply(svg, live, repo, log, report, pop, bands=None):
     bl = blocks(svg, pop)
+    stated = blocks_stated(svg)
     room_below_ = (lambda *a: True) if pop else room_below       # a pop-up grows over the picture: nothing to push
     for num in sorted(bl):
         l = live.get(num)
@@ -329,12 +361,13 @@ def _apply(svg, live, repo, log, report, pop, bands=None):
             report.append('#%d: pill %s, GitHub says %s: not patched' % (num, have, want))
             continue
         # date line (the small form of a collapsed box has none)
-        mm = None if compact else re.search(r'(<text class="meta" x="[\d.]+" y="([\d.]+)">opened [\d-]+ %s )(still open|closed [\d-]+|merged [\d-]+|draft[^<]*)(</text>)' % DOT, blk)
+        mm = None if compact else re.search(r'(<text class="meta" x="[\d.]+" y="([\d.]+)">opened )([\d-]+)( %s )(still open|closed [\d-]+|merged [\d-]+|draft[^<]*)(</text>)' % DOT, blk)
         if mm:
             new = ('merged ' + l['mergedAt']) if l['state'] == 'merged' else ('closed ' + l['closedAt']) if l['state'] == 'closed' else 'still open'
-            if mm.group(3) != new:
-                blk = blk[:mm.start(3)] + new + blk[mm.end(3):]
-                log.append('%s: date line "%s" -> "%s"' % (tag, mm.group(3), new))
+            opened = l.get('createdAt') or mm.group(3)              # dates in the reader's zone (refresh_meta.local_day)
+            if (mm.group(3), mm.group(5)) != (opened, new):
+                blk = blk[:mm.start(3)] + opened + mm.group(4) + new + blk[mm.end(5):]
+                log.append('%s: date line "opened %s %s" -> "opened %s %s"' % (tag, mm.group(3), mm.group(5), opened, new))
             meta_y = float(mm.group(2))
         else:
             meta_y = None
@@ -408,6 +441,16 @@ def _apply(svg, live, repo, log, report, pop, bands=None):
             if old_label is not None and old_label != esc_label:
                 blk = new_blk
                 log.append('%s: assignee %s -> %s' % (tag, old_label, label))
+        # the first line, on EVERY box: a login (or a wider pill) may no longer end before the pill. Only that is fixed: a header on
+        # two lines that would fit on one again stays (harmless; the box and its pop-up keep the same form)
+        fit, n0, n1 = box_header.refit(blk)
+        if n1 is not None and n1 > n0:
+            if compact:                                                 # the keywords sit under the first line: collapse.py places them
+                report.append('#%d: its first line needs %d line(s) on a collapsed box: run collapse.py --set %d="<its keywords>" '
+                              'again' % (num, n1, num))
+            else:                                                       # a full box has room: the second line sits above the title
+                blk = fit
+                log.append('%s: first line on %d line(s) (%s)' % (tag, n1, box_header.who_of(blk)))
         # title: a full box or a pop-up shows it (a collapsed box shows its keywords); rewrapped as draw.py wraps it (12.5px, 232px)
         if not compact and l.get('title'):
             nb, dy, msg = retitle(blk, l['title'], repo, live)
@@ -417,10 +460,11 @@ def _apply(svg, live, repo, log, report, pop, bands=None):
                 blk = nb
                 log.append('%s: %s' % (tag, msg))
         # "Blocked by" notes, on EVERY box at each refresh (a blocker that closes changes the boxes it blocked, which GitHub does not
-        # mark as updated): one line per blocker, bold while that block holds, struck once the box or that blocker is closed
+        # mark as updated): one line per blocker, bold while that block holds, struck once the box or that blocker is closed, or
+        # once GitHub and the picture no longer state that block (blocker_holds)
         if not compact:
-            is_open = lambda b: None if b not in live or live[b].get('missing') else live[b]['state'] in ('open', 'draft')
-            nb, dyb, what = reblock(blk, l['state'] in ('open', 'draft'), is_open, repo, live)
+            holds = lambda b, n=num: blocker_holds(n, b, live, stated)
+            nb, dyb, what = reblock(blk, l['state'] in ('open', 'draft'), holds, repo, live)
             if what:
                 more = max(dyb, 0)                                      # fewer lines: the box keeps its height
                 if more and not room_below_(svg, bl, num, more + rect_of(blk)[3] - h):

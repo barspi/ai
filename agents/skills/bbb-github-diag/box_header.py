@@ -15,7 +15,8 @@ A tspan sets letter-spacing:0 so the 0.3px spacing of the `.kind` class is not i
 The line must end before the pill (6px) and before the red cross (12px). When it does not, the arrow and the name go on a
 second `<text class="kind">` 13px lower (never truncated, never smaller than 11.5px).
 
-usage as a module:  header(...), kind_of(box_markup), who_of(box_markup), set_who(box_markup, label), text_width(inner), restyle(svg)
+usage as a module:  header(...), kind_of(box_markup), who_of(box_markup), set_who(box_markup, label), refit(box_markup),
+                    text_width(inner), restyle(svg)
 usage as a command: box_header.py restyle IN.svg OUT.svg     converts boxes and pop-ups drawn the old way (kind + 5-point arrow
                                                              polyline + separate name text, tag UMBRELLA) to this form. OUT may be IN.
                     Run it once on a revision that was drawn the old way. On a file already in this form it changes nothing.
@@ -110,6 +111,32 @@ def set_who(markup, label):
         return markup, None
     m = ms[-1]
     return markup[:m.start(1)] + label + markup[m.end(1):], m.group(1)
+
+
+TAIL_LINE = re.compile(r'\n<text class="kind" x="[\d.]+" y="[\d.]+" style="fill:#[0-9a-f]{6}">((?:(?!<a |</text>).)*)</text>', re.S)
+
+
+def refit(markup):
+    """Lay out the first line of a box again after its login changed (set_who swaps only the text): one line when it ends before the
+    pill (and cross), else the arrow and the name on a second line 13px lower, as header() draws it. Returns (markup, lines before,
+    lines after); (markup, None, None) when the box is not drawn in this form."""
+    m = KIND_TEXT.search(markup)
+    who = who_of(markup)
+    if not m or who is None:
+        return markup, None, None
+    x, y, color, inner = m.group(1), m.group(2), m.group(3), m.group(4)
+    link = re.search(r'<a .*?</a>', inner, re.S)
+    if not link:
+        return markup, None, None
+    end = m.end()
+    t = TAIL_LINE.match(markup, end)
+    before = 2 if t and NAME_TSPAN.search(t.group(1)) else 1
+    if before == 2:
+        end = t.end()
+    kind = kind_of(markup)
+    umb = kind == 'UMBRELLA'
+    new, two = header(x, y, color, 'ISSUE' if umb else kind, link.group(0), who, umb, _limit(markup[end:end + 1800], float(x)))
+    return markup[:m.start()] + new + markup[end:], before, 2 if two else 1
 
 
 def _limit(tail, x):

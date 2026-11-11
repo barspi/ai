@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Close the empty space that collapsing (or removing) boxes leaves, in the diagram as it is. Boxes only move up; columns and frames stay.
 
-usage: compact.py IN.svg OUT.svg [--gap 28] [--force]
+usage: compact.py IN.svg OUT.svg [--gap 28] [--frame WORDS] [--force]
+
+--frame WORDS: only the frame whose title contains WORDS (and the frames inside it) closes its gaps and shrinks; what lies below it in
+the same columns moves up by the same amount, and every other gap of the picture stays.
 
 Method (generic, read from the SVG; nothing about one diagram):
 1. Every box belongs to the smallest dotted frame that contains it, or to no frame. Boxes of one region and one column keep their order
    and, when the gap between two is over 60px, move up until they are `gap` px apart (100px where a vertical arrow with a label joins two
-   neighbours). A gap of 60px or less is left alone: it may carry arrows.
+   neighbours). A gap where a bent arrow ends on the bottom of the upper box or the top of the lower one stays as it is: that arrow
+   runs in the gap, often beside the lanes of others, and the router needs the room it had (a rule that left 25px per lane plus 25px
+   still lost such an arrow, and the frame came out no shorter: the lowest column sets its bottom). A gap of 60px or less is left alone: it may carry arrows.
 2. Boxes joined by a straight horizontal arrow form a chain and move together, so that arrow stays straight.
 3. A frame shrinks to its lowest box (+ its old bottom padding). Whatever lies below a shrunk frame in the same columns (frames, their
    boxes, other boxes) moves up by the same amount.
@@ -24,13 +29,22 @@ import collapse, hops, model
 VGAP = 100.0
 
 
-def compute(text, gap=28.0, min_gap=60.0):
+def compute(text, gap=28.0, min_gap=60.0, only=None):
+    """only: words of one frame's title; then only the boxes of that frame (and of frames inside it) close their gaps, only that
+    frame shrinks, and what lies below it in the same columns moves up by the same amount. Every other gap stays."""
     lines, box, pop, frame = collapse.parse(text)
     R = {n: [b['x'], b['y'], b['w'], b['h']] for n, b in box.items()}
     member = {}
     for n, (x, y, w, h) in R.items():
         inside = [i for i, f in enumerate(frame) if f['x'] <= x and x + w <= f['x'] + f['w'] and f['y'] <= y and y + h <= f['y'] + f['h']]
         member[n] = min(inside, key=lambda i: frame[i]['w'] * frame[i]['h']) if inside else -1
+    scope = None                                 # the frames whose boxes may close their gaps (None: all)
+    if only:
+        hit = [i for i, f in enumerate(frame) if only.lower() in f['name'].lower()]
+        if len(hit) != 1:
+            sys.exit('--frame %r: %d frames have it in their title' % (only, len(hit)))
+        t = frame[hit[0]]
+        scope = {i for i, f in enumerate(frame) if t['x'] <= f['x'] and f['x'] + f['w'] <= t['x'] + t['w'] and t['y'] <= f['y'] and f['y'] + f['h'] <= t['y'] + t['h']}
     # straight horizontal arrows tie their two boxes into a chain; vertical arrows ask for a taller gap
     arrows = [model.arrow_points(l) for l in lines if l.startswith('<path d="M') and 'marker-end' in l]
 
@@ -63,6 +77,15 @@ def compute(text, gap=28.0, min_gap=60.0):
             a, b = at_tb(pts[0]), at_tb(pts[-1])
             if a is not None and b is not None:
                 vert.add(frozenset((a, b)))
+    tops, bottoms = set(), set()                 # boxes with an arrow end on their top or bottom side: that arrow runs in the gap
+    for pts in arrows:
+        for p in (pts[0], pts[-1]):
+            for n, (x, y, w, h) in R.items():
+                if x - 3 <= p[0] <= x + w + 3:
+                    if abs(p[1] - y) <= 3:
+                        tops.add(n)
+                    elif abs(p[1] - (y + h)) <= 3:
+                        bottoms.add(n)
     chains = {}
     for n in R:
         chains.setdefault(find(n), []).append(n)
@@ -82,11 +105,15 @@ def compute(text, gap=28.0, min_gap=60.0):
         cur = NY[n] - (NY[p] + R[p][3])
         if cur <= min_gap:                       # a gap that is already tight is left alone (it may carry arrows)
             return 0.0
+        if g != VGAP and (p in bottoms or n in tops):   # a bent arrow ends on the bottom of p or the top of n: it runs in this gap,
+            return 0.0                                   # often beside the lanes of others; the router needs the room it had
         return max(0.0, cur - g)
 
     for _ in range(40):
         moved = False
         for members in chains.values():
+            if scope is not None and any(member[n] not in scope for n in members):
+                continue
             d = min(limit(n) for n in members)
             if d > 0.5:
                 for n in members:
@@ -100,7 +127,7 @@ def compute(text, gap=28.0, min_gap=60.0):
     FH = {i: f['h'] for i, f in enumerate(frame)}
     for i in sorted(range(len(frame)), key=lambda i: frame[i]['y']):
         mem = [n for n in R if member[n] == i]
-        if not mem:
+        if not mem or (scope is not None and i not in scope):
             continue
         f = frame[i]
         pad = f['y'] + f['h'] - max(R[n][1] + R[n][3] for n in mem)
@@ -124,15 +151,17 @@ def compute(text, gap=28.0, min_gap=60.0):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    gap = 28.0
-    if '--gap' in sys.argv:
-        gap = float(sys.argv[sys.argv.index('--gap') + 1])
-        args = [a for a in args if a != str(sys.argv[sys.argv.index('--gap') + 1])]
+    argv = sys.argv[1:]
+    gap, only = 28.0, None
+    if '--gap' in argv:
+        gap = float(argv.pop(argv.index('--gap') + 1))
+    if '--frame' in argv:
+        only = argv.pop(argv.index('--frame') + 1)
+    args = [a for a in argv if not a.startswith('--')]
     if len(args) != 2:
         sys.exit(__doc__)
     text = open(args[0], encoding='utf-8').read()
-    moves = compute(text, gap)
+    moves = compute(text, gap, only=only)
     if not moves['boxes'] and not moves['frames']:
         print('nothing to close')
         open(args[1], 'w', encoding='utf-8').write(text)

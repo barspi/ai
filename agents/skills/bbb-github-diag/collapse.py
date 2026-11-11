@@ -230,7 +230,7 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
         if on is None:
             return None
         oy = p['pts'][0][1]
-        if on in COLL:
+        if on in new_coll:
             if center_pairs and abs(NEWY[n] - NEWY[on]) < .01:               # two collapsed boxes with the same top: through their centres
                 return NEWY[n] + HC / 2
             return oy + DY[n] if abs(DY[n] - DY[on]) < .01 else None
@@ -242,7 +242,7 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
         """New y of every arrow end on (box n, side L/R) for a box h tall: ({(k, e): y}, ok). ok: spacing and margins hold and every straight arrow keeps its height."""
         ends = [(k, e) for k, p in enumerate(PATH) for e, key in ((0, 's'), (1, 'e')) if p[key] == (n, side)]
         y = NEWY[n]
-        if n not in COLL:
+        if n not in new_coll:                                                   # not collapsed in this run: its arrows only move with it
             return {(k, e): PATH[k]['pts'][0 if e == 0 else -1][1] + DY[n] for k, e in ends}, True
         ends.sort(key=lambda ke: PATH[ke[0]]['pts'][0 if ke[1] == 0 else -1][1])
         cnt = len(ends)
@@ -266,7 +266,7 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
         ok = want_fixed and all(y + 8 - .01 <= v <= y + h - 8 + .01 for v in ys) and all(ys[i + 1] - ys[i] >= STEP - .01 for i in range(cnt - 1))
         return {ends[i]: ys[i] for i in range(cnt)}, ok
 
-    for n in COLL:
+    for n in new_coll:                      # a box collapsed by an earlier run keeps its height (fit_heights.py, move.py may have set it)
         h = HC_TWO if two_lines(lines[BOX[n]['a']:BOX[n]['b'] + 1]) else HC
         while h < 600 and not all(side_slots(n, side, h)[1] for side in 'LR'):
             h += 1
@@ -274,7 +274,7 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
 
     SLOT = {}
     for n in BOX:
-        changed = n in COLL or abs(DY[n]) > .01
+        changed = n in new_coll or abs(DY[n]) > .01
         if not changed:
             continue
         for side in 'LR':
@@ -294,11 +294,14 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
     def rebuild(k, p):
         pts, n = p['pts'], len(p['pts'])
         s_new, e_new = end_xy(p, k, 0), end_xy(p, k, 1)
-        if p['arc']:
-            if abs((s_new[1] - pts[0][1]) - (e_new[1] - pts[-1][1])) > .5:
-                log.append('NOTE arrow with a jump arc ends on boxes that moved differently: redraw it by hand near (%d,%d)' % pts[0])
+        if p['arc'] and abs((s_new[1] - pts[0][1]) - (e_new[1] - pts[-1][1])) < .01:      # both ends move alike: the arcs move with it
             dy = s_new[1] - pts[0][1]
             return re.sub(r'(-?[\d.]+),(-?[\d.]+)', lambda m: '%s,%s' % (m.group(1), fmt(float(m.group(2)) + dy)), p['d']), [(a, b + dy) for a, b in pts]
+        # otherwise the arcs are dropped (pts has none) and the polyline is rebuilt like any other; the caller redoes the jump arcs.
+        # Points in a straight run (where an arc was) are merged first, so a straight arrow is two points and gets an elbow below.
+        import route
+        pts = route.straight(pts)
+        n = len(pts)
         seg_h = [abs(pts[i][1] - pts[i + 1][1]) < .01 for i in range(n - 1)]
         ny = [None] * n
         ny[0], ny[-1] = s_new[1], e_new[1]
@@ -319,6 +322,9 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
                 ny[i] = pts[i][1] + ((s_new[1] - pts[0][1]) if near_start else (e_new[1] - pts[-1][1]))
         out = []
         for q in zip([a for a, _ in pts], ny):
+            if out and abs(q[0] - out[-1][0]) > .01 and abs(q[1] - out[-1][1]) > .01:      # never a slanted stretch: an elbow
+                xm = (q[0] + out[-1][0]) / 2
+                out += [(xm, out[-1][1]), (xm, q[1])]
             if not out or abs(q[0] - out[-1][0]) > .01 or abs(q[1] - out[-1][1]) > .01:
                 out.append(q)
         return None, out
@@ -443,7 +449,7 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
     for k, p in enumerate(PATH):
         if p['s'][0] is None or p['e'][0] is None:
             continue
-        if not any(n in COLL or abs(DY[n]) > .01 for n in (p['s'][0], p['e'][0])):
+        if not any(n in new_coll or abs(DY[n]) > .01 for n in (p['s'][0], p['e'][0])):
             continue
         d, newpts = rebuild(k, p)
         if d is None:

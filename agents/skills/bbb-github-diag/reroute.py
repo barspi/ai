@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Route again some arrows of a diagram, in the diagram as it is. Boxes and the other arrows do not move.
 
-usage: reroute.py IN.svg OUT.svg (A>B ...|--frame-leavers|--improve [N]) [--force]
+usage: reroute.py IN.svg OUT.svg (A>B ...|--frame-leavers|--in-frame WORDS|--improve [N]) [--force]
 
---improve [N] takes every drawn arrow, the most costly first (route.path_cost: steps, bends, crossings, frame borders, in the picture
+--in-frame WORDS takes every arrow whose two boxes lie inside the one dotted frame whose title contains WORDS (case is ignored; more
+than one such frame is an error). Use it after a frame was compacted, to route its inner arrows again. With --improve, only the
+arrows named (A>B, --in-frame, --frame-leavers) are tried, so the rest of the picture keeps its routes.
+--improve [N] takes every drawn arrow (or only the named ones), the most costly first (route.path_cost: steps, bends, crossings, frame borders, in the picture
 with the other arrows), and keeps a new path only when it costs less than the old one; N passes (default 2: an arrow that improved can
 free a channel for one tried before it). Use it after the routing rules change, or after boxes moved, to let every arrow take the
 routes that opened up. It never makes an arrow worse by that measure, and it never touches a pinned arrow.
@@ -31,6 +34,26 @@ def leaves_frame(text):
             continue
         fr = route.common_frame(sc, at[0], at[1])
         if fr and any(not (fr[0] - 1 <= x <= fr[0] + fr[2] + 1 and fr[1] - 1 <= y <= fr[1] + fr[3] + 1) for x, y in model.arrow_points(ln)):
+            out.append(at[:2])
+    return out
+
+
+def in_frame(text, words):
+    """(a, b) of every drawn arrow whose two boxes lie inside the dotted frame whose title contains `words`."""
+    import collapse
+    _, box, _, frames = collapse.parse(text)
+    hit = [f for f in frames if words.lower() in f['name'].lower()]
+    if len(hit) != 1:
+        sys.exit('--in-frame %r: %d frames have it in their title: %s' % (words, len(hit), '; '.join(f['name'][:60] for f in hit)))
+    f = hit[0]
+
+    def inside(n):
+        b = box.get(n)
+        return b and f['x'] <= b['x'] and b['x'] + b['w'] <= f['x'] + f['w'] and f['y'] <= b['y'] and b['y'] + b['h'] <= f['y'] + f['h']
+    out = []
+    for ln in text.split('\n'):
+        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+        if at and inside(at[0]) and inside(at[1]) and at[:2] not in out:
             out.append(at[:2])
     return out
 
@@ -109,7 +132,12 @@ def reroute(text, pairs, improve=False):
 
 
 def main():
-    argv, passes = sys.argv[1:], 0
+    argv, passes, words = sys.argv[1:], 0, None
+    if '--in-frame' in argv:
+        k = argv.index('--in-frame')
+        if k + 1 >= len(argv):
+            sys.exit(__doc__)
+        words = argv.pop(k + 1)
     if '--improve' in argv:
         k = argv.index('--improve')
         passes = 2
@@ -132,6 +160,9 @@ def main():
         return
     if '--frame-leavers' in sys.argv:
         pairs += [p for p in leaves_frame(text) if p not in pairs]
+    if words:
+        pairs += [p for p in in_frame(text, words) if p not in pairs]
+        print('%d arrows inside the frame "%s"' % (len(pairs), words))
     if not pairs and not passes:
         print('nothing to route again')
         open(out, 'w', encoding='utf-8').write(text)
@@ -142,7 +173,7 @@ def main():
         total0 = sum(costs(text).values())
         for _ in range(passes):
             cost = costs(res)
-            order = sorted(cost, key=lambda p: -cost[p])
+            order = sorted((p for p in cost if not pairs or p in pairs), key=lambda p: -cost[p])
             res, d, _ = reroute(res, order, improve=True)
             res, _, _ = hops.add_hops(res, marks=False)      # fresh arcs before the next pass reads the picture
             done += d

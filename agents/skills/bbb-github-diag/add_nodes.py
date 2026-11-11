@@ -62,8 +62,15 @@ def is_free(sc, r, frame=None):
     return True
 
 
-def place(sc, w, h, near, going_right, frame):
-    """Top-left corner for a new box: beside `near` (right of it when the arrow leaves it), the nearest free spot, scanning up and down."""
+def place(sc, w, h, near, going_right, frame, partners=()):
+    """Top-left corner for a new box. partners: the boxes it has arrows to (in the diagram). With two or more, every candidate column
+    (beside `near`, and every column of the frame) gives its nearest free spot above and below `near`'s top, and the spot with the least
+    total distance to all partners wins (box centres, Manhattan; ties: the earlier candidate). Never the first spot that is free: that
+    put a box with arrows to three boxes beside one of them and 900px from the others. With fewer partners: beside `near` (right of it
+    when the arrow leaves it), the nearest free spot, scanning up and down."""
+    rects = [sc.boxes[p] for p in partners if p in sc.boxes]
+    if len(rects) >= 2 and near in sc.boxes:
+        return _place_best(sc, w, h, near, going_right, frame, rects)
     if near in sc.boxes:
         nx, ny, nw, nh = sc.boxes[near]
         xs = [nx + nw + GAP_X, nx - w - GAP_X] if going_right else [nx - w - GAP_X, nx + nw + GAP_X]
@@ -83,6 +90,32 @@ def place(sc, w, h, near, going_right, frame):
                 if is_free(sc, (x, y, w, h), frame):
                     return x, y
     return None
+
+
+def _place_best(sc, w, h, near, going_right, frame, rects):
+    nx, ny, nw, nh = sc.boxes[near]
+    xs = [nx + nw + GAP_X, nx - w - GAP_X] if going_right else [nx - w - GAP_X, nx + nw + GAP_X]
+    xs += [nx + nw + 2 * GAP_X + w, nx]
+    if frame is not None:
+        xs += sorted({b[0] for b in sc.boxes.values() if frame[0] <= b[0] < frame[0] + frame[2] and frame[1] <= b[1] < frame[1] + frame[3]})
+    seen, cands = set(), []
+    for x in xs:
+        if round(x) in seen:
+            continue
+        seen.add(round(x))
+        for sign in (1, -1):                                   # the nearest free spot below, then above, the top of `near`
+            for k in range(0, 300):
+                y = ny + sign * k * STEP
+                if y < 190:
+                    break
+                if is_free(sc, (x, y, w, h), frame):
+                    cands.append((x, y))
+                    break
+
+    def cost(c):
+        cx, cy = c[0] + w / 2, c[1] + h / 2
+        return sum(abs(cx - (r[0] + r[2] / 2)) + abs(cy - (r[1] + r[3] / 2)) for r in rects)
+    return min(cands, key=cost) if cands else None
 
 
 def move_legend(lines, dx):
@@ -167,7 +200,8 @@ def main():
                     going_right = True
                 if a.get('from') == b['num'] and a.get('to') == near:
                     going_right = False
-            spot = place(sc, draw.BOX_W, h, near, going_right, fr)
+            partners = [a.get('to') if a.get('from') == b['num'] else a.get('from') for a in spec.get('arrows', []) if b['num'] in (a.get('from'), a.get('to'))]
+            spot = place(sc, draw.BOX_W, h, near, going_right, fr, partners)
             if spot is None and fr is not None:                       # no room inside the frame: below its last box, and the frame grows
                 members = [r for r in sc.boxes.values() if fr[0] <= r[0] < fr[0] + fr[2] and fr[1] <= r[1] < fr[1] + fr[3]]
                 spot = (members[0][0] if members else fr[0] + 60, max([m[1] + m[3] for m in members] + [fr[1] + 40]) + 28)
@@ -207,11 +241,10 @@ def main():
             if not ra or not rb:
                 problems.append('arrow #%s -> #%s names a box that is not in the diagram' % (a['from'], a['to']))
                 continue
-            pts = None
-            for sa, sb in route.sides_for(ra, rb):
-                pts = route.route(sc, a['from'], a['to'], sa, sb)
-                if pts:
-                    break
+            # the router picks the sides: it searches every pair at once (the same side twice too) and keeps the cheapest path. Never
+            # try side pairs in a fixed order and take the first that has a path: that took an 8-bend detour out of the far side of a
+            # box when the arrow could leave the near side and run down beside its column with 2 bends.
+            pts = route.route(sc, a['from'], a['to'], '*', '*')
             if not pts:
                 problems.append('NO PATH for #%s %s #%s: kept in the metadata ("nopath"); name it in the box note, and say what would have to move' % (a['from'], kind, a['to']))
                 nopath.append((a['from'], a['to'], kind))
@@ -264,6 +297,17 @@ def main():
                    lambda q: '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (nW, nH, q.group(1)), s, count=1)
         print('canvas %dx%d -> %dx%d' % (W, H, nW, nH))
     s, hops_added, hops_removed = hops.add_hops(s)           # the jump arcs of the whole diagram, recomputed
+    # second pass: each new arrow was routed before the boxes and arrows after it in the spec were placed, so a cheaper path may
+    # exist now (route.path_cost); reroute.reroute keeps a new path only when it costs less
+    import reroute
+    s, better, _ = reroute.reroute(s, sorted(drawn), improve=True)
+    if better:
+        s, _, _ = hops.add_hops(s)
+        s, _, _ = model.relabel(s, hop_pad=20)
+        s, _, nolab = model.label_missing(s, [(d[0], d[1]) for d in better])
+        for a_, b_, bends, _, old_bends in better:
+            print('routed again: #%d -> #%d, %d bends (was %d)' % (a_, b_, bends, old_bends))
+        problems += ['#%d %s #%d has no label: no place on it or beside it' % x for x in nolab]
     meta = svgmeta.read(s)
     if meta is None:
         problems.append('%s has no metadata block (drawn before svgmeta.py): run svgmeta.py migrate on it first' % src)

@@ -377,7 +377,8 @@ def unjog(pts, ra, rb, sa, sb, short=2 * G):
 
 
 def sides_for(ra, rb):
-    """Sides to try for an arrow from box ra to box rb: the natural pair first, then the others."""
+    """The natural pair of sides for an arrow from box ra to box rb first, then the others. route(sc, a, b, '*', '*') uses only the
+    first, as the preferred pair; do not loop over this list and take the first pair with a path: that is not the cheapest path."""
     if rb[0] >= ra[0] + ra[2]:
         first = ('R', 'L')
     elif rb[0] + rb[2] <= ra[0]:
@@ -645,6 +646,13 @@ def selftest():
     check('a short arrow has its label beside its shaft', place_label(s8, up, 'follow-up', strict=False) is None and bs is not None
           and bs[:2] == (50, 224.5) and bs[2] > 0 and bs[3] == 0, str(bs))      # the shaft runs 238 to 211 (the head is 11px)
     check('a long arrow never has its label beside its shaft', place_label_beside(Sc({1: A, 2: B}), [(100, 230), (800, 230)], 'led to') is None)
+    # 9. a box two places down the same column: the arrow leaves one side and runs down beside the column into the SAME side (2 bends).
+    #    The first pair of sides_for() that has a path (bottom to top is blocked, so right to left) is a detour round the far side.
+    col = Sc({1: (0, 0, 200, 60), 3: (0, 120, 200, 60), 2: (0, 240, 200, 60)})
+    p = route(col, 1, 2, '*', '*')
+    sp = straight(p or [(0, 0)])
+    check('an arrow down its own column leaves and enters the same side with 2 bends', p is not None and len(sp) == 4
+          and abs(sp[0][0] - sp[-1][0]) < .01, 'path %s' % (p,))
     print('route self-test %s' % ('OK' if not bad else 'FAILED: %d' % len(bad)))
     if bad:
         sys.exit(1)
