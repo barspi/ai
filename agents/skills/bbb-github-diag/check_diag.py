@@ -418,8 +418,8 @@ for _pop in (False, True):
 import reroute                                # an arrow between two boxes of one frame stays inside it (route.py; an almost hard rule)
 for _a, _b in reroute.leaves_frame(new):
     fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d (or move a box)' % (_a, _b, _a, _b))
-for _f in __import__('rules').far_low(new):      # a far low arrow from closed work is not drawn (rules.far_low)
-    print('WARN far low arrow #%d %s #%d: %s; rules.py prune drops it into "nopath"' % _f)
+for _a, _b, _k, _why in __import__('rules').far_low(new):      # a far low arrow from closed work is not drawn (rules.far_low)
+    print('WARN far low arrow #%d %s #%d: %s; rules.py prune drops it into "nopath"' % (_a, _k, _b, _why))
 import rules                                  # arrows a person should look at again: asked, never failed (rules.py review)
 for _f in rules.review(new):
     print('ASK %s: %s' % (_f['check'], _f['message']))

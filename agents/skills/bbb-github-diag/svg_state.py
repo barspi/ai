@@ -21,7 +21,7 @@ room_below() allows, else it is reported. Every link's tooltip gets the box's cu
 """
 import re
 
-import box_header
+import box_header, svgmeta
 
 # state ->(fill, stroke, pill colour, pill width, dashed); the same table as the skill's palette
 STY = {
@@ -278,6 +278,14 @@ def reblock(blk, box_open, blocker_open, repo, live):
     return (out, dy, changed) if changed else (blk, 0, [])
 
 
+def border(blk, color):
+    """The box's border (and an umbrella's inner frame) in this colour."""
+    blk = re.sub(r'(<rect x="[\d.]+" y="[\d.]+" width="260" height="[\d.]+" rx="10" fill="#[0-9a-f]{6}" stroke=")#[0-9a-f]{6}',
+                 lambda m: m.group(1) + color, blk, count=1)
+    return re.sub(r'(<rect x="[\d.]+" y="[\d.]+" width="252" height="[\d.]+" rx="7" fill="none" stroke=")#[0-9a-f]{6}',
+                  lambda m: m.group(1) + color, blk, count=1)
+
+
 def grow(blk, dy):
     return re.sub(r'(<rect x="[\d.]+" y="[\d.]+" width="(?:260|252)(?:\.0)?" height=")([\d.]+)(" rx="(?:10|7)")',
                   lambda m: m.group(1) + fmt(float(m.group(2)) + dy) + m.group(3), blk, count=2)
@@ -324,6 +332,7 @@ def make_room(svg, num, more, log, report):
 def _apply(svg, live, repo, log, report, pop, bands=None):
     bl = blocks(svg, pop)
     stated = blocks_stated(svg)
+    marks = (svgmeta.read(svg) or {}).get('label_marks') or []        # per chart: [{"label", "letter", "fill"}] (box_header.set_mark)
     room_below_ = (lambda *a: True) if pop else room_below       # a pop-up grows over the picture: nothing to push
     for num in sorted(bl):
         l = live.get(num)
@@ -332,6 +341,10 @@ def _apply(svg, live, repo, log, report, pop, bands=None):
         a, b = bl[num]
         blk = svg[a:b]
         before = blk
+        if '<rect class="mark"' in blk:                    # a mark-coloured border goes back to the state's own before any restyle
+            hv = (re.findall(r'>(open|closed|merged|waiting|draft)<', blk) or ['?'])[-1]
+            if hv in STY:
+                blk = border(blk, STY[hv][1])
         compact = (not pop) and 'data-collapsed="1"' in blk       # the small form has no date line, merge line or notes
         tag = '#%d%s' % (num, ' (pop-up)' if pop else '')
         kind = l['kind']
@@ -441,6 +454,18 @@ def _apply(svg, live, repo, log, report, pop, bands=None):
             if old_label is not None and old_label != esc_label:
                 blk = new_blk
                 log.append('%s: assignee %s -> %s' % (tag, old_label, label))
+        # label mark: a GitHub label the chart's metadata lists in "label_marks" (box_header.set_mark); the first listed wins
+        if kind == 'ISSUE' and 'labels' in l:
+            mk = next((m for m in marks if m.get('label') in l['labels']), None)
+            blk, changed = box_header.set_mark(blk, mk)
+            if changed:
+                log.append('%s: label mark %s' % (tag, ('"%s" (%s)' % (mk['letter'], mk['label'])) if mk else 'removed'))
+            if mk and mk.get('border') and want == 'open':              # an open issue with this label: border in the mark's colour
+                nb = border(blk, mk['fill'])
+                if nb != blk:
+                    blk = nb
+                    if border(before, mk['fill']) != before:            # new, not the same border put back after the restyle step
+                        log.append('%s: border %s (%s)' % (tag, mk['fill'], mk['label']))
         # the first line, on EVERY box: a login (or a wider pill) may no longer end before the pill. Only that is fixed: a header on
         # two lines that would fit on one again stays (harmless; the box and its pop-up keep the same form)
         fit, n0, n1 = box_header.refit(blk)

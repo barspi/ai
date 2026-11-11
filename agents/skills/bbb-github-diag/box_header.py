@@ -8,6 +8,10 @@ tag or name pushes the rest and nothing has to be moved by hand:
   umbrella     (umbrella emoji) ISSUE #100 -> alice      the emoji U+2602 U+FE0F is 16.9px, which is 25% over the 13.5px tag
   pull request PR #122 by alice                   no arrow
   not assigned the login is `?`
+  label mark   (mark) ISSUE #130 -> alice        a GitHub label the chart's metadata lists in "label_marks" (e.g. {"label": "x",
+               "letter": "x", "fill": "#2e7d32"}): a 13px round pill with a white letter, drawn before the tag (and before the
+               umbrella emoji). The tag sits in GAP_OPEN, a tspan with dx (honoured by browsers and rsvg alike), to make room;
+               the pill is a `<rect class="mark">` and a `<text class="mark">` just before the kind text. svg_state.py adds and removes it at each refresh.
 
   <text class="kind" x=".." y=".." style="fill:#..">ISSUE <a>#120</a> <tspan ARROW>&#8594;</tspan> <tspan NAME>alice</tspan></text>
 
@@ -26,6 +30,16 @@ import html, re, sys
 from fonts import load
 
 EMOJI = '☂️'
+MARK_D = 19.5                      # the mark's diameter; its letter is MARK_D - 4.5 px
+MARK_DX = MARK_D + 5
+GAP_OPEN = '<tspan dx="%g">' % MARK_DX   # room for a label mark: the tag (and umbrella) shifted right inside this tspan
+GAP_RE = re.compile(r'<tspan dx="([\d.]+)">')   # any size: a chart drawn with an older MARK_D is still read
+
+
+def gap_of(inner):
+    """The GAP_OPEN tspan a kind text starts with (any dx), or ''."""
+    m = GAP_RE.match(inner)
+    return m.group(0) if m else ''
 ARROW = '→'
 KIND_PX, KIND_SPACING = 13.5, 0.3
 UMBRELLA_PX = 16.9                 # 25% over the tag
@@ -44,9 +58,51 @@ OLD = re.compile(
     r'(?:\n<text class="meta" x="([\d.]+)" y="([\d.]+)" style="fill:#[0-9a-f]{6};font-size:([\d.]+)px;font-weight:600">([^<]*)</text>)?', re.S)
 
 
-def tag(kind, umbrella=False):
-    """`ISSUE `, `PR `, or the umbrella emoji and `ISSUE ` (an umbrella is an ISSUE)."""
-    return (UMB_OPEN + ' ISSUE ') if umbrella else kind + ' '
+def tag(kind, umbrella=False, gap=False):
+    """`ISSUE `, `PR `, or the umbrella emoji and `ISSUE ` (an umbrella is an ISSUE); shifted right in GAP_OPEN when the box has a label mark."""
+    t = (UMB_OPEN + ' ISSUE ') if umbrella else kind + ' '
+    return (GAP_OPEN + t.rstrip(' ') + '</tspan> ') if gap else t      # the space outside: a renderer drops it at a tspan's end
+
+
+MARK = re.compile(r'<rect class="mark"[^>]*/>\n<text class="mark"[^>]*>.*?</text>\n')
+
+
+def mark(x, y, fill, letter, label=''):
+    """The label mark of a kind text at (x, y): a round pill and its white letter, centred in the room GAP_OPEN leaves. The label
+    name is a <title> of the letter: a tooltip, and part of the box's text, so the find box (find-box.js) matches it."""
+    x, y, r = float(x), float(y), MARK_D / 2
+    cy = y - 5                                                    # the middle of the 13.5px capitals
+    title = '<title>label: %s</title>' % html.escape(label) if label else ''
+    return ('<rect class="mark" x="%g" y="%g" width="%g" height="%g" rx="%g" fill="%s"/>'
+            '\n<text class="mark" x="%g" y="%g" text-anchor="middle" style="fill:#ffffff;font:700 %gpx Georgia,serif">%s%s</text>\n'
+            % (round(x, 1), round(cy - r, 2), MARK_D, MARK_D, r, fill, round(x + r, 2), round(cy + (MARK_D - 4.5) * 0.35, 1),
+               MARK_D - 4.5, letter, title))
+
+
+def set_mark(markup, want):
+    """Put the wanted mark (a dict with letter and fill, or None) on the box's first line, or take it off. Returns (markup, changed)."""
+    m = KIND_TEXT.search(markup)
+    if not m:
+        return markup, False
+    x, y, inner = m.group(1), m.group(2), m.group(4)
+    g = gap_of(inner)
+    has, old = bool(g), MARK.search(markup, 0, m.start() + 1)
+    new = mark(x, y, want['fill'], want['letter'], want.get('label', '')) if want else ''
+    if has == bool(want) and (old.group(0) if old else '') == new and (not g or g == GAP_OPEN):
+        return markup, False
+    body = GAP_OPEN + inner[len(g):] if want and has else inner
+    if want and not has:                                          # the tag (up to the number link) goes into the shifted tspan
+        i = inner.index('<a ')
+        body = GAP_OPEN + inner[:i].rstrip(' ') + '</tspan> ' + inner[i:]
+    elif has and not want:
+        core = inner[len(g):]
+        j = core.rindex('</tspan>', 0, core.index('<a '))
+        body = core[:j] + core[j + len('</tspan>'):]
+    kind = markup[m.start():m.start(4)] + body + markup[m.end(4):m.end()]
+    pre = markup[:m.start()]
+    if old:
+        pre = pre[:old.start()] + pre[old.end():]
+    return pre + new + kind + markup[m.end():], True
 
 
 def _tail(who, pr, with_arrow=True):
@@ -59,7 +115,8 @@ def _tail(who, pr, with_arrow=True):
 def text_width(inner):
     """Estimated width in px of the inner markup of a kind text (links, tspans with their own size and spacing)."""
     inner = re.sub(r'<title>.*?</title>', '', inner, flags=re.S)
-    w = 0.0
+    g = GAP_RE.match(inner)
+    w = float(g.group(1)) if g else 0.0
     for m in re.finditer(r'<tspan style="([^"]*)">(.*?)</tspan>|([^<]+)|<[^>]+>', inner, re.S):
         style, txt = (m.group(1), m.group(2)) if m.group(1) is not None else ('', m.group(3) or '')
         txt = html.unescape(re.sub(r'<[^>]+>', '', txt))
@@ -74,12 +131,12 @@ def text_width(inner):
     return w
 
 
-def header(x, y, color, kind, link, who, umbrella=False, limit=None):
+def header(x, y, color, kind, link, who, umbrella=False, limit=None, gap=False):
     """Markup of the first line. `link` is the finished `<a>` markup; `who` is the XML-escaped login text (issue) or `by login` (pull
     request), None for a pull request with no author. `x`, `y` are the text origin (box x + 14, box y + 28). `limit` is the x the line
     must end before. Returns (markup, two_lines)."""
     pr = kind == 'PR'
-    first = '<text class="kind" x="%s" y="%s" style="fill:%s">%s%s' % (x, y, color, tag(kind, umbrella), link)
+    first = '<text class="kind" x="%s" y="%s" style="fill:%s">%s%s' % (x, y, color, tag(kind, umbrella, gap), link)
     one = first + (' ' + _tail(who, pr) if who is not None else '') + '</text>'
     if who is None or limit is None or float(x) + text_width(one[one.index('>', one.index('style=')) + 1:-7]) <= limit:
         return one, False
@@ -93,6 +150,9 @@ def kind_of(markup):
     if not m:
         return None
     s = m.group(4)
+    g = gap_of(s)
+    if g:                                                         # a marked box: the tag ends its shifted tspan ("ISSUE</tspan> ")
+        s = re.sub(r'(ISSUE|PR)</tspan> ', r'\1 ', s[len(g):], count=1)
     if s.startswith(UMB_OPEN) or s.startswith('UMBRELLA '):
         return 'UMBRELLA'
     return 'PR' if s.startswith('PR ') else 'ISSUE' if s.startswith('ISSUE ') else None
@@ -135,7 +195,8 @@ def refit(markup):
         end = t.end()
     kind = kind_of(markup)
     umb = kind == 'UMBRELLA'
-    new, two = header(x, y, color, 'ISSUE' if umb else kind, link.group(0), who, umb, _limit(markup[end:end + 1800], float(x)))
+    new, two = header(x, y, color, 'ISSUE' if umb else kind, link.group(0), who, umb, _limit(markup[end:end + 1800], float(x)),
+                      bool(gap_of(inner)))
     return markup[:m.start()] + new + markup[end:], before, 2 if two else 1
 
 

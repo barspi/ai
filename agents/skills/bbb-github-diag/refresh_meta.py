@@ -31,7 +31,7 @@ import box_header, svgmeta
 FIELDS = """
   __typename
   ... on Issue { title state stateReason createdAt closedAt updatedAt author{login} comments{totalCount}
-                 assignees(first:10){nodes{login}}
+                 assignees(first:10){nodes{login}} labels(first:20){nodes{name}}
                  parent{number} subIssues(first:50){nodes{number}} blockedBy(first:20){nodes{number}}
                  blocking(first:20){nodes{number}} closedByPullRequestsReferences(first:10){nodes{number}}
                  timelineItems(itemTypes:[CLOSED_EVENT], last:1){nodes{... on ClosedEvent{closer{__typename
@@ -151,6 +151,7 @@ def fetch_records(owner, name, nums, run_start=None):
             'state': 'merged' if pr and d['merged'] else 'draft' if pr and d['state'] == 'OPEN' and d['isDraft'] else d['state'].lower(),
             'opener': (d['author'] or {}).get('login', '?'),
             'assignees': [] if pr else [a['login'] for a in d['assignees']['nodes']],
+            'labels': [] if pr else [x['name'] for x in (d.get('labels') or {}).get('nodes', [])],
             'comments': d['comments']['totalCount'], 'reviews': d['reviews']['totalCount'] if pr else 0,
             'mergeSha': d['mergeCommit']['oid'][:9] if pr and d.get('mergeCommit') else '',
             'mergedBy': (d.get('mergedBy') or {}).get('login', '') if pr else '',
