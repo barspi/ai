@@ -39,6 +39,7 @@ FIELDS = """
                  dup:timelineItems(itemTypes:[MARKED_AS_DUPLICATE_EVENT], last:1){nodes{... on MarkedAsDuplicateEvent{
                    canonical{... on Issue{number} ... on PullRequest{number}}}}} }
   ... on PullRequest { title state isDraft merged mergedAt createdAt closedAt updatedAt author{login} comments{totalCount}
+                 labels(first:20){nodes{name}}
                  reviews{totalCount} mergeCommit{oid} mergedBy{login} closingIssuesReferences(first:20){nodes{number}}
                  commits(first:50){nodes{commit{authors(first:5){nodes{name user{login}}}}}} }
 """
@@ -151,7 +152,7 @@ def fetch_records(owner, name, nums, run_start=None):
             'state': 'merged' if pr and d['merged'] else 'draft' if pr and d['state'] == 'OPEN' and d['isDraft'] else d['state'].lower(),
             'opener': (d['author'] or {}).get('login', '?'),
             'assignees': [] if pr else [a['login'] for a in d['assignees']['nodes']],
-            'labels': [] if pr else [x['name'] for x in (d.get('labels') or {}).get('nodes', [])],
+            'labels': [x['name'] for x in (d.get('labels') or {}).get('nodes', [])],      # searchable in the find box (find-box.js)
             'comments': d['comments']['totalCount'], 'reviews': d['reviews']['totalCount'] if pr else 0,
             'mergeSha': d['mergeCommit']['oid'][:9] if pr and d.get('mergeCommit') else '',
             'mergedBy': (d.get('mergedBy') or {}).get('login', '') if pr else '',

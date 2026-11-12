@@ -1,10 +1,31 @@
 /* Find box for the lineage diagram: type a number (120, #120) to jump to that issue or pull request,
-   or any text (a username, a title word, merged) to light up every matching box. */
+   or any text (a username, a title word, merged) to light up every matching box.
+   Query: words separated by spaces must all be in the box (AND); `&&` is the same AND; `||` is OR and binds looser
+   (a b || c && !d  =  (a AND b) OR (c AND NOT d)); `!word` (or `! word`) is NOT. No parentheses. `#123` in an expression is
+   box number 123 exactly; a query of digits alone is a number (exact, else the numbers that start with it).
+   The `regex` box: the query is one JavaScript regular expression (case-insensitive), at the reader's risk.
+   A box's text is, in document order: the first line (tag, number, assignee or author), pill word, title, date line, notes (no hover
+   tooltips, no label mark); then
+   its pop-up's text (a collapsed box); then `label:NAME` for each GitHub label in its data-github attribute (never drawn). */
 (function () {
   var SVGNS = 'http://www.w3.org/2000/svg', HTMLNS = 'http://www.w3.org/1999/xhtml';
   var svg = document.documentElement;
+  function labelsOf(g) {   /* the GitHub labels refresh_meta.py stores on the box: searchable, not drawn */
+    try { return (JSON.parse(g.getAttribute('data-github') || '{}').labels || []).map(function (l) { return ' label:' + l; }).join(''); }
+    catch (e) { return ''; }
+  }
+  function textOf(g) {      /* the text drawn in the box, its parts apart: no <title> (a link's tooltip holds the linked item's title)
+                               and no label mark (its label is in labelsOf) */
+    if (!g) return '';
+    var c = g.cloneNode(true);
+    [].slice.call(c.querySelectorAll('title, .mark')).forEach(function (n) { n.parentNode.removeChild(n); });
+    return [].slice.call(c.childNodes).map(function (n) { return n.textContent || ''; }).join(' ');
+  }
   var info = [].slice.call(document.querySelectorAll('g[id]')).filter(function (g) { return /^n\d+$/.test(g.id); })
-    .map(function (g) { return { g: g, num: g.id.slice(1), text: ((g.textContent || '') + ' ' + ((document.getElementById('pop' + g.id.slice(1)) || {}).textContent || '')).replace(/\s+/g, ' ').toLowerCase() }; });   /* a collapsed box is also searched by the text of its pop-up */
+    .map(function (g) {
+      var raw = (textOf(g) + ' ' + textOf(document.getElementById('pop' + g.id.slice(1))) + labelsOf(g)).replace(/\s+/g, ' ').trim();
+      return { g: g, num: g.id.slice(1), raw: raw, text: raw.toLowerCase() };   /* a collapsed box is also searched by the text of its pop-up */
+    });
   if (!info.length) return;
 
   var css = document.createElementNS(SVGNS, 'style');
@@ -59,11 +80,21 @@
     return b;
   }
   var prev = btn('◀', 'previous match (Shift+Enter)'), next = btn('▶', 'next match (Enter)'), clear = btn('✕', 'clear (Esc)');
+  var row2 = document.createElementNS(HTMLNS, 'div');
+  row2.setAttribute('style', 'display:flex;justify-content:space-between;align-items:center;margin-top:11px;font-size:11px;color:#cfe0f5');   /* 4px + half a 13px row */
   var note = document.createElementNS(HTMLNS, 'div');
-  note.setAttribute('style', 'margin-top:11px;font-size:11px;color:#cfe0f5');   /* 4px + half a 13px row */
+  note.setAttribute('style', 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
   note.textContent = 'press / to search';
+  var reLabel = document.createElementNS(HTMLNS, 'label');
+  reLabel.setAttribute('style', 'display:flex;align-items:center;gap:3px;cursor:pointer;flex:none;margin-left:8px');
+  reLabel.setAttribute('title', 'the query is one regular expression (case-insensitive); Esc twice turns it off');
+  var reBox = document.createElementNS(HTMLNS, 'input');
+  reBox.setAttribute('type', 'checkbox');
+  reBox.setAttribute('style', 'margin:0;cursor:pointer');
+  reLabel.appendChild(reBox); reLabel.appendChild(document.createTextNode('regex'));
+  row2.appendChild(note); row2.appendChild(reLabel);
   row.appendChild(input); row.appendChild(prev); row.appendChild(next); row.appendChild(clear);
-  box.appendChild(row); box.appendChild(note); host.appendChild(box);
+  box.appendChild(row); box.appendChild(row2); host.appendChild(box);
   var hover = false;
   function shade() { box.style.opacity = (hover || document.activeElement === input) ? '1' : '.75'; }
   box.addEventListener('mouseenter', function () { hover = true; shade(); });
@@ -195,15 +226,40 @@
     info.forEach(function (i) { i.g.classList.remove('hit'); i.g.classList.remove('cur'); });
     hits = []; cur = 0;
   }
+  /* The query as OR terms, each a list of AND factors {t, neg, num}. Empty pieces (a half-typed `a ||`, a lone `!`) are dropped. */
+  function parse(q) {
+    return q.toLowerCase().split('||').map(function (term) {
+      var out = [], neg = false;
+      term.split('&&').join(' ').split(/\s+/).forEach(function (w) {
+        while (w.charAt(0) === '!') { neg = !neg; w = w.slice(1); }
+        if (!w) return;                                           /* `! word`: the NOT waits for the next word */
+        var num = /^#\d+$/.test(w);
+        out.push({ t: num ? w.slice(1) : w, neg: neg, num: num });
+        neg = false;
+      });
+      return out;
+    }).filter(function (f) { return f.length; });
+  }
+  /* null: nothing to search (empty, or only operators); {bad: message}: a regex that does not compile; else the matching boxes. */
   function find(q) {
-    q = q.trim().toLowerCase().replace(/^#/, '');
-    if (!q) return [];
-    if (/^\d+$/.test(q)) {
-      var exact = info.filter(function (i) { return i.num === q; });
-      return exact.length ? exact : info.filter(function (i) { return i.num.indexOf(q) === 0; });
+    if (reBox.checked) {
+      if (!q.trim()) return null;
+      var rx;
+      try { rx = new RegExp(q, 'i'); } catch (e) { return { bad: e.message }; }
+      return info.filter(function (i) { return rx.test(i.raw); });
     }
-    var toks = q.split(/\s+/);
-    return info.filter(function (i) { return toks.every(function (t) { return i.text.indexOf(t) >= 0; }); });
+    var d = q.trim().toLowerCase().replace(/^#/, '');
+    if (/^\d+$/.test(d)) {
+      var exact = info.filter(function (i) { return i.num === d; });
+      return exact.length ? exact : info.filter(function (i) { return i.num.indexOf(d) === 0; });
+    }
+    var terms = parse(q);
+    if (!terms.length) return null;
+    return info.filter(function (i) {
+      return terms.some(function (fs) {
+        return fs.every(function (f) { return (f.num ? i.num === f.t : i.text.indexOf(f.t) >= 0) !== f.neg; });
+      });
+    });
   }
   function show(jump) {
     info.forEach(function (i) { i.g.classList.remove('cur'); });
@@ -224,9 +280,11 @@
   }
   function run(q, jump) {
     reset();
-    hits = find(q);
-    paint(!q.trim() ? 'empty' : hits.length ? 'hit' : 'miss');
-    if (!q.trim()) { note.textContent = 'press / to search'; return; }
+    var r = find(q);
+    hits = (r && !r.bad) ? r : [];
+    paint(!r ? 'empty' : hits.length ? 'hit' : 'miss');
+    if (!r) { note.textContent = reBox.checked ? 'regex: type a pattern' : 'press / to search'; return; }
+    if (r.bad) { note.textContent = 'bad regex: ' + r.bad; note.title = r.bad; return; }
     if (!hits.length) { note.textContent = 'no match'; return; }
     svg.classList.add('q-on');
     hits.forEach(function (i) { i.g.classList.add('hit'); });
@@ -237,16 +295,21 @@
   input.addEventListener('input', function () { run(input.value, true); });
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-    else if (e.key === 'Escape') { input.value = ''; run('', false); input.blur(); }
+    else if (e.key === 'Escape') { escape(); }
     e.stopPropagation();
   });
+  reBox.addEventListener('change', function () { run(input.value, true); });
   prev.addEventListener('click', function () { step(-1); });
   next.addEventListener('click', function () { step(1); });
   clear.addEventListener('click', function () { input.value = ''; run('', false); });
-  function clearAll() { input.value = ''; run('', false); input.blur(); }
+  function clearAll() { input.value = ''; run('', false); input.blur(); }   /* the regex box stays as it is */
+  function escape() {                     /* Esc clears; a second Esc, on an empty field, also turns the regex box off */
+    if (!input.value.trim() && reBox.checked) reBox.checked = false;
+    clearAll();
+  }
   document.addEventListener('keydown', function (e) {
     if (e.key === '/' && document.activeElement !== input) { e.preventDefault(); input.focus(); }
-    else if (e.key === 'Escape') { clearAll(); }
+    else if (e.key === 'Escape') { escape(); }
   });
   document.addEventListener('dblclick', function (e) {
     if (box.contains(e.target)) return;
