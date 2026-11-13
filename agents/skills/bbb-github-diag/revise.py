@@ -149,7 +149,11 @@ def main():
     else:
         done.append('%s exists: continuing on it' % o.new)
     text = open(o.new, encoding='utf-8').read()
-    repo = o.repo or re.search(r'https://github\.com/([\w.-]+/[\w.-]+)/(?:issues|pull)/\d+', text).group(1)
+    link = re.search(r'https://github\.com/([\w.-]+/[\w.-]+)/(?:issues|pull)/\d+', text)
+    if not (o.repo or link):
+        sys.exit('%s holds no GitHub issue or PR link: give the repository with --repo OWNER/NAME' % o.new)
+    repo = o.repo or link.group(1)
+    owner, name = repo.split('/')
 
     r = run(log, 'refresh_meta.py', repo, o.new, '--apply', *(['--discover'] if o.discover else []))
     if r.returncode:
@@ -163,8 +167,8 @@ def main():
     added = []
     if adds:
         import refresh_meta, svgmeta
-        live, _ = refresh_meta.fetch_records(*repo.split('/'), adds)
-        texts = refresh_meta.fetch_texts(*repo.split('/'), [n for n in adds if not live.get(n, {}).get('missing')])
+        live, _ = refresh_meta.fetch_records(owner, name, adds)
+        texts = refresh_meta.fetch_texts(owner, name, [n for n in adds if not live.get(n, {}).get('missing')])
         kinds = {b: r['github'].get('kind') for b, r in svgmeta.boxes(text).items() if r.get('github')}
         spec, n_, notes = spec_for(repo, live, adds, boxes, answers, texts, kinds)
         need += n_

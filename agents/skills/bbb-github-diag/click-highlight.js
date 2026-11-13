@@ -3,6 +3,7 @@
      and the two boxes it joins light up like matches of the find box. Nothing fades.
    - Click a box (or its open pop-up): the box, every arrow that starts or ends on it, and the box at the other end of each one light
      up; everything else fades. The box is marked like the current match of the find box, its neighbours like the other matches.
+   - A find-box search calls lineageHighlight.boxes(matches): every arrow that starts or ends on a match lights up as above.
    - Escape, or a click on the background, clears it. A click on a link inside a box follows the link and changes nothing. */
 (function () {
   var SVGNS = 'http://www.w3.org/2000/svg';
@@ -24,7 +25,8 @@
     'g[id^="n"].c-hit{opacity:1;filter:drop-shadow(0 0 7px #ff7a00)}' +
     'g[id^="n"].c-hit>rect:first-child{stroke:#ff7a00;stroke-width:5}' +
     'g[id^="n"].c-cur>rect:first-child{stroke:#e6007a;stroke-width:6}' +
-    '.c-fade path[marker-end]:not(.c-arr),.c-fade .c-lab:not(.c-on),.c-fade .xmark:not(.c-on){opacity:.15}';
+    '.c-fade path[marker-end]:not(.c-arr),.c-fade .c-lab:not(.c-on),.c-fade .xmark:not(.c-on){opacity:.15}' +
+    '.q-on path[marker-end].c-arr{opacity:1}';                          /* an arrow of a find-box match stays bright (find-box.js dims the rest) */
   root.insertBefore(css, root.firstChild);
 
   function pts(d) {
@@ -114,6 +116,12 @@
     clear(); light(a);
     [a.from, a.to].forEach(function (n) { var g = box(n); if (g && litBoxes.indexOf(g) < 0) { g.classList.add('c-hit'); litBoxes.push(g); } });
   }
+  function showBoxes(ns) {                                              /* the find box's matches: every arrow on one of them lights up */
+    clear();                                                            /* the boxes themselves are marked by find-box.js */
+    var set = {};
+    ns.forEach(function (n) { set[String(n)] = 1; });
+    A.forEach(function (a) { if (set[a.from] || set[a.to]) light(a); });
+  }
   function showBox(n) {
     clear();
     var g = box(n);
@@ -145,6 +153,7 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clear(); });
   window.lineageHighlight = { arrow: function (f, t) { var a = A.filter(function (x) { return x.from == f && x.to == t; })[0]; if (a) showArrow(a); return !!a; },
                               box: function (n) { showBox(String(n)); return litBoxes.map(function (g) { return g.id; }); },
+                              boxes: function (ns) { showBoxes(ns); return lit.map(function (a) { return a.from + '>' + a.to; }); },
                               clear: clear,
                               unlabeled: function () { return A.filter(function (a) { return !a.labs.length; }).map(function (a) { return a.from + '>' + a.to; }); } };
 })();

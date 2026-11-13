@@ -185,12 +185,17 @@ def main():
     res, _, _ = hops.add_hops(res)
     res, _, bad = model.relabel(res, hop_pad=20)
     res, _, nolab = model.label_missing(res, [(d[0], d[1]) for d in done])   # a label left off before the arcs were drawn
-    bad += [(0, 0, '#%d %s #%d has no label: no place on it or beside it' % x) for x in nolab]
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
         sys.exit(1)
+    want, got = model.count_arrows(text), model.count_arrows(res)       # a failed arrow keeps its old path: none may go or come
+    if got != want:
+        print('REFUSED: %d arrows after, %d before. Nothing written.' % (got, want))
+        sys.exit(1)
     open(out, 'w', encoding='utf-8').write(res)
+    for x in nolab:
+        print('PROBLEM', model.no_label(x))
     for a, b, bends, left, old_bends in done:
         print('#%d -> #%d: %d bends (was %d)%s' % (a, b, bends, old_bends, ' (no path inside their frame: it leaves it)' if left else ''))
     if passes:                                             # what the user should look at: the arrows that took more bends

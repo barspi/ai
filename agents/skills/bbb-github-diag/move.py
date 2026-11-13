@@ -161,8 +161,11 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
         sc.arrows.append(list(pts))
         lab = route.place_label_any(sc, pts, kind)
         if lab:
-            k = lab_at if lab_at is not None else i
-            lines[k] = '\n'.join(draw.label(kind, lab[0], lab[1], lab[2]))
+            label = '\n'.join(draw.label(kind, lab[0], lab[1], lab[2]))
+            if lab_at is not None:                        # the slot of its old label
+                lines[lab_at] = label
+            else:                                         # it had none: the label goes after the path; writing it over line i lost the arrow
+                lines[i] += '\n' + label
         routed.append((a, b, len(pts) - 2, bool(sc.left_frame)))
     text = '\n'.join(l for l in '\n'.join(lines).split('\n') if l != GONE)
     if failed:
@@ -205,9 +208,9 @@ def main():
     _, box, _, _ = collapse.parse(text)
     moves = {}
     for m in args[2:]:
-        n, xy = m.split('@')
+        ns, xy = m.split('@')
         sx, sy = xy.split(',')
-        n = int(n.lstrip('#'))
+        n = int(ns.lstrip('#'))
         moves[n] = (place(box[n]['x'], sx), place(box[n]['y'], sy))
     before = model.repair(text, count_only=True)[1]
     res, routed, failed, where = move(text, moves, grows, extra, sides, keep_out)
@@ -217,6 +220,10 @@ def main():
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
+        sys.exit(1)
+    want, got = model.count_arrows(text) - len(failed), model.count_arrows(res)   # a failed arrow is left out (nopath); no other may go
+    if got != want:
+        print('REFUSED: %d arrows after, %d expected (%d before, %d left out). Nothing written.' % (got, want, want + len(failed), len(failed)))
         sys.exit(1)
     open(out, 'w', encoding='utf-8').write(res)
     for n, (x, y) in moves.items():
@@ -229,8 +236,8 @@ def main():
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
     for x, y, why in bad:
         print('PROBLEM label near (%d,%d): %s' % (x, y, why))
-    for a, k, b in nolab:
-        print('PROBLEM #%d %s #%d has no label: no place on it or beside it' % (a, k, b))
+    for x in nolab:
+        print('PROBLEM', model.no_label(x))
     print('next: check_diag.py %s' % out)
 
 

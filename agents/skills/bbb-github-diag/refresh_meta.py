@@ -318,14 +318,14 @@ def main():
         S = set(nums)
         print('--- GitHub-native relations between boxes ---')
         for n in nums:
-            r = live[n].get('rel') or {}
-            for c in r.get('children', []):
+            rel = live[n].get('rel') or {}       # not `r`: that name holds a subprocess result above
+            for c in rel.get('children', []):
                 if c in S: print('#%d child #%d   (sub-issue)' % (n, c))
-            for c in r.get('blockedBy', []):
+            for c in rel.get('blockedBy', []):
                 if c in S: print('#%d blocked by #%d' % (n, c))
-            for c in r.get('closedBy', []):
+            for c in rel.get('closedBy', []):
                 if c in S: print('#%d closed by PR #%d' % (n, c))
-            for c in r.get('closes', []):
+            for c in rel.get('closes', []):
                 if c in S: print('PR #%d closes #%d' % (n, c))
         print('(parent/children counts not shown here are issues outside the diagram)')
 

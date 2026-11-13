@@ -7,7 +7,26 @@
 import os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from typing import NamedTuple
 import collapse, route
+
+
+class Arrow(NamedTuple):
+    """One arrow, as svgmeta.arrow_of gives it. Callers use the names (x.kind), never the position (x[2]): a bare (a, b, kind) tuple,
+    documented as (a, kind, b), was formatted in the wrong order by three scripts, each crashing only when an arrow got no label."""
+    a: int
+    b: int
+    kind: str
+
+
+def no_label(x: Arrow) -> str:
+    """The PROBLEM text for an arrow that found no place for its label: one wording, written once, for every script."""
+    return '#%d %s #%d has no label: no place on it or beside it' % (x.a, x.kind, x.b)
+
+
+def count_arrows(text: str) -> int:
+    """Arrows drawn in the picture (path lines with an arrowhead). move.py and reroute.py compare it before and after their work."""
+    return sum(1 for ln in text.split('\n') if ln.startswith('<path d="M') and 'marker-end' in ln)
 
 
 def arrow_points(line):
@@ -246,18 +265,19 @@ def relabel(text, hop_pad=0, redo=()):
     return '\n'.join(lines), fixed, failed
 
 
-def label_missing(text, pairs):
+def label_missing(text: str, pairs) -> tuple[str, int, list[Arrow]]:
     """Give a label to each arrow between the pairs [(a, b)] that has none, in the picture as it is now (route.place_label_any). A
     script that routes an arrow places its label before hops.py draws the jump arcs, and a straight arrow's label may only sit at its
     middle: when a crossing line is there, the label found no place and was left off; with the arcs drawn, the arrow is cut in two
-    pieces and one of them may carry it. Run it after hops.py and relabel(). Returns (text, labels added, [(a, kind, b)] still none)."""
+    pieces and one of them may carry it. Run it after hops.py and relabel(). Returns (text, labels added, [Arrow] still with none)."""
     import svgmeta
     sc, info = read(text)
     lines = info['lines']
     want = {tuple(p) for p in pairs}
     centres = [(l[0] + l[2] / 2, l[1] + l[3] / 2) for l in
                (route.draw.label_at(lines, i) for i in range(len(lines))) if l]
-    added, none, ins = 0, [], []
+    added, ins = 0, []
+    none: list[Arrow] = []
     for ln in lines:
         at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
         if not at or (at[0], at[1]) not in want or at[2] not in route.draw.EDGE:
@@ -269,7 +289,7 @@ def label_missing(text, pairs):
             continue
         lab = route.place_label_any(sc, pts, at[2])
         if not lab:
-            none.append(at)
+            none.append(Arrow(*at))
             continue
         w = route.draw.label_width(at[2])
         dx, dy = lab[2] or (0, 0)

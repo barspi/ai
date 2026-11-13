@@ -307,7 +307,7 @@ def main():
         s, _, nolab = model.label_missing(s, [(d[0], d[1]) for d in better])
         for a_, b_, bends, _, old_bends in better:
             print('routed again: #%d -> #%d, %d bends (was %d)' % (a_, b_, bends, old_bends))
-        problems += ['#%d %s #%d has no label: no place on it or beside it' % x for x in nolab]
+        problems += [model.no_label(x) for x in nolab]
     meta = svgmeta.read(s)
     if meta is None:
         problems.append('%s has no metadata block (drawn before svgmeta.py): run svgmeta.py migrate on it first' % src)

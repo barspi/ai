@@ -34,7 +34,9 @@
     '.q-on g[id^="n"].hit{opacity:1;filter:drop-shadow(0 0 7px #ff7a00)}' +
     '.q-on g[id^="n"].hit>rect:first-child{stroke:#ff7a00;stroke-width:5}' +
     '.q-on g[id^="n"].cur>rect:first-child{stroke:#e6007a;stroke-width:6}' +
-    '.q-on path[marker-end]{opacity:.35}';
+    '.q-on path[marker-end]{opacity:.35}' +
+    '.q-on path[marker-end].q-arr{opacity:1;stroke-width:3px}' +        /* an arrow that starts or ends on a match */
+    '.q-on g[id^="n"].nb{opacity:.75}';                                 /* the box at its other end: seen, but not a match */
   svg.insertBefore(css, svg.firstChild);
 
   /* Host: move the drawing into a scrollable HTML container that fills the window, and put the find box
@@ -221,9 +223,26 @@
   }
 
   var hits = [], cur = 0;
+  var arrowEls = [].slice.call(svg.querySelectorAll('path[marker-end][data-from][data-to]'));
+  /* Every arrow that starts or ends on a match is marked, and the box at its other end loses most of its fade. click-highlight.js,
+     when the file has it, also lights those arrows its own way (halo, glowing label); it loads after this script, so it is looked up
+     at search time. */
+  function lightArrows(list) {
+    var set = {};
+    list.forEach(function (i) { set[i.num] = 1; });
+    arrowEls.forEach(function (p) {
+      var f = p.getAttribute('data-from'), t = p.getAttribute('data-to');
+      if (!set[f] && !set[t]) return;
+      p.classList.add('q-arr');
+      [f, t].forEach(function (n) { var g = set[n] ? null : document.getElementById('n' + n); if (g) g.classList.add('nb'); });
+    });
+    if (window.lineageHighlight && window.lineageHighlight.boxes) window.lineageHighlight.boxes(Object.keys(set));
+  }
   function reset() {
     svg.classList.remove('q-on');
-    info.forEach(function (i) { i.g.classList.remove('hit'); i.g.classList.remove('cur'); });
+    info.forEach(function (i) { i.g.classList.remove('hit'); i.g.classList.remove('cur'); i.g.classList.remove('nb'); });
+    arrowEls.forEach(function (p) { p.classList.remove('q-arr'); });
+    if (hits.length && window.lineageHighlight) window.lineageHighlight.clear();   /* only the arrows a search lit; a click's stay */
     hits = []; cur = 0;
   }
   /* The query as OR terms, each a list of AND factors {t, neg, num}. Empty pieces (a half-typed `a ||`, a lone `!`) are dropped. */
@@ -288,6 +307,7 @@
     if (!hits.length) { note.textContent = 'no match'; return; }
     svg.classList.add('q-on');
     hits.forEach(function (i) { i.g.classList.add('hit'); });
+    lightArrows(hits);
     show(jump);
   }
   function step(d) { if (hits.length) { cur = (cur + d + hits.length) % hits.length; show(true); } }
