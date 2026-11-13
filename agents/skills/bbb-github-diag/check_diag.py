@@ -420,6 +420,10 @@ for _a, _b in reroute.leaves_frame(new):
     fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d (or move a box)' % (_a, _b, _a, _b))
 for _a, _b, _k, _why in __import__('rules').far_low(new):      # a far low arrow from closed work is not drawn (rules.far_low)
     print('WARN far low arrow #%d %s #%d: %s; rules.py prune drops it into "nopath"' % (_a, _k, _b, _why))
+import ports                                  # two arrows of one side of a box that cross each other: never needed (ports.py)
+for _e, _f in ports.crossing_pairs(new):
+    print('WARN #%d -> #%d and #%d -> #%d: both on the %s side of #%d, and they cross each other: ports.py IN OUT orders the slots'
+          % (_e.arrow.a, _e.arrow.b, _f.arrow.a, _f.arrow.b, _e.side, _e.box))
 import rules                                  # arrows a person should look at again: asked, never failed (rules.py review)
 for _f in rules.review(new):
     print('ASK %s: %s' % (_f['check'], _f['message']))

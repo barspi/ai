@@ -112,7 +112,7 @@ def _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
     return False
 
 
-def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False):
+def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
     ra, rb = sc.boxes[a], sc.boxes[b]
     bx0, by0, bx1, by1 = (int(v) for v in (sc.bounds or (0, 0, 10 ** 6, 10 ** 6)))
     x0 = max(bx0, int(min(ra[0], rb[0]) - pad))
@@ -228,10 +228,17 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False):
     # sa and sb may name several sides ('RLTB'): one search then finds the best path over all of them. `natural` (the side pair that
     # faces the other box) costs nothing; another side costs SIDE_COST, so it wins only when it saves a bend or a crossing.
     nat = natural or (sa[0], sb[0])
-    starts = [(i, j, off, s) for s in sa for i, j, off in side_set(ra, s, OUT[s])]
+    def slot_cells(r, s, span):
+        """side_set(), less the cells whose place along the side (y on R or L, x on T or B) is outside span (lo, hi)."""
+        cells = side_set(r, s, OUT[s])
+        if span is None:
+            return cells
+        pos = (lambda c: y0 + c[1] * G) if s in 'RL' else (lambda c: x0 + c[0] * G)
+        return [c for c in cells if span[0] <= pos(c) <= span[1]]
+    starts = [(i, j, off, s) for s in sa for i, j, off in slot_cells(ra, s, span_a)]
     goals = {}
     for s in sb:
-        for i, j, _ in side_set(rb, s, OUT[s]):
+        for i, j, _ in slot_cells(rb, s, span_b):
             goals.setdefault((i, j), {})[(OUT[s] + 2) % 4] = 0 if s == nat[1] else SIDE_COST   # entered against the side's outward way
     if not starts or not goals:
         return None
@@ -398,29 +405,31 @@ def common_frame(sc, a, b):
     return min(both, key=lambda f: f[2] * f[3]) if both else None
 
 
-def route(sc, a, b, sa='R', sb='L', pad=260):
+def route(sc, a, b, sa='R', sb='L', pad=260, span_a=None, span_b=None):
     """Path from side `sa` of box a to side `sb` of box b (sides R, L, T, B), or None when there is no path that keeps the rules.
     sa='*' and sb='*' let the search pick the sides: the pair that faces the other box is preferred, any other side is taken when it
-    saves a bend or a crossing (an arrow to a box up and to the right leaves from the top, not from the bottom and around)."""
+    saves a bend or a crossing (an arrow to a box up and to the right leaves from the top, not from the bottom and around).
+    span_a, span_b: (lo, hi), the part of that end's side the search may use (y on R or L, x on T or B); None: all of it."""
     natural = None
     if sa == '*' or sb == '*':
         natural = sides_for(sc.boxes[a], sc.boxes[b])[0]
         sa, sb = ('RLTB' if sa == '*' else sa), ('RLTB' if sb == '*' else sb)
+    pin = dict(span_a=span_a, span_b=span_b)
     fr = common_frame(sc, a, b)
     if fr:                                       # both boxes in one frame: the arrow stays inside it (an almost hard rule)
-        pts = _route(sc, a, b, sa, sb, 10 ** 6, natural, inside=fr)
+        pts = _route(sc, a, b, sa, sb, 10 ** 6, natural, inside=fr, **pin)
         if pts:
             return pts
         if hasattr(sc, 'left_frame'):
             sc.left_frame.append((a, b))
     for _ in range(3):
-        pts = _route(sc, a, b, sa, sb, pad, natural)
+        pts = _route(sc, a, b, sa, sb, pad, natural, **pin)
         if pts:
             return pts
         pad *= 2
     # Last try: the whole canvas. A long detour (around a fork, over a frame) can leave even the largest window above; NO PATH is
     # reported only when there is truly no path that keeps the rules.
-    return _route(sc, a, b, sa, sb, 10 ** 6, natural, prove_none=True)
+    return _route(sc, a, b, sa, sb, 10 ** 6, natural, prove_none=True, **pin)
 
 
 def _hit(rect, sc, own=None, pad=2, hop_pad=20, g=LABM):

@@ -16,6 +16,8 @@ usage: selftest.py [--no-static]
    - move.py again on that output, moving the box back: the arrows that had no label get one, and none may disappear;
    - move.py onto another box (a place PROBLEM), and inside a keep-out area (each arrow of the box finds no path, goes to nopath);
    - reroute.py with every label refused;
+   - ports.py: #103's two arrows of one side drawn in the wrong order cross; check_diag.py warns; ports.py (B, then A) routes every
+     arrow again and leaves no two arrows of one side crossing, every arrow kept, FAILS 0;
    - check_diag.py on the picture with the overlapping box: it must print FAIL lines, not a traceback.
 The in-process runs call each script's main() with sys.argv set, so a crash shows its traceback here.
 """
@@ -23,7 +25,7 @@ import contextlib, io, os, re, shutil, subprocess, sys, tempfile, traceback
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import model, move, reroute, route, rules, svgmeta
+import model, move, ports, reroute, route, rules, svgmeta
 
 EXAMPLE = os.path.join(HERE, 'example', 'sample-lineage.svg')
 RUFF_IGNORE = 'F401,F841,F402'                   # dead code only; every other pyflakes rule is an error
@@ -116,6 +118,24 @@ def failure_paths(tmp):
     check(code == 0, 'reroute.py with no label anywhere ends normally' + ('' if code == 0 else ' (%s):\n%s' % (code, out)))
     check('has no label' in out, 'reroute.py prints the "has no label" PROBLEM')
     check(os.path.exists(e) and arrows(e) == n0, 'reroute.py keeps every arrow')
+
+    crossed = os.path.join(tmp, 'crossed.svg')                         # #103's two arrows on its right side, in the wrong order
+    t = open(src, encoding='utf-8').read()
+    side = ports.groups(t)[(103, 'R')]
+    open(crossed, 'w', encoding='utf-8').write(ports.reorder(t, side, key=lambda e: [-v for v in ports.far_key(e)]) or t)
+    check(len(ports.crossing_pairs(open(crossed, encoding='utf-8').read())) == 1, 'ports.reorder in the wrong order makes them cross')
+    r = subprocess.run([sys.executable, os.path.join(HERE, 'check_diag.py'), crossed], capture_output=True, text=True)
+    check(re.search(r'^WARN #103 -> #11\d and #103 -> #11\d: both on the R side of #103', r.stdout, re.M) is not None,
+          'check_diag.py warns about two arrows of one side that cross')
+    fixed = os.path.join(tmp, 'fixed.svg')
+    code, out = call(ports, [crossed, fixed])
+    check(code == 0 and os.path.exists(fixed) and not ports.crossing_pairs(open(fixed, encoding='utf-8').read()),
+          'ports.py (B, then A) leaves no two arrows of one side crossing' + ('' if code == 0 else ' (%s):\n%s' % (code, out)))
+    check(os.path.exists(fixed) and arrows(fixed) == n0, 'ports.py keeps every arrow')
+    if os.path.exists(fixed):
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'check_diag.py'), fixed], capture_output=True, text=True)
+        check(re.search(r'^FAILS 0$', r.stdout, re.M) is not None, 'check_diag.py after ports.py: FAILS 0'
+              + ('' if 'FAILS 0' in r.stdout else ':\n' + '\n'.join(l for l in r.stdout.splitlines() if l.startswith('FAIL'))))
 
     r = subprocess.run([sys.executable, os.path.join(HERE, 'check_diag.py'), c], capture_output=True, text=True)
     m = re.search(r'^FAILS (\d+)', r.stdout, re.M)
