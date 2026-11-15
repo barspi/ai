@@ -178,7 +178,7 @@ def main():
         nopath = [(a, b, kind) for a, b, kind, _ in res.failed]
         problems = [p for p in problems if not p.startswith('NO PATH') or any('#%s %s #%s' % x in p for x in nopath)]
         for g in res.grown:
-            print('frame "%s" grown %dpx to make room for an arrow' % g)
+            print('frame "%s" inflated (%s) to make room for an arrow' % g)
     if svgmeta.read(text) is None:
         text = svgmeta.write(text, svgmeta.new_meta(spec['repo'], spec.get('roots') or ()))
     for a2, b2, kind2, why2 in rules.far_low(text):

@@ -4,7 +4,7 @@
     sc, info = model.read(svg_text)
     info: {'lines': [...], 'titles': {num: title}, 'prs': {num}, 'right': x, 'bottom': y, 'legend': (x, y, w, h) or None}
 """
-import itertools, os, re, sys, tempfile
+import itertools, math, os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from typing import NamedTuple
@@ -148,42 +148,75 @@ def _by_importance(items, sc):
     return sorted(items, key=lambda p: (-draw.IMPORTANCE.get(p.kind, 2), sum(abs(u - v) for u, v in zip(centre(p.a), centre(p.b)))))
 
 
+STRETCH = (0.05, 0.1, 0.15, 0.2, 0.25, 0.3)            # what a frame grows by, as a share of its size, in the stretches _plans tries
+GROW_MAX = GROW_STEP * GROW_STEPS                        # px a frame may grow on one side for one arrow
+
+
+def _plans(sc, p, frame):
+    """The inflations to try for an arrow p with no path inside `frame`, in order: [(grow_by {side: px}, profile)] for
+    frames.inflate. Where the arrow fits best is its path with the frame as a soft limit (route.route_soft): the sides that path
+    goes past get the overshoot plus the border clearance (route.FPROX and two lattice steps), stretched graded toward them, then
+    linear, then with no stretch (profile edge: the room opens at the border) once, 1.5 and 2 times the overshoot, at most GROW_MAX.
+    Then, and first when no such path exists (the arrow is walled in by other arrows, not by the border), the stretches that open
+    lanes everywhere in the frame, the smallest growth first: graded toward one side, linear along one axis, a balloon on both,
+    each by STRETCH of the frame's size."""
+    soft = route.route_soft(sc, p.a, p.b, frame, *p.sides)
+    x, y, w, h = frame
+    need = {}
+    if soft:
+        over = {'left': x - min(q[0] for q in soft), 'right': max(q[0] for q in soft) - x - w,
+                'top': y - min(q[1] for q in soft), 'bottom': max(q[1] for q in soft) - y - h}
+        need = {sd: 10 * math.ceil((v + route.FPROX + 2 * route.G) / 10) for sd, v in over.items() if v > 0}
+    plans = [(need, pr) for pr in ('graded', 'linear')] if need else []
+    plans += [({sd: min(GROW_MAX, 10 * math.ceil(v * f / 10)) for sd, v in need.items()}, 'edge') for f in (1, 1.5, 2)] if need else []
+    size = {'left': w, 'right': w, 'top': h, 'bottom': h}
+    shapes = [({sd: 1.0}, 'graded') for sd in ('top', 'bottom', 'left', 'right')] + \
+             [({'top': .5, 'bottom': .5}, 'linear'), ({'left': .5, 'right': .5}, 'linear'),
+              ({'left': .5, 'right': .5, 'top': .5, 'bottom': .5}, 'linear')]
+    stretch = [({sd: v * f * size[sd] for sd, v in sh.items()}, pr) for f in STRETCH for sh, pr in shapes]
+    return plans + sorted(stretch, key=lambda pl: sum(pl[0].values()))
+
+
 def _grow_for(text, p, frame, keep_out):
-    """The smallest growth of `frame` (a whole number of GROW_STEP px, at most GROW_STEPS) after which the arrow p has a path inside
-    it AND every arrow the push cut has one too: a growth is taken whole or not at all, so it never costs an arrow it did not ask
-    for. A cut arrow that was already invalid before (an input fault, such as one that leaves its frame) does not veto the growth:
-    with no path it keeps its old markup, as invalid as it was. Returns (text with all of them drawn, scene, [(Pending, route_labelled result)], px), or None. Each try starts from `text`,
-    so a growth that does not help leaves nothing behind."""
+    """Grow `frame` for the arrow p, which has no path inside it, by the first of _plans after which p has a path inside it
+    (frames.inflate: the frame's area grows, its content is stretched, its neighbours move rigidly; nothing is routed but p, and an
+    arrow whose corridor step found no room, which must find a path too: a growth is taken whole or not at all). A cut arrow that
+    was already invalid before (an input fault) does not veto it: with no path it keeps its old markup.
+    Returns (text with all of them drawn, scene, [(Pending, route_labelled result)], description), or None."""
     lines0 = text.split('\n')
     was_bad = {(arrow_at(lines0[i]) or (0, 0))[:2] for i in invalid(text)}
-
-    def attempt(k, whole):
-        """Grow k steps; route p, and with `whole` every cut arrow too. The result, or None when one finds no path."""
-        push = frames_mod().grow(text, frame, k * GROW_STEP)
+    fm = frames_mod()
+    for grow_by, profile in _plans(scene(text, keep_out), p, frame):
+        push = fm.inflate(text, frame, grow_by, profile)
         t, cut = take_out(push.text, push.cut)
         sc = scene(t, keep_out)
+        if _route_one(sc, p) is None:                     # p first, alone: most plans fail here, at the cost of one search
+            continue
         drawn = []
-        for q in [p] + (_by_importance(cut, sc) if whole else []):
+        for q in [p] + _by_importance(cut, sc):
             res = _route_one(sc, q)
             if res is None and q is not p and (q.a, q.b) in was_bad:
                 t = t.replace(q.slot, q.old, 1)
                 sc = scene(t, keep_out)
                 continue
             if res is None:
-                return None
+                break
             t = _fill(t, sc, q, res)
             drawn.append((q, res))
-        return t, sc, drawn, k * GROW_STEP
-    # The most growth first, for p alone: when even that gives no path, no growth does (a growth only adds room inside the frame
-    # and takes cut arrows away), and the frame stays. Else a binary search for the fewest steps that give p a path, and from there
-    # up, the first growth after which every cut arrow has a path too.
-    if attempt(GROW_STEPS, False) is None:
-        return None
-    lo, hi = 0, GROW_STEPS                                # no path for p with lo steps; a path with hi steps
-    while hi - lo > 1:
-        mid = (lo + hi) // 2
-        lo, hi = (lo, mid) if attempt(mid, False) else (mid, hi)
-    return next((got for k in range(hi, GROW_STEPS + 1) if (got := attempt(k, True))), None)
+        else:
+            moved = '; '.join('%s %s' % (_frame_title(t, nw)[:24], _shift_text(old, nw)) for old, nw in push.frames)
+            desc = '%s %s; frames: %s; corridor steps: %d; routed again besides it: %d' % (
+                profile, ', '.join('%s %dpx' % (sd, round(v)) for sd, v in grow_by.items() if v > 0), moved,
+                fm.STATS.get('jogs', 0), len(drawn) - 1)
+            return t, sc, drawn, desc
+    return None
+
+
+def _shift_text(old, new):
+    """How a frame changed: grown (w, h) and moved (x, y), in px."""
+    parts = ['%s %+d' % (k, round(b - a)) for k, a, b in (('x', old[0], new[0]), ('y', old[1], new[1]), ('w', old[2], new[2]),
+                                                           ('h', old[3], new[3])) if abs(b - a) > .5]
+    return '(%s)' % ' '.join(parts)
 
 
 def frames_mod():
@@ -233,13 +266,15 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
         drawn = [(p, res)] if res else []
         fr = route.common_frame(sc, p.a, p.b) if res is None and p.a in sc.boxes and p.b in sc.boxes else None
         if fr:
+            title = _frame_title(text, fr)
             more = _grow_for(text, p, fr, keep_out)
             if more:
-                text, sc, drawn, px = more
-                grown.append((_frame_title(text, fr), px))
+                text, sc, drawn, how = more
+                grown.append((title, '#%d -> #%d: %s' % (p.a, p.b, how)))
         if not drawn:
             why = 'a box is not in the diagram' if p.a not in sc.boxes or p.b not in sc.boxes else \
-                'no path inside its frame, even grown %dpx' % (GROW_STEP * GROW_STEPS) if fr else 'no path'
+                'no path inside its frame, even inflated (soft-limit sides to %dpx, stretches to %d%% of its size)' % (GROW_MAX, 100 * STRETCH[-1]) \
+                if fr else 'no path'
             failed.append((p.a, p.b, p.kind, why))
             text = text.replace(p.slot, p.old if keep_old or p.keep else '', 1)
             if (keep_old or p.keep) and p.old:
@@ -374,7 +409,7 @@ def repair(text, count_only=False, only=None):
     text, pend = take_out(text, sorted(known))
     res = route_arrows(text, pend, keep_old=True)
     problems += ['NO PATH for the arrow #%s -> #%s (%s): it stays as it was' % (a, b, why) for a, b, _, why in res.failed]
-    problems += ['frame "%s" grown %dpx to make room' % g for g in res.grown]
+    problems += ['frame "%s" inflated (%s) to make room' % g for g in res.grown]
     problems += [no_label(x) for x in res.unlabelled]
     return res.text, len(res.routed), problems
 

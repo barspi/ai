@@ -192,12 +192,22 @@ def by_construction(tmp):
     text2, p = model.new_arrow(text, 104, 112, 'related', ('B', 'B'))
     res = model.route_arrows(text2, [p])
     sc2 = model.scene(res.text)
-    grown = res.grown[0][1] if res.grown else 0
-    check(res.routed and grown > 0 and not reroute.leaves_frame(res.text), '2. the frame grew %dpx and the arrow stays inside it' % grown)
+    grown = sc2.frames[0][3] - tight[3]
+    check(res.routed and grown > 0 and not reroute.leaves_frame(res.text) and 'bottom' in str(res.grown),
+          '2. an arrow walled in at the bottom edge: the frame grew %dpx on that side and the arrow stays inside it (%s)' % (grown, res.grown))
     check(sc2.frames[1][1] == 1100 + grown and sc2.frames[0][3] == tight[3] + grown,
           '2. the frame below moved down by as much (%s)' % (sc2.frames,))
     f, w, out = checked(res.text, tmp, 'grown.svg')
     check(f == 0, '2. check_diag.py after the push: FAILS 0' + ('' if f == 0 else ':\n' + out))
+    # 2. frames.inflate, each profile: the inflated frame keeps its crossings and orthogonality, no box changes size, a frame
+    #    beside or below keeps its exact internal geometry (translated as a whole), nothing is routed
+    ex = open(EXAMPLE, encoding='utf-8').read()
+    exf = model.scene(ex).frames[0]
+    for grow_by, profile in (({'right': 120}, 'linear'), ({'bottom': 90}, 'graded'), ({'left': 40, 'right': 40, 'top': 30, 'bottom': 30}, 'linear'),
+                             ({'top': 60}, 'edge')):
+        push = frames.inflate(ex, exf, grow_by, profile)
+        check(not push.cut and _inflate_ok(ex, push.text, exf), '2. frames.inflate %s %s: orthogonal, same crossings, boxes keep their size, '
+              'what lies outside is translated' % (profile, grow_by))
     # 2. the cascade never leaves two frames overlapping, frames that touch both move
     check(frames.selftest.__call__ is not None and _quiet(frames.selftest), '2. frames.selftest(): the cascade')
     # 3. add_nodes.py in a full frame, near a box: inside the frame (grown), in near's column, no overlap
@@ -285,6 +295,32 @@ def by_construction(tmp):
     t8 = re.sub(r'(<g id="n122"[^>]*>\n<rect x=")1909(" y=")411', r'\g<1>1444\g<2>420', open(EXAMPLE, encoding='utf-8').read())
     f, w, out = checked(t8, tmp, 'boxes.svg')
     check(re.search(r'^FAIL boxes #121 and #122 overlap', out, re.M) is not None, '7. two boxes on top of each other: FAIL')
+
+
+def _inflate_ok(before, after, frame):
+    """The invariants of frames.inflate between two texts: every arrow orthogonal; the same pairs of arrows cross, among the arrows
+    that do not cross the frame border (one that does may take a corridor step); every box keeps its size; the boxes outside the
+    frame moved by at most two amounts (pushed on one side, or not)."""
+    import itertools
+    def arrows(t):
+        out = {}
+        for ln in t.split('\n'):
+            at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+            if at:
+                out[at[:2]] = route.straight(model.arrow_points(ln))
+        return out
+    a0, a1 = arrows(before), arrows(after)
+    b0 = model.scene(before).boxes
+    same_side = lambda k: route.holds(frame, b0[k[0]]) == route.holds(frame, b0[k[1]])   # an arrow across the border may take a step
+    a0 = {k: v for k, v in a0.items() if same_side(k)}
+    a1 = {k: v for k, v in a1.items() if k in a0}
+    orth = all(abs(p[0] - q[0]) < .01 or abs(p[1] - q[1]) < .01 for pts in arrows(after).values() for p, q in zip(pts, pts[1:]))
+    cross = lambda arr: {(u, v) for u, v in itertools.combinations(sorted(arr), 2)
+                         if route._crossings(route.segments(arr[u]), route.segments(arr[v]))}
+    b1 = model.scene(after).boxes
+    sizes = all(b0[n][2:] == b1[n][2:] for n in b0)
+    outside = {n: (b1[n][0] - b0[n][0], b1[n][1] - b0[n][1]) for n in b0 if not route.holds(frame, b0[n])}
+    return orth and cross(a0) == cross(a1) and sizes and len(set(outside.values())) <= 2
 
 
 def _quiet(fn):

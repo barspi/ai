@@ -573,6 +573,21 @@ def has_jog(pts):
     return any(hi - lo < MIN_JOG for _, _, lo, hi in segments(straight([tuple(p) for p in pts]))[1:-1])
 
 
+SOFT_MARGIN = 300    # px round a frame that route_soft() may use
+
+
+def route_soft(sc, a, b, frame, sa='*', sb='*'):
+    """The path of an arrow between two boxes of `frame` with the frame border as a soft limit, as main's router had it: the window is
+    the frame and SOFT_MARGIN around it (then the whole canvas), and each border crossing costs FRAME_OWN_COST. Where it goes past
+    the border is where the frame should grow (model._plans). None when there is no path even there."""
+    natural = sides_for(sc.boxes[a], sc.boxes[b])[0] if '*' in (sa, sb) else None
+    x, y, w, h = frame
+    m = SOFT_MARGIN
+    sides = ('RLTB' if sa == '*' else sa, 'RLTB' if sb == '*' else sb)
+    return _route(sc, a, b, *sides, (x - m, y - m, x + w + m, y + h + m), natural) or \
+        _route(sc, a, b, *sides, 10 ** 6, natural, prove_none=True)
+
+
 def route_labelled(sc, a, b, kind, sa='*', sb='*', w=None, h=18.0, span_a=None, span_b=None):
     """route() whose path must leave room for the arrow's label: one straight stretch with the label's length plus LABEL_SHAFT px of
     shaft on each side, where the label touches no box, label, pill or other arrow (place_label with shaft=LABEL_SHAFT), and no jog

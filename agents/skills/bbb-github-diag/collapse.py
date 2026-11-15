@@ -71,6 +71,17 @@ def shift_y_line(line, dy):
     return line
 
 
+def shift_line(line, dx, dy):
+    """Shift every coordinate of one line of markup (not a path's d) by dx, dy."""
+    line = shift_y_line(line, dy)
+    if not dx:
+        return line
+    line = re.sub(r'\b(x|x1|x2|cx)="(-?[\d.]+)"', lambda m: '%s="%s"' % (m.group(1), fmt(float(m.group(2)) + dx)), line)
+    line = re.sub(r'points="([^"]*)"', lambda m: 'points="%s"' % re.sub(r'(-?[\d.]+),(-?[\d.]+)', lambda k: '%s,%s' % (fmt(float(k.group(1)) + dx), k.group(2)), m.group(1)), line)
+    line = re.sub(r'rotate\(-45 ([\d.-]+) ([\d.-]+)\)', lambda m: 'rotate(-45 %s %s)' % (fmt(float(m.group(1)) + dx), m.group(2)), line)
+    return line
+
+
 def set_height(lines, n, h):
     """Give the collapsed box n the height h, in place: its rect, an umbrella's inner frame, a closed pull request's stripes and the
     "..." cue at the bottom. Used by build.py and fit_heights.py."""

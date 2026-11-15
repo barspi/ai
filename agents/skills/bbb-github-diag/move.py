@@ -37,16 +37,7 @@ import collapse, draw, hops, model, route, svgmeta
 GAP = 28.0
 
 
-def shift_line(line, dx, dy):
-    """Shift every coordinate of one line of markup by dx, dy."""
-    line = collapse.shift_y_line(line, dy)
-    if not dx:
-        return line
-    f = collapse.fmt
-    line = re.sub(r'\b(x|x1|x2|cx)="(-?[\d.]+)"', lambda m: '%s="%s"' % (m.group(1), f(float(m.group(2)) + dx)), line)
-    line = re.sub(r'points="([^"]*)"', lambda m: 'points="%s"' % re.sub(r'(-?[\d.]+),(-?[\d.]+)', lambda k: '%s,%s' % (f(float(k.group(1)) + dx), k.group(2)), m.group(1)), line)
-    line = re.sub(r'rotate\(-45 ([\d.]+) ([\d.]+)\)', lambda m: 'rotate(-45 %s %s)' % (f(float(m.group(1)) + dx), m.group(2)), line)
-    return line
+shift_line = collapse.shift_line                      # every coordinate of one line of markup moved by dx, dy
 
 
 def place(old, spec):
@@ -183,7 +174,7 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
               % (a[0], a[1], b[0], b[1]) for k, a in enumerate(frs) for b in frs[k + 1:]
               if a[0] < b[0] + b[2] - 1 and b[0] < a[0] + a[2] - 1 and a[1] < b[1] + b[3] - 1 and b[1] < a[1] + a[3] - 1]
     res = model.route_arrows(text, pend, keep_out)
-    where += ['frame "%s" grown %dpx to make room for an arrow' % g for g in res.grown]
+    where += ['frame "%s" inflated (%s) to make room for an arrow' % g for g in res.grown]
     text, _, more = model.settle(before, res.text, [(p.a, p.b) for p in pend])
     where += more
     kept = {(p.a, p.b) for p in pend if p.keep}
@@ -252,6 +243,8 @@ def main():
         print('PROBLEM', p)
     for a, b, why in failed:
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
+    import frames
+    print('inflate: %d calls, %.3f s' % (frames.STATS['inflate'], frames.STATS['inflate_secs']))
     print('next: check_diag.py %s' % out)
 
 

@@ -354,7 +354,7 @@ def main():
             problems.append('NO PATH for #%s %s #%s after a frame grew (%s): its old path stays, and check_diag.py fails it' % (a_, kind, b_, why))
             continue
         nopath.append((a_, b_, kind))
-    problems += ['frame "%s" grown %dpx to make room for an arrow' % g for g in res.grown]
+    problems += ['frame "%s" inflated (%s) to make room for an arrow' % g for g in res.grown]
     problems += ['WARN: #%s -> #%s: no path of the cheapest had room for the full label' % (a_, b_) for a_, b_, _, room in res.routed if not room]
     problems += [model.no_label(x) for x in res.unlabelled]
     drawn |= {(a_, b_) for a_, b_, _, _ in res.routed}
@@ -393,6 +393,7 @@ def main():
     print('wrote %s: %d boxes, %d arrows' % (out, len(spec.get('boxes', [])), len(drawn & new_pairs)))
     for p in dict.fromkeys(problems):
         print('PROBLEM', p)
+    print('inflate: %d calls, %.3f s' % (frames.STATS['inflate'], frames.STATS['inflate_secs']))
     print('next: check_diag.py %s <previous revision>' % out)
 
 
