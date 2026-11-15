@@ -17,10 +17,12 @@ leaves and enters straight). Costs: a step 1, a bend 30, a crossing 35, a side o
 holds neither end 60, of a frame that holds an end 75 (so leaving such a frame and coming back costs 150). An arrow whose two boxes are
 in the same frame is searched inside that frame first and leaves it only when no path exists inside (route() then records the pair in
 sc.left_frame). It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
-The search is A* on a 5px grid inside a window around the two boxes (the window grows when nothing is found); place_label() keeps a
-label 7px from every other arrow.
+The search runs inside a window around the two boxes (the window grows when nothing is found), on a 5px lattice. Two searches give
+the same costs: `vis` (ovg.py, the default), A* on an orthogonal visibility graph whose nodes are only where a path may need to turn,
+and `grid` (_route_grid below), A* over every lattice cell, kept to compare. The environment variable BBB_ROUTER=grid|vis picks one.
+place_label() keeps a label 7px from every other arrow.
 """
-import heapq, math
+import heapq, math, os, time
 from array import array
 
 import draw
@@ -37,6 +39,7 @@ FRAME_COST = 60     # per border crossed of a frame that holds neither end: goin
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
 LAST_COST = None    # the cost of the last path _route() found
+STATS = {'calls': 0, 'build': 0.0, 'search': 0.0}    # _route() calls and their seconds: obstacle structures, then the search itself
 OUT = {'R': 0, 'L': 2, 'B': 1, 'T': 3}               # direction numbers: 0 east, 1 south, 2 west, 3 north
 DX, DY = (1, 0, -1, 0), (0, 1, 0, -1)
 
@@ -49,6 +52,7 @@ class Scene:
         self.arrows = [list(a) for a in arrows]
         self.hops = []                                     # jump arcs already in the picture: (x0, y0, x1, y1) of each; labels keep clear of them
         self.left_frame = []                               # (a, b) of arrows that had to leave their common frame (no path inside)
+        self.index = None                                  # ovg.Index: the labels, pills and arrows above as obstacles (vis router)
 
     def add(self, pts, kind=None, lab=None):
         self.arrows.append(list(pts))
@@ -113,7 +117,28 @@ def _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
 
 
 def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
-    ra, rb = sc.boxes[a], sc.boxes[b]
+    """One search, by the router the environment variable BBB_ROUTER names: `vis` (ovg.search, the default) or `grid` (_route_grid).
+    Both take the same arguments and return (points, cost) or None; the cost goes to LAST_COST."""
+    global LAST_COST
+    which = os.environ.get('BBB_ROUTER', 'vis')
+    if which == 'vis':
+        import ovg                                               # here, not at the top: ovg imports this module
+        search = ovg.search
+    elif which == 'grid':
+        search = _route_grid
+    else:
+        raise ValueError('BBB_ROUTER=%r: use grid or vis' % which)
+    STATS['calls'] += 1
+    found = search(sc, a, b, sa, sb, pad, natural, inside, prove_none, span_a, span_b)
+    if found is None:
+        return None
+    pts, LAST_COST = found
+    return pts
+
+
+def _window(sc, ra, rb, pad, inside):
+    """(x0, y0, x1, y1, NX, NY): the search window around boxes ra and rb (or the frame `inside`) and its lattice. The lattice point
+    (i, j) is (x0 + i * G, y0 + j * G); NX and NY points across and down."""
     bx0, by0, bx1, by1 = (int(v) for v in (sc.bounds or (0, 0, 10 ** 6, 10 ** 6)))
     x0 = max(bx0, int(min(ra[0], rb[0]) - pad))
     y0 = max(by0, int(min(ra[1], rb[1]) - pad))
@@ -121,7 +146,81 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
     y1 = min(by1, int(max(ra[1] + ra[3], rb[1] + rb[3]) + pad))
     if inside:                                   # the window is the frame itself
         x0, y0, x1, y1 = int(inside[0]) - 2 * G, int(inside[1]) - 2 * G, int(inside[0] + inside[2]) + 2 * G, int(inside[1] + inside[3]) + 2 * G
-    NX, NY = (x1 - x0) // G + 1, (y1 - y0) // G + 1
+    return x0, y0, x1, y1, (x1 - x0) // G + 1, (y1 - y0) // G + 1
+
+
+def _ends(ra, rb, sa, sb, nat, span_a, span_b, x0, y0, NX, NY, free):
+    """The lattice points where a path may start and end. free(i, j): no box, label, pill or line end blocks the point.
+    Returns (starts, goals): starts [(i, j, offset from the middle of the side in px, side)]; goals {(i, j): {direction: side cost}},
+    the direction being the one that enters the box. sa and sb may name several sides ('RLTB'): one search then finds the best path
+    over all of them. `nat` (the side pair that faces the other box) costs nothing; another side costs SIDE_COST, so it wins only when
+    it saves a bend or a crossing."""
+    def side_set(r, side, span):
+        """Lattice points just outside one side of a box, 20px from its corners, and inside span (lo, hi) of the side when given."""
+        x, y, w, h = r
+        lo, hi = _side_cells(r, side, 20)
+        out = []
+        if side in 'RL':
+            cx = (x + w + 4) if side == 'R' else (x - 4)
+            i = int(math.ceil((cx - x0) / G)) if side == 'R' else int(math.floor((cx - x0) / G))
+            for j in range(int(math.ceil((lo - y0) / G)), int(math.floor((hi - y0) / G)) + 1):
+                if 0 <= i < NX and 0 <= j < NY and free(i, j):
+                    out.append((i, j, abs((y0 + j * G) - (y + h / 2))))
+        else:
+            cy = (y + h + 4) if side == 'B' else (y - 4)
+            j = int(math.ceil((cy - y0) / G)) if side == 'B' else int(math.floor((cy - y0) / G))
+            for i in range(int(math.ceil((lo - x0) / G)), int(math.floor((hi - x0) / G)) + 1):
+                if 0 <= i < NX and 0 <= j < NY and free(i, j):
+                    out.append((i, j, abs((x0 + i * G) - (x + w / 2))))
+        if span is None:
+            return out
+        pos = (lambda c: y0 + c[1] * G) if side in 'RL' else (lambda c: x0 + c[0] * G)
+        return [c for c in out if span[0] <= pos(c) <= span[1]]
+    starts = [(i, j, off, s) for s in sa for i, j, off in side_set(ra, s, span_a)]
+    goals: dict = {}
+    for s in sb:
+        for i, j, _ in side_set(rb, s, span_b):
+            goals.setdefault((i, j), {})[(OUT[s] + 2) % 4] = 0 if s == nat[1] else SIDE_COST   # entered against the side's outward way
+    return starts, goals
+
+
+def _finish(path, x0, y0, ra, rb):
+    """The points of a path found on the lattice: path is its states (i, j, direction) from the start to the goal, at least at every
+    bend. The corners stay; the first and the last point go onto the box edges (the sides the search chose); unjog() follows."""
+    pts = [(x0 + path[0][0] * G, y0 + path[0][1] * G)]
+    for k in range(1, len(path) - 1):
+        if path[k + 1][2] != path[k][2]:
+            pts.append((x0 + path[k][0] * G, y0 + path[k][1] * G))
+    pts.append((x0 + path[-1][0] * G, y0 + path[-1][1] * G))
+    side_of = {v: k for k, v in OUT.items()}
+    sa = side_of[path[0][2]]
+    sb = side_of[(path[-1][2] + 2) % 4]
+    px, py, w, h = ra
+    if sa == 'R':
+        pts[0] = (px + w, pts[0][1])
+    elif sa == 'L':
+        pts[0] = (px, pts[0][1])
+    elif sa == 'B':
+        pts[0] = (pts[0][0], py + h)
+    else:
+        pts[0] = (pts[0][0], py)
+    px, py, w, h = rb
+    if sb == 'L':
+        pts[-1] = (px, pts[-1][1])
+    elif sb == 'R':
+        pts[-1] = (px + w, pts[-1][1])
+    elif sb == 'T':
+        pts[-1] = (pts[-1][0], py)
+    else:
+        pts[-1] = (pts[-1][0], py + h)
+    return unjog(pts, ra, rb, sa, sb)
+
+
+def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
+    """A* over every cell of the 5px lattice of the window: the router before ovg.py, kept to compare (BBB_ROUTER=grid)."""
+    t0 = time.perf_counter()
+    ra, rb = sc.boxes[a], sc.boxes[b]
+    x0, y0, x1, y1, NX, NY = _window(sc, ra, rb, pad, inside)
     size = NX * NY
     blk, noh, nov, nt, crh, crv, sv, frh, frv = (bytearray(size) for _ in range(9))
 
@@ -174,9 +273,6 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
             line(blk, o, c, lo - END_CLEAR, lo + END_CLEAR)        # no crossing near either end of the line
             line(blk, o, c, hi - END_CLEAR, hi + END_CLEAR)
 
-    def holds(f, r):
-        return f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]
-
     for f in sc.frames:
         x, y, w, h = f
         # A frame that holds one end is crossed an odd number of times, one that holds both an even number: any extra crossings come in
@@ -203,46 +299,14 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
         x, y, w, h = r
         mark(nt, x - TURN_FREE, y - TURN_FREE, x + w + TURN_FREE, y + h + TURN_FREE)
 
-    def cell(i, j):
-        return j * NX + i
-
-    def side_set(r, side, outward):
-        """Grid cells just outside one side of a box where a path may start or end."""
-        x, y, w, h = r
-        lo, hi = _side_cells(r, side, 20)
-        out = []
-        if side in 'RL':
-            cx = (x + w + 4) if side == 'R' else (x - 4)
-            i = int(math.ceil((cx - x0) / G)) if side == 'R' else int(math.floor((cx - x0) / G))
-            for j in range(int(math.ceil((lo - y0) / G)), int(math.floor((hi - y0) / G)) + 1):
-                if 0 <= i < NX and 0 <= j < NY and not blk[cell(i, j)]:
-                    out.append((i, j, abs((y0 + j * G) - (y + h / 2))))
-        else:
-            cy = (y + h + 4) if side == 'B' else (y - 4)
-            j = int(math.ceil((cy - y0) / G)) if side == 'B' else int(math.floor((cy - y0) / G))
-            for i in range(int(math.ceil((lo - x0) / G)), int(math.floor((hi - x0) / G)) + 1):
-                if 0 <= i < NX and 0 <= j < NY and not blk[cell(i, j)]:
-                    out.append((i, j, abs((x0 + i * G) - (x + w / 2))))
-        return out
-
-    # sa and sb may name several sides ('RLTB'): one search then finds the best path over all of them. `natural` (the side pair that
-    # faces the other box) costs nothing; another side costs SIDE_COST, so it wins only when it saves a bend or a crossing.
     nat = natural or (sa[0], sb[0])
-    def slot_cells(r, s, span):
-        """side_set(), less the cells whose place along the side (y on R or L, x on T or B) is outside span (lo, hi)."""
-        cells = side_set(r, s, OUT[s])
-        if span is None:
-            return cells
-        pos = (lambda c: y0 + c[1] * G) if s in 'RL' else (lambda c: x0 + c[0] * G)
-        return [c for c in cells if span[0] <= pos(c) <= span[1]]
-    starts = [(i, j, off, s) for s in sa for i, j, off in slot_cells(ra, s, span_a)]
-    goals = {}
-    for s in sb:
-        for i, j, _ in slot_cells(rb, s, span_b):
-            goals.setdefault((i, j), {})[(OUT[s] + 2) % 4] = 0 if s == nat[1] else SIDE_COST   # entered against the side's outward way
+    starts, goals = _ends(ra, rb, sa, sb, nat, span_a, span_b, x0, y0, NX, NY, lambda i, j: not blk[j * NX + i])
+    t1 = time.perf_counter()
+    STATS['build'] += t1 - t0
     if not starts or not goals:
         return None
     if prove_none and not _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
+        STATS['search'] += time.perf_counter() - t1
         return None
     gis = [i for i, j in goals]
     gjs = [j for i, j in goals]
@@ -316,42 +380,14 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
                 dist[s2] = c2
                 prev[s2] = st
                 heappush(pq, (c2 + max(0, gi_lo - ni, ni - gi_hi) + max(0, gj_lo - nj, nj - gj_hi), c2, s2))
+    STATS['search'] += time.perf_counter() - t1
     if end is None:
         return None
-    global LAST_COST
-    LAST_COST = dist[end]                                        # what this path cost the search (selftest() reads it)
     path = [end]
     while prev[path[-1]] >= 0:
         path.append(prev[path[-1]])
     path = [((s >> 2) // NY, (s >> 2) % NY, s & 3) for s in reversed(path)]
-    pts = [(x0 + path[0][0] * G, y0 + path[0][1] * G)]
-    for k in range(1, len(path) - 1):
-        if path[k + 1][2] != path[k][2]:
-            pts.append((x0 + path[k][0] * G, y0 + path[k][1] * G))
-    pts.append((x0 + path[-1][0] * G, y0 + path[-1][1] * G))
-    # put the first and the last point on the box edges (the sides the search chose)
-    side_of = {v: k for k, v in OUT.items()}
-    sa = side_of[path[0][2]]
-    sb = side_of[(path[-1][2] + 2) % 4]
-    px, py, w, h = ra
-    if sa == 'R':
-        pts[0] = (px + w, pts[0][1])
-    elif sa == 'L':
-        pts[0] = (px, pts[0][1])
-    elif sa == 'B':
-        pts[0] = (pts[0][0], py + h)
-    else:
-        pts[0] = (pts[0][0], py)
-    px, py, w, h = rb
-    if sb == 'L':
-        pts[-1] = (px, pts[-1][1])
-    elif sb == 'R':
-        pts[-1] = (px + w, pts[-1][1])
-    elif sb == 'T':
-        pts[-1] = (pts[-1][0], py)
-    else:
-        pts[-1] = (pts[-1][0], py + h)
-    return unjog(pts, ra, rb, sa, sb)
+    return _finish(path, x0, y0, ra, rb), dist[end]              # dist[end]: what this path cost the search (selftest() reads it)
 
 
 def unjog(pts, ra, rb, sa, sb, short=2 * G):
@@ -396,10 +432,13 @@ def sides_for(ra, rb):
     return [first] + [s for s in rest if s != first]
 
 
+def holds(f, r):
+    """Does frame f hold box r?"""
+    return f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]
+
+
 def common_frame(sc, a, b):
     """The smallest frame that holds both boxes, or None."""
-    def holds(f, r):
-        return f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]
     ra, rb = sc.boxes[a], sc.boxes[b]
     both = [f for f in sc.frames if holds(f, ra) and holds(f, rb)]
     return min(both, key=lambda f: f[2] * f[3]) if both else None
