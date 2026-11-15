@@ -114,7 +114,7 @@ def parse(s):
         m = re.match(r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>$', ln)
         if m:
             j = group_end(lines, i)
-            r = re.match(r'<rect x="([\d.]+)" y="([\d.]+)" width="(\d+)(?:\.0)?" height="([\d.]+)"([^>]*)/?>', lines[i + 1])
+            r = re.match(r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)(?:\.0)?" height="([\d.]+)"([^>]*)/?>', lines[i + 1])   # negative: a push past the edge, before frames.translate
             box[int(m.group(1))] = dict(a=i, b=j, x=float(r.group(1)), y=float(r.group(2)), w=float(r.group(3)), h=float(r.group(4)),
                                        coll='data-collapsed="1"' in lines[i + 1])
         m = re.match(r'<g id="pop(\d+)" class="pop">$', ln)
@@ -122,7 +122,7 @@ def parse(s):
             pop[int(m.group(1))] = (i, group_end(lines, i))
     frame = []
     for i, ln in enumerate(lines):
-        m = re.match(r'<rect x="([\d.-]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="18"[^>]*stroke-dasharray="2 6"', ln)
+        m = re.match(r'<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)" rx="18"[^>]*stroke-dasharray="2 6"', ln)
         if m and i + 1 < len(lines) and lines[i + 1].startswith('<text class="ftl"'):
             frame.append(dict(rl=i, tl=i + 1, x=float(m.group(1)), y=float(m.group(2)), w=float(m.group(3)), h=float(m.group(4)),
                               name=re.sub(r'<[^>]+>', '', lines[i + 1]).replace('&#8212;', '—')))
@@ -566,6 +566,7 @@ def main():
     log += ['%d arrows routed again (the collapse left them invalid)' % n] + ['PROBLEM ' + p for p in problems]
     open(dst, 'w', encoding='utf-8').write(res)
     print('\n'.join(log) or 'nothing to do')
+    print(__import__('push').report(), end='')
     print('wrote', dst)
 
 

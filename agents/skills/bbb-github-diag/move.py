@@ -247,6 +247,7 @@ def main():
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
     import frames
     print('inflate: %d calls, %.3f s' % (frames.STATS['inflate'], frames.STATS['inflate_secs']))
+    print(__import__('push').report(), end='')
     print('next: check_diag.py %s' % out)
 
 

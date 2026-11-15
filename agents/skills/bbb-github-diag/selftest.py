@@ -300,6 +300,7 @@ def by_construction(tmp):
 def room_cases(tmp):
     """One case per rule of the room work (push.py, model.labels_on_top): labels painted last, no arrow without a label (relaxed
     rules, then a push), a label that only fits relaxed is moved there by relabel, a detour opened by a one-sided push."""
+    import push
     ex = open(EXAMPLE, encoding='utf-8').read()
     # A. a label written before a path that crosses it is painted under it: check_diag.py fails it; labels_on_top puts it last
     lines = ex.split('\n')
@@ -326,13 +327,42 @@ def room_cases(tmp):
     check(route.place_label(s8, pts, 'follow-up', strict=False) is None and route.place_label_beside(s8, pts, 'follow-up') is None
           and lab is not None and lab[3] and not route._hit((lab[0] - w8 / 2, lab[1] - 9, w8, 18), s8, own=pts, pad=0, hop_pad=0, g=0),
           'B. a short arrow with no 8px place and no place beside: its label goes relaxed and covers nothing (%s)' % (lab,))
+    # B(b). no place even relaxed: move.py puts #122 70px from #121; the room pass pushes a box until the label fits
+    dst = os.path.join(tmp, 'tight.svg')
+    src = os.path.join(tmp, 'ex.svg')
+    open(src, 'w', encoding='utf-8').write(ex)
+    code, out = call(move, [src, dst, '122@1774,='])
+    t = open(dst, encoding='utf-8').read() if os.path.exists(dst) else ''
+    sc = model.scene(t) if t else None
+    gap = sc and sc.boxes[122][0] - sc.boxes[121][0] - sc.boxes[121][2]
+    f, w, out2 = checked(t, tmp, 'tight2.svg') if t else (-1, -1, '')
+    check(code == 0 and sc is not None and gap > 70 and not push.needing_room(t) and f == 0 and 'PUSH room for the label of #121' in out
+          and sc.boxes[122][2:] == (260.0, 122.0), 'B. an arrow with no room: its end boxes move apart (gap %s), it has a label, FAILS 0' % gap
+          + ('' if code == 0 else ':\n' + out))
     # C. a label that has a place only relaxed (an arrow 6px from it) is moved there by relabel, not left where it sits badly
     rl = ex.split('\n')
     i113 = next(i for i, ln in enumerate(rl) if (model.svgmeta_arrow(ln) or ())[:2] == (113, 112))
     rl.insert(i113, route.draw.arrow([(1075, 763), (1075, 863)], 'related', 112, 113))
     t, fixed_n, failed = model.relabel('\n'.join(rl), hop_pad=route.LABEL_SHAFT)
-    check(not any('no straight stretch' in why for *_, why in failed),
-          'C. relabel places a label relaxed when nothing else fits (%s)' % failed)
+    check(not any('no straight stretch' in why for *_, why in failed) and (113, 112, 'supersedes') not in push.needing_room(t),
+          'C. relabel places a label relaxed when nothing else fits, and no label covers anything (%s)' % failed)
+    # D. a detour round a column whose gap is too narrow: the probe goes through the gap; one side is pushed by the whole need
+    col = {1: (0, 300, 100, 60), 2: (900, 300, 100, 60), 3: (400, -300, 160, 600), 4: (400, 328, 160, 600)}
+    sc = route.Scene(dict(col), bounds=(-600, -600, 3000, 3000))
+    far = route.route(sc, 1, 2, 'R', 'L')
+    keep, route.BOXM = route.BOXM, 0
+    probe = route.route(sc, 1, 2, 'R', 'L')
+    route.BOXM = keep
+    sets = push.detour_pushes(push.blockers(sc, probe, 1, 2))
+    one = [c for c in sets if len(c) == 1 and c[0][0] == 4 and c[0][1] == 'bottom']
+    ok = False
+    if one:
+        r = col[4]
+        sc2 = route.Scene({**col, 4: (r[0], r[1] + one[0][0][2], r[2], r[3])}, bounds=(-600, -600, 3000, 3000))
+        near = route.route(sc2, 1, 2, 'R', 'L')
+        ok = near is not None and push._length(near) <= push.DETOUR_GAIN * push._length(far)
+    check(ok, 'D. a gap too narrow: pushing the lower box down by the whole need opens a short path (%s; %s)' % (sets, far))
+    check(_quiet(push.selftest), 'B, D. push.selftest(): the cascade and reattach')
 
 
 def _inflate_ok(before, after, frame):

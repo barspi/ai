@@ -292,10 +292,9 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
     text = '\n'.join(l for l in text.split('\n') if not l.startswith('<!--slot:'))
     routed = [(a, b, bends, room) for (a, b, _), (bends, room) in results.items()]
     kinds = {(a, b): k for a, b, k in results}
-    text, unlabelled = finish(text, list(kinds))
+    text, unlabelled = finish(text, list(kinds), room=False)
     routed, again = retry_short(text, routed, keep_out, kinds)
-    if again != text:
-        text, unlabelled = finish(again, list(kinds))
+    text, unlabelled = finish(again, list(kinds))         # with room: no arrow is left without a label
     return Routed(text, routed, failed, grown, unlabelled)
 
 
@@ -349,16 +348,30 @@ def _frame_title(text, rect):
     return svgmeta.frame_name(lines[f['tl']]) if f else '?'
 
 
-def finish(text, pairs):
+
+def finish(text, pairs, room=True):
     """What every script does after it routed arrows, so that nothing is left for a later step: the jump arcs of the whole diagram
     (hops.py) and the red crosses, every label that now sits badly placed again (relabel, with the checker's 20px of shaft from a
-    jump), and a label for every arrow that still has none (label_missing, down to its relaxed try; `pairs`, the arrows the caller
-    routed, no longer limit it: no arrow is left without a label); last, labels_on_top: every label after every path. Returns
-    (text, [Arrow] with no label)."""
+    jump), and a label for every arrow that still has none (label_missing; `pairs`, the arrows the caller routed, are kept for the
+    callers and no longer limit it: no arrow is left without a label). Then, with room (the default; never inside a push's own
+    routing): push.make_room for each arrow that still has no label, or whose label still covers something (its end boxes move
+    apart, push.py), and push.straighten for each arrow that makes a long detour a small push can save. Last, labels_on_top: every
+    label after every path. Returns (text, [Arrow] with no label)."""
     import hops
     text, _, _ = hops.add_hops(text)
     text, _, _ = relabel(text, hop_pad=route.LABEL_SHAFT)
     text, _, none = label_missing(text, None)
+    import push                                           # push.DEPTH, not a global here: model.py may run as __main__ too
+    if room and not push.DEPTH['n'] and os.environ.get('BBB_NO_PUSH') != '1':
+        push.DEPTH['n'] += 1                              # finish() inside a push's own routing makes no room again
+        try:
+            text = push.make_room(text)
+            text = push.straighten(text)
+        finally:
+            push.DEPTH['n'] -= 1
+        text, _, _ = hops.add_hops(text)
+        text, _, _ = relabel(text, hop_pad=route.LABEL_SHAFT)
+        text, _, none = label_missing(text, None)
     return labels_on_top(text), none
 
 
@@ -667,18 +680,32 @@ def read(text, bounds=None):
 USAGE = """usage: model.py relabel IN.svg OUT.svg     put every badly placed label back on a good straight stretch of its own arrow
                                          (a label left behind by an old move goes back to the nearest unlabelled arrow of its word)
        model.py repair IN.svg OUT.svg      route again every arrow that is invalid (an end on no box, a run through a box)
+       model.py tidy IN.svg OUT.svg        repair, then finish() over the whole chart: jump arcs, labels, room for every label
+                                         (push.make_room), short paths for long detours (push.straighten), labels on top
 Run check_diag.py afterwards."""
 
+
+def tidy(text):
+    """repair(), then finish() on every arrow (the room pass included). Returns (text, rerouted, problems)."""
+    text, n, notes = repair(text)
+    text, none = finish(text, None)
+    return text, n, notes + [no_label(x) for x in none]
+
+
 if __name__ == '__main__':
-    if len(sys.argv) != 4 or sys.argv[1] not in ('relabel', 'repair'):
+    if len(sys.argv) != 4 or sys.argv[1] not in ('relabel', 'repair', 'tidy'):
         sys.exit(USAGE)
     src = open(sys.argv[2], encoding='utf-8').read()
     if sys.argv[1] == 'relabel':
         out, n, notes = relabel(src)
         print('%d labels moved' % n)
+    elif sys.argv[1] == 'tidy':
+        out, n, notes = tidy(src)
+        print('%d arrows routed again' % n)
     else:
         out, n, notes = repair(src)
         print('%d arrows routed again' % n)
     for p in notes:
         print('PROBLEM', '%s near (%d,%d)' % (p[2], p[0], p[1]) if isinstance(p, tuple) else p)
+    print(__import__('push').report(), end='')
     open(sys.argv[3], 'w', encoding='utf-8').write(out)

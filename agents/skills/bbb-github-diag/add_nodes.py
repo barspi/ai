@@ -402,6 +402,7 @@ def main():
     for p in dict.fromkeys(problems):
         print('PROBLEM', p)
     print('inflate: %d calls, %.3f s' % (frames.STATS['inflate'], frames.STATS['inflate_secs']))
+    print(__import__('push').report(), end='')
     print('next: check_diag.py %s <previous revision>' % out)
 
 

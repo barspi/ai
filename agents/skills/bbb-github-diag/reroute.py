@@ -201,6 +201,7 @@ def main():
             print('  MORE BENDS #%d -> #%d: %d (was %d)' % (p[0], p[1], b1[p][0], b0[p][0]))
     for a, b, why in failed:
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
+    print(__import__('push').report(), end='')
     print('next: check_diag.py %s' % out)
 
 
