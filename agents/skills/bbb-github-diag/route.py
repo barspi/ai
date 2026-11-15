@@ -47,6 +47,9 @@ LAST_COST = None    # the cost of the last path _route() found
 ALT_BENDS = 2       # an alternative has at most this many bends more than the cheapest path, or it is not taken
 K_PATHS = 6         # route(accept=...) tries at most this many paths (the cheapest, then alternatives) for one that passes
 LABEL_SHAFT = 20    # px of straight shaft a label needs on each side (check_diag.py warns below it)
+RELAX_SHAFT = 3     # place_label(relaxed=True): px of shaft each side, the label off the middle, this close to other things; it
+RELAX_GAP = 2       # still covers nothing: no box, label, pill or other path under it, RELAX_GAP px clear of each and of a jump arc
+RELAX_STEP = 2      # px between the places a relaxed label tries along a stretch
 WINDOW_MARGIN = 2 * FPROX  # a cross-frame search window: the two frames and what lies between them, and this much around
 STATS = {'calls': 0, 'build': 0.0, 'search': 0.0}    # _route() calls and their seconds: obstacle structures, then the search itself
 OUT = {'R': 0, 'L': 2, 'B': 1, 'T': 3}               # direction numbers: 0 east, 1 south, 2 west, 3 north
@@ -639,13 +642,18 @@ def _future_hops(sc, y, lo, hi, own):
             if o == 'v' and pts != mine and lo + HOP_END < c < hi - HOP_END and lo2 + 3 < y < hi2 - 3]
 
 
-def place_label(sc, pts, kind, w=None, h=18.0, strict=True, shaft=None):
+def place_label(sc, pts, kind, w=None, h=18.0, strict=True, shaft=None, relaxed=False):
     """Centre of the label for an arrow: the middle of a straight stretch where the label touches nothing. The stretch that ends in the
     arrowhead counts up to the base of the head (11px). Returns None when no stretch is long enough. A new label has the width of its word
     and 18px; an existing label of another size (a two-line one is 30px tall) passes its own w and h. The label keeps px of shaft on
     each side: `shaft` on every stretch when given; else LABEL_SHAFT at the tail, the tip and a jump (8 when not strict), 8 elsewhere.
     A jump cuts a stretch like a bend: one already drawn (sc.hops), and on a horizontal stretch one hops.py will draw where a vertical
-    arrow crosses it (_future_hops), so a label never ends up next to an arc drawn after it."""
+    arrow crosses it (_future_hops), so a label never ends up next to an arc drawn after it.
+    relaxed: the last try before an arrow is left with no label (the soft rules give way, the hard one does not): RELAX_SHAFT px of
+    shaft on every stretch, any place along it (the middle is preferred, not required), RELAX_GAP px from a box, a label, a pill, a
+    jump arc and every other arrow (LABM is the soft distance), so the label still covers nothing."""
+    if relaxed:
+        shaft, strict = RELAX_SHAFT, False
     w = w if w is not None else draw.label_width(kind)
     best = None
     own_pts = pts
@@ -672,21 +680,24 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True, shaft=None):
         edge_seg = k in (0, n - 1) or bool(cuts)                 # a stretch at the tail, the tip or a jump needs 20px of shaft each side
         margin = shaft if shaft is not None else (LABEL_SHAFT if strict else 8) if edge_seg else 8
         whole = n == 1                                           # a straight arrow: its label belongs in the middle of the shaft
+        hit = (lambda r: _hit(r, sc, own=own_pts, pad=RELAX_GAP, hop_pad=RELAX_GAP, g=RELAX_GAP)) if relaxed else \
+            (lambda r: _hit(r, sc, own=own_pts, hop_pad=LABEL_SHAFT if strict or shaft else 8))
         for plo, phi in pieces:
             if phi - plo < ext + 2 * margin:
                 continue
             mid = (plo + phi) / 2
             near = min(max((lo + hi) / 2, plo + ext / 2 + margin), phi - ext / 2 - margin)   # the place in this piece nearest that middle
             slide = [mid, near]
-            if not (whole and not cuts):
+            if not (whole and not cuts) or relaxed:
                 t = plo + ext / 2 + margin
                 while t <= phi - ext / 2 - margin:
                     slide.append(t)
-                    t += 10
+                    t += RELAX_STEP if relaxed else 10
+                slide += [phi - ext / 2 - margin] if relaxed else []
             for pos in slide:
                 cx, cy = (pos, p[1]) if horiz else (p[0], pos)
                 rect = (cx - w / 2, cy - h / 2, w, h)
-                if _hit(rect, sc, own=own_pts, hop_pad=LABEL_SHAFT if strict or shaft else 8):
+                if hit(rect):
                     continue
                 if whole:                                        # check_diag.py fails a straight arrow's label off its middle
                     score = -abs(pos - (lo + hi) / 2)
@@ -700,8 +711,9 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True, shaft=None):
 def place_label_any(sc, pts, kind, w=None, h=18.0):
     """The label of an arrow, in the one order every script uses: on a stretch with LABEL_SHAFT px of shaft each side; else with
     that much at the tail, the tip and a jump only; else with 8px (a short arrow: check_diag.py warns with the measure); else beside
-    its shaft (place_label_beside). Returns (cx, cy, shift, short): shift is None on the shaft and (dx, dy) beside it (draw.label
-    shift); short is True when only 8px of shaft is left. None when there is no place at all."""
+    its shaft (place_label_beside); else relaxed (place_label relaxed=True: the soft rules give way, the label still covers nothing).
+    Returns (cx, cy, shift, short): shift is None on the shaft and (dx, dy) beside it (draw.label shift); short is True when less
+    than LABEL_SHAFT px of shaft is left. None when there is no place at all."""
     lab = place_label(sc, pts, kind, w, h, shaft=LABEL_SHAFT) or place_label(sc, pts, kind, w, h)
     if lab:
         return lab[0], lab[1], None, False
@@ -709,7 +721,10 @@ def place_label_any(sc, pts, kind, w=None, h=18.0):
     if lab:
         return lab[0], lab[1], None, True
     bs = place_label_beside(sc, pts, kind, w, h)
-    return (bs[0], bs[1], bs[2:], False) if bs else None
+    if bs:
+        return bs[0], bs[1], bs[2:], False
+    lab = place_label(sc, pts, kind, w, h, relaxed=True)
+    return (lab[0], lab[1], None, True) if lab else None
 
 
 BESIDE_GAP = 5.0

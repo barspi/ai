@@ -352,12 +352,13 @@ def _frame_title(text, rect):
 def finish(text, pairs):
     """What every script does after it routed arrows, so that nothing is left for a later step: the jump arcs of the whole diagram
     (hops.py) and the red crosses, every label that now sits badly placed again (relabel, with the checker's 20px of shaft from a
-    jump), and a label for each routed arrow that still has none (label_missing); last, labels_on_top: every label after every
-    path. Returns (text, [Arrow] with no label)."""
+    jump), and a label for every arrow that still has none (label_missing, down to its relaxed try; `pairs`, the arrows the caller
+    routed, no longer limit it: no arrow is left without a label); last, labels_on_top: every label after every path. Returns
+    (text, [Arrow] with no label)."""
     import hops
     text, _, _ = hops.add_hops(text)
     text, _, _ = relabel(text, hop_pad=route.LABEL_SHAFT)
-    text, _, none = label_missing(text, pairs)
+    text, _, none = label_missing(text, None)
     return labels_on_top(text), none
 
 
@@ -571,10 +572,15 @@ def relabel(text, hop_pad=0, redo=()):
                     failed.append((round(new[0]), round(new[1]), 'WARN: the label has less than 20px of shaft (a short arrow)'))
                 else:                                       # a shaft too short for any label: beside it
                     bs = route.place_label_beside(others, own, word, w, h)
-                    if not bs:
+                    rx = None if bs else route.place_label(others, own, word, w, h, relaxed=True)
+                    if bs:
+                        new, nshift = bs[:2], bs[2:]
+                    elif rx:                                # the soft rules give way; the label still covers nothing
+                        new = rx
+                        failed.append((round(new[0]), round(new[1]), 'WARN: the label has less than 20px of shaft (relaxed)'))
+                    else:
                         failed.append((round(cx), round(cy), 'no straight stretch long enough for this label'))
                         continue
-                    new, nshift = bs[:2], bs[2:]
         route.draw.move_label(lines, i, new[0], new[1], nshift)
         dx, dy = nshift or (0, 0)
         sc.labels.remove(tuple(rect))                      # the one change to the labels: only a label that moved costs a new index
@@ -584,21 +590,22 @@ def relabel(text, hop_pad=0, redo=()):
 
 
 def label_missing(text: str, pairs) -> tuple[str, int, list[Arrow]]:
-    """Give a label to each arrow between the pairs [(a, b)] that has none, in the picture as it is now (route.place_label_any). A
-    script that routes an arrow places its label before hops.py draws the jump arcs, and a straight arrow's label may only sit at its
-    middle: when a crossing line is there, the label found no place and was left off; with the arcs drawn, the arrow is cut in two
-    pieces and one of them may carry it. Run it after hops.py and relabel(). Returns (text, labels added, [Arrow] still with none)."""
+    """Give a label to each arrow between the pairs [(a, b)] (None: every arrow) that has none, in the picture as it is now
+    (route.place_label_any, down to its relaxed try). A script that routes an arrow places its label before hops.py draws the jump
+    arcs, and a straight arrow's label may only sit at its middle: when a crossing line is there, the label found no place and was
+    left off; with the arcs drawn, the arrow is cut in two pieces and one of them may carry it. Run it after hops.py and relabel().
+    Returns (text, labels added, [Arrow] still with none)."""
     import svgmeta
     sc, info = read(text)
     lines = info['lines']
-    want = {tuple(p) for p in pairs}
+    want = None if pairs is None else {tuple(p) for p in pairs}
     centres = [(l[0] + l[2] / 2, l[1] + l[3] / 2) for l in
                (route.draw.label_at(lines, i) for i in range(len(lines))) if l]
     added, ins = 0, []
     none: list[Arrow] = []
     for ln in lines:
         at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
-        if not at or (at[0], at[1]) not in want or at[2] not in route.draw.EDGE:
+        if not at or (want is not None and (at[0], at[1]) not in want) or at[2] not in route.draw.EDGE:
             continue
         pts = arrow_points(ln)
         segs = route.segments(route.straight([tuple(p) for p in pts]))

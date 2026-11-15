@@ -317,6 +317,22 @@ def room_cases(tmp):
     rl = res.text.split('\n')
     last = max(i for i, ln in enumerate(rl) if svgmeta.is_arrow(ln))
     check(not any(route.draw.label_at(rl, i) for i in range(last)), 'A. model.route_arrows writes no label before a path')
+    # B(a). relaxed: 20px, 8px and beside all fail (two labels block the places beside it); relaxed fits and covers nothing
+    w8 = route.draw.label_width('follow-up')
+    s8 = route.Scene({1: (0, 200, 100, 60), 2: (100 + w8 + 20, 200, 100, 60)}, labels=[(100, 196, 300, 20), (100, 244, 300, 20)],
+                     bounds=(-600, -600, 3000, 3000))
+    pts = [(100, 230), (100 + w8 + 20, 230)]
+    lab = route.place_label_any(s8, pts, 'follow-up')
+    check(route.place_label(s8, pts, 'follow-up', strict=False) is None and route.place_label_beside(s8, pts, 'follow-up') is None
+          and lab is not None and lab[3] and not route._hit((lab[0] - w8 / 2, lab[1] - 9, w8, 18), s8, own=pts, pad=0, hop_pad=0, g=0),
+          'B. a short arrow with no 8px place and no place beside: its label goes relaxed and covers nothing (%s)' % (lab,))
+    # C. a label that has a place only relaxed (an arrow 6px from it) is moved there by relabel, not left where it sits badly
+    rl = ex.split('\n')
+    i113 = next(i for i, ln in enumerate(rl) if (model.svgmeta_arrow(ln) or ())[:2] == (113, 112))
+    rl.insert(i113, route.draw.arrow([(1075, 763), (1075, 863)], 'related', 112, 113))
+    t, fixed_n, failed = model.relabel('\n'.join(rl), hop_pad=route.LABEL_SHAFT)
+    check(not any('no straight stretch' in why for *_, why in failed),
+          'C. relabel places a label relaxed when nothing else fits (%s)' % failed)
 
 
 def _inflate_ok(before, after, frame):
