@@ -576,7 +576,7 @@ def _compare(seeds):
                 found = search(sc, a, b, *sides, 260, natural, None, proved, span)
                 cost['vis, 260px' + (', walk back' if proved else '')] = found and found[1]
             n += 1
-            if len({None if c is None else round(c, 6) for c in list(cost.values())[:2]}) > 1 or \
+            if len({None if c is None else round(c, 6) for c in (cost['grid'], cost['vis'])}) > 1 or \
                     cost['vis, 260px'] != cost['vis, 260px, walk back']:
                 bad.append('seed %d #%d -> #%d %s %s: %s' % (seed, a, b, sa, sb, cost))
             if path:

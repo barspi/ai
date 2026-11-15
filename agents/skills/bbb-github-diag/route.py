@@ -456,8 +456,6 @@ def route(sc, a, b, sa='R', sb='L', pad=260, span_a=None, span_b=None):
     if sa == '*' or sb == '*':
         natural = sides_for(sc.boxes[a], sc.boxes[b])[0]
         sa, sb = ('RLTB' if sa == '*' else sa), ('RLTB' if sb == '*' else sb)
-    # After a search that found nothing, the next ones also walk back from the target (prove_none): when the target is walled in,
-    # that ends each of them at once, where the search would visit its whole window. It never changes a result.
     pin = dict(span_a=span_a, span_b=span_b)
     fr = common_frame(sc, a, b)
     if fr:                                       # both boxes in one frame: the arrow stays inside it (an almost hard rule)
@@ -466,6 +464,8 @@ def route(sc, a, b, sa='R', sb='L', pad=260, span_a=None, span_b=None):
             return pts
         if hasattr(sc, 'left_frame'):
             sc.left_frame.append((a, b))
+    # After a search that found nothing, the next ones also walk back from the target (prove_none): when the target is walled in,
+    # that ends each of them at once, where the search would visit its whole window. It never changes a result.
     for k in range(3):
         pts = _route(sc, a, b, sa, sb, pad, natural, prove_none=bool(fr or k), **pin)
         if pts:
