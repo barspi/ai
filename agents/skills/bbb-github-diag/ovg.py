@@ -22,13 +22,13 @@ its end, touches the feature). The search stops at the points where a candidate 
 allowed), and nowhere else; it turns only there. This needs the no-turn bands as wide as the assert below says, and a no-turn band
 wherever a band forbids running along a line (the features below always come in such pairs).
 
-Structures. Index, one per Scene: the features of the scene's labels, pills and arrows, in canvas px, built on the first search and
-kept in step with the scene (what a list gained is added; a list changed in any other way is indexed again). Per call, _Lattice: the
+Structures. The features of the scene's labels, pills and arrows, in canvas px, live in the scene's spatial index (spatial.py, one per
+Scene, kept in step with it); a call asks only for those that fall in its window. Per call, _Lattice: the
 window, the features on its lattice (with the call's own: its two boxes, which keep OWN_BOXM instead of BOXM, the frames, whose border
 cost depends on whether they hold an end, the no-turn zones round the two boxes, the outside of the frame for an `inside` search),
 and, built when the search first reaches them, per row and per column: the cells a step may not enter, the crossing and frame costs,
 the NEAR cells, the cells where no turn is allowed, and the candidate runs. The lattice moves with the window, as the grid search's
-does, so that the two can be compared: that is why nothing below the Index outlives a call.
+does, so that the two can be compared: that is why nothing below the spatial index outlives a call.
 
 The heuristic: Manhattan steps to the nearest goal side, plus TURN_COST for each bend that any path from that point and direction to
 that side must make, plus the side's cost. It never overestimates and it is consistent, so the first goal taken from the queue is a
@@ -53,28 +53,21 @@ RECT, HLINE, VLINE = range(3)
 # (besides BLK), the kind of line it crosses, of frame border, and the kind that costs per step (none along a row).
 STOP, CROSS, FRAME, PER_STEP = (NOH, NOV), (CRV, CRH), (FRV, FRH), (None, NEAR)
 BUCKET = 16                                      # lattice lines per bucket of the per-call feature lists
+MAX_STATE_PATHS = 96                             # search_paths stops after this many state paths (duplicates included)
 
 
-class Index:
-    """The features of a scene's labels, pills and arrows: the obstacles that do not depend on the arrow being routed."""
+def _feature_box(f):
+    """The bounding box in px of a feature (kind, shape, p, q, r, s, value)."""
+    _, shape, p, q, r, s, _ = f
+    return (p, q, r, s) if shape == RECT else (q, p, r, p) if shape == HLINE else (p, q, p, r)
 
-    def __init__(self):
-        self.feats = {name: [] for name in _SOURCES}
-        self.seen = {name: [] for name in _SOURCES}      # name -> the items indexed, as values (a caller may edit a list in place)
 
-    def sync(self, sc):
-        """Add the features of the items appended since the last call; index a list again when anything else changed in it."""
-        for name, (freeze, make) in _SOURCES.items():
-            items = [freeze(x) for x in getattr(sc, name)]
-            n = len(self.seen[name])
-            if items[:n] != self.seen[name]:
-                self.feats[name], n = [], 0
-            for item in items[n:]:
-                self.feats[name] += make(item)
-            self.seen[name] = items
-
-    def all(self):
-        return itertools.chain.from_iterable(self.feats.values())
+def scene_features(sc, box):
+    """The features of the scene's labels, pills and arrows whose bounding box meets box (x0, y0, x1, y1), from the scene's spatial
+    index (route.Scene.layer): built once per scene, brought up to date as arrows and labels are added."""
+    return itertools.chain.from_iterable(
+        sc.layer(('ovg', name), name, lambda item, make=make: [(_feature_box(f), f) for f in make(item)]).query(box)
+        for name, make in _SOURCES.items())
 
 
 def _label(r):
@@ -104,7 +97,7 @@ def _arrow(pts):
     return out
 
 
-_SOURCES = {'labels': (tuple, _label), 'pills': (tuple, _pill), 'arrows': (lambda pts: tuple(map(tuple, pts)), _arrow)}
+_SOURCES = {'labels': _label, 'pills': _pill, 'arrows': _arrow}
 
 
 def _call_features(sc, a, b, inside, window):
@@ -197,12 +190,9 @@ class _Lattice:
     def __init__(self, sc, a, b, pad, inside):
         ra, rb = sc.boxes[a], sc.boxes[b]
         self.x0, self.y0, x1, y1, self.NX, self.NY = R._window(sc, ra, rb, pad, inside)
-        if getattr(sc, 'index', None) is None:
-            sc.index = Index()
-        sc.index.sync(sc)
         self.px = (self.x0, self.y0, self.x0 + (self.NX - 1) * G, self.y0 + (self.NY - 1) * G)   # the lattice's extent in px
-        feats = [f for f in map(self._on_lattice, itertools.chain(sc.index.all(),
-                 _call_features(sc, a, b, inside, (self.x0, self.y0, x1, y1)))) if f]
+        near = scene_features(sc, (self.px[0] - G, self.px[1] - G, self.px[2] + G, self.px[3] + G))
+        feats = [f for f in map(self._on_lattice, itertools.chain(near, _call_features(sc, a, b, inside, (self.x0, self.y0, x1, y1)))) if f]
         self.n = (self.NX, self.NY)              # positions along a row, along a column
         self.buckets = ({}, {})                  # per axis: bucket of BUCKET rows (columns) -> the features that reach into it
         for f in feats:
@@ -437,38 +427,90 @@ def _heuristic(goals):
 def search(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
     """route._route for BBB_ROUTER=vis: same arguments, (points, cost) or None. prove_none: the search walks back from the goals
     at the same time (_Lattice.walk_back), a cell per node it takes from the queue, and gives up as soon as the walk finds no start."""
+    return next(search_paths(sc, a, b, sa, sb, pad, natural, inside, prove_none, span_a, span_b), None)
+
+
+def search_paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
+    """The paths of search(), cheapest first, as a generator of (points, cost): the k shortest loopless paths of Yen's algorithm
+    (J. Y. Yen, "Finding the k shortest loopless paths in a network", Management Science 17, 1971) on the search graph, the lattice
+    and its features built once. The next path is searched only when the caller asks for it, so a caller that takes the first pays
+    for one search. Paths differ as point lists: on this graph a straight run passes every stop on it, so two state sequences from
+    the same start are two different polylines."""
     t0 = time.perf_counter()
     ra, rb = sc.boxes[a], sc.boxes[b]
     lat = _Lattice(sc, a, b, pad, inside)
     nat = natural or (sa[0], sb[0])
     starts, goals = R._ends(ra, rb, sa, sb, nat, span_a, span_b, lat.x0, lat.y0, lat.NX, lat.NY, lat.free)
-    found = None
-    if starts and goals:
-        lat.set_goals(goals)
-        found = _astar(lat, starts, goals, nat, lat.walk_back(starts, goals) if prove_none else None)
-    R.STATS['build'] += time.perf_counter() - t0 - lat.search_secs
-    R.STATS['search'] += lat.search_secs
-    if found is None:
-        return None
-    states, cost = found
-    return R._finish(states, lat.NY, lat.x0, lat.y0, ra, rb), cost
-
-
-def _astar(lat, starts, goals, nat, walk=None):
-    """A* over (node, direction) from the start states to the goal states: (the states of the cheapest path, its cost) or None.
-    walk: a _Lattice.walk_back to advance one step per node taken; the search stops when it says False.
-    Heap entries (f, g, state), the state packed as (i * NY + j) * 4 + direction: the grid search's order, so ties break alike where
-    the two visit the same states. Sets lat.search_secs (the time of the search less the rows and columns built on the way)."""
-    t0, built0 = time.perf_counter(), lat.build_secs
+    R.STATS['build'] += time.perf_counter() - t0
+    if not starts or not goals:
+        return
+    lat.set_goals(goals)
     NY = lat.NY
-    h = _heuristic(goals)
-    goal_cost = {(i * NY + j) * 4 + d: extra for (i, j), ds in goals.items() for d, extra in ds.items()}
-    dist, prev, pq = {}, {}, []
+    sources = {}
     for i, j, off, s in starts:
         st, c0 = (i * NY + j) * 4 + R.OUT[s], off * 0.15 + (0 if s == nat[0] else R.SIDE_COST)
+        sources[st] = min(c0, sources.get(st, math.inf))
+    goal_cost = {(i * NY + j) * 4 + d: extra for (i, j), ds in goals.items() for d, extra in ds.items()}
+    h = _heuristic(goals)
+    walk = lat.walk_back(starts, goals) if prove_none else None
+    drawn = set()
+    for states, costs in itertools.islice(_yen(lat, sorted(sources.items()), goal_cost, h, walk), MAX_STATE_PATHS):
+        R.STATS['search'] += lat.search_secs
+        R.STATS['build'] += lat.build_secs
+        lat.search_secs = lat.build_secs = 0.0
+        pts = R._finish(states, NY, lat.x0, lat.y0, ra, rb)
+        if tuple(pts) not in drawn:                       # R.unjog can make two state paths one polyline: yield it once
+            drawn.add(tuple(pts))
+            yield pts, costs[-1]
+
+
+def _yen(lat, sources, goal_cost, h, walk):
+    """Yen's k shortest loopless paths over the search states, from a virtual source joined to every start state (sources: [(state,
+    cost)]) to the goal states: a generator of (states, cumulative costs), cheapest first. Path k+1 is the cheapest of the candidates:
+    for each state of path k taken as the spur (the virtual source included), the root up to it is kept, its states are removed from
+    the graph, the edges that the paths found so far take out of the spur after the same root are removed, and the cheapest spur path
+    is searched from it with the root's cost."""
+    first = _astar(lat, sources, goal_cost, h, walk)
+    if first is None:
+        return
+    found = [first]
+    yield first
+    cands, seen, tie = [], {tuple(first[0])}, itertools.count()
+    while True:
+        states, costs = found[-1]
+        for i in range(-1, len(states) - 1):               # i = -1: the spur is the virtual source, so another start state
+            root = states[:i + 1]
+            used = {p[0][i + 1] for p in found if p[0][:i + 1] == root}
+            if i < 0:
+                spur = _astar(lat, [sc for sc in sources if sc[0] not in used], goal_cost, h)
+                path = spur
+            else:
+                spur = _astar(lat, [(states[i], costs[i])], goal_cost, h, banned_states=frozenset(root[:-1]),
+                              banned_edges=frozenset((states[i], u) for u in used))
+                path = spur and (states[:i] + spur[0], costs[:i] + spur[1])
+            if path and tuple(path[0]) not in seen:
+                seen.add(tuple(path[0]))
+                heapq.heappush(cands, (path[1][-1], next(tie), path))
+        if not cands:
+            return
+        found.append(heapq.heappop(cands)[2])
+        yield found[-1]
+
+
+def _astar(lat, sources, goal_cost, h, walk=None, banned_states=frozenset(), banned_edges=frozenset()):
+    """A* over (node, direction) from the source states [(state, cost)] to the goal states (goal_cost: state -> side cost):
+    (the states of the cheapest path, the cost reached at each) or None. walk: a _Lattice.walk_back to advance one step per node
+    taken; the search stops when it says False. banned_states, banned_edges: what Yen's algorithm removes for a spur search.
+    Heap entries (f, g, state), the state packed as (i * NY + j) * 4 + direction: the grid search's order, so ties break alike where
+    the two visit the same states. Adds to lat.search_secs (the time of the search less the rows and columns built on the way)."""
+    t0, built0 = time.perf_counter(), lat.build_secs
+    NY = lat.NY
+    prune = not banned_states and not banned_edges        # the dominance cut below holds only for the whole graph
+    dist, prev, pq = {}, {}, []
+    for st, c0 in sources:
         if c0 < dist.get(st, math.inf):
             dist[st] = c0
-            heapq.heappush(pq, (c0 + h(i, j, R.OUT[s]), c0, st))
+            heapq.heappush(pq, (c0 + h(*divmod(st >> 2, NY), st & 3), c0, st))
     end = None
     while pq:
         if walk is not None:
@@ -494,23 +536,26 @@ def _astar(lat, starts, goals, nat, walk=None):
                 continue
             i2, j2, c = nxt
             s2 = (i2 * NY + j2) * 4 + nd
+            if s2 in banned_states or (st, s2) in banned_edges:
+                continue
             c2 = cost + c + (R.TURN_COST if nd != d else 0) + goal_cost.get(s2, 0)
             # s2 ^ 1 and s2 ^ 3 are the same node going the two perpendicular ways; a turn is allowed at every stop but a goal. When one
             # of them is cheaper by more than a turn, it can do all that s2 can for less (but turn back the way it came, which only
             # retraces a path its own predecessors cover more cheaply), so s2 is on no cheapest path.
-            if s2 not in goal_cost and min(dist.get(s2 ^ 1, math.inf), dist.get(s2 ^ 3, math.inf)) + R.TURN_COST < c2:
+            if prune and s2 not in goal_cost and min(dist.get(s2 ^ 1, math.inf), dist.get(s2 ^ 3, math.inf)) + R.TURN_COST < c2:
                 continue
             if c2 < dist.get(s2, math.inf):
                 dist[s2] = c2
                 prev[s2] = st
                 heapq.heappush(pq, (c2 + (0 if s2 in goal_cost else h(i2, j2, nd)), c2, s2))
-    lat.search_secs = time.perf_counter() - t0 - (lat.build_secs - built0)
+    lat.search_secs += time.perf_counter() - t0 - (lat.build_secs - built0)
     if end is None:
         return None
     states = [end]
     while states[-1] in prev:
         states.append(prev[states[-1]])
-    return states[::-1], dist[end]
+    states.reverse()
+    return states, [dist[st] for st in states]
 
 
 def selftest(seeds=20):

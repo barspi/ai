@@ -121,8 +121,7 @@ def main():
     for a, b, kind, pts in easy:
         lab = route.place_label(sc, pts, kind)
         if lab:
-            sc.add([], kind, lab)
-            sc.arrows.pop()
+            sc.add(None, kind, lab)
             label_lines += draw.label(kind, *lab)
         else:
             problems.append('no free straight stretch for the label of #%s %s #%s' % (a, kind, b))
@@ -141,8 +140,7 @@ def main():
         add(a, b, kind, pts)
         lab = route.place_label(sc, pts, kind)
         if lab:
-            sc.add([], kind, lab)
-            sc.arrows.pop()
+            sc.add(None, kind, lab)
             label_lines += draw.label(kind, *lab)
         else:
             problems.append('no free straight stretch for the label of #%s %s #%s' % (a, kind, b))
@@ -169,6 +167,17 @@ def main():
         if model.repair(rr, count_only=True)[1] <= before_r:
             text = rr
             print('reroute: %d arrows that left their frame routed again, %d still leave it' % (len(rr_done), len(reroute.leaves_frame(text))))
+    if nopath:                                    # no room for them in their frame: model.route_arrows grows it (frames.grow)
+        pend = []
+        for a, b, kind in nopath:
+            text, p = model.new_arrow(text, a, b, kind)
+            pend.append(p)
+        res = model.route_arrows(text, pend)
+        text = res.text
+        nopath = [(a, b, kind) for a, b, kind, _ in res.failed]
+        problems = [p for p in problems if not p.startswith('NO PATH') or any('#%s %s #%s' % x in p for x in nopath)]
+        for g in res.grown:
+            print('frame "%s" grown %dpx to make room for an arrow' % g)
     if svgmeta.read(text) is None:
         text = svgmeta.write(text, svgmeta.new_meta(spec['repo'], spec.get('roots') or ()))
     for a2, b2, kind2, why2 in rules.far_low(text):

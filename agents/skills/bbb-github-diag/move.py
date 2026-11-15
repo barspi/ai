@@ -14,13 +14,18 @@ N@X,Y        the new top-left corner of box N (its pop-up moves with it). X or Y
              below a row, not over it). Nothing is drawn there; the other arrows are not touched.
 
 Steps, in order:
-1. the boxes move and the frames grow; each moved box gets the data-frame of the smallest frame that now holds it (svgmeta.py);
-2. every arrow with an end on a moved box, and every --reroute arrow, is taken out with its label;
-3. they are routed again in the picture as it now is, the most important first (draw.IMPORTANCE), then the shortest (the distance
-   between the two box centres); an arrow inside one frame is searched inside it first (route.py); its label goes on the new path;
-4. hops.py redoes the jump arcs and model.relabel() moves labels that now sit badly.
-A moved box that overlaps another box (28px) or crosses a frame border is printed as a PROBLEM; an arrow with no path is left out and
-printed. Nothing is written when the result has more invalid arrows than the input (exit 1), unless --force.
+1. the boxes move and the --grow frames grow; each moved box gets the data-frame of the smallest frame that now holds it
+   (svgmeta.py). A moved box that sticks out below the frame it was in makes that frame grow (frames.grow: what lies below moves down
+   by as much, and the arrows that ran through it are routed again);
+2. every arrow with an end on a moved box, every --reroute arrow and every arrow a push cut is taken out with its label;
+3. model.route_arrows routes them in the picture as it now is, the most important first (draw.IMPORTANCE), then the shortest; an
+   arrow between two boxes of one frame never leaves it: when the frame has no room, it grows down; each path leaves room for its
+   label where it can (the cheapest of the k cheapest that does), and the label goes there;
+4. model.settle routes again any other arrow the move left invalid (a box moved onto it), redoes the jump arcs and places again
+   every label that now sits badly. Nothing is left for a later step.
+A moved box that overlaps another box (28px) or crosses a frame border is printed as a PROBLEM; an arrow with no path is left out,
+listed in the metadata ("nopath") and printed. Nothing is written when the result has more invalid arrows than the input (exit 1),
+unless --force.
 """
 import os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
@@ -28,7 +33,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collapse, draw, hops, model, route, svgmeta
 
 GAP = 28.0
-GONE = '<!--move.py: gone-->'
 
 
 def shift_line(line, dx, dy):
@@ -107,73 +111,54 @@ def problems_of_place(text, moved):
 
 def take_out(lines, i):
     """Line indexes of the arrow on line i and of its label (a label of its word centred on one of its stretches)."""
-    kind = svgmeta.arrow_of(lines[i])[2]
-    segs = route.segments(model.arrow_points(lines[i]))
-    for j in range(len(lines)):
-        lab = draw.label_at(lines, j)
-        if lab and lab[5] == kind:
-            cx, cy = lab[0] + lab[2] / 2, lab[1] + lab[3] / 2
-            if any((o == 'h' and abs(c - cy) < 1 and lo - 1 <= cx <= hi + 1) or (o == 'v' and abs(c - cx) < 1 and lo - 1 <= cy <= hi + 1) for o, c, lo, hi in segs):
-                return [i] + list(range(j, j + 1 + lab[4]))
-    return [i]
+    return [i] + list(model.label_lines(lines, i))
+
+
+def fit_frames(text, homes):
+    """Grow each frame that a moved box now sticks out of at the bottom, by frames.grow (what lies below moves down), so that the box
+    keeps frames.BOTTOM_PAD px above the bottom border. homes {box: frame rect it was in before the move}. Returns (text, line indexes
+    of the arrows the pushes cut, [(frame title, px)])."""
+    import frames
+    cut, grown = set(), []
+    for n, rect in homes.items():
+        _, box, _, frs = collapse.parse(text)
+        b = box[n]
+        f = next((f for f in frs if abs(f['x'] - rect[0]) < .5 and abs(f['y'] - rect[1]) < .5), None)
+        if f is None or not (f['x'] <= b['x'] and b['x'] + b['w'] <= f['x'] + f['w'] and f['y'] <= b['y'] < f['y'] + f['h']):
+            continue                                       # left its frame (problems_of_place says so) or was never in one
+        need = b['y'] + b['h'] + frames.BOTTOM_PAD - (f['y'] + f['h'])
+        if need > 0:
+            push = frames.grow(text, (f['x'], f['y'], f['w'], f['h']), need)
+            text, cut = push.text, cut | set(push.cut)
+            grown.append((f['name'], need))
+    return text, sorted(cut), grown
 
 
 def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
-    """Returns (text, routed [(a, b, bends, left its frame)], failed [(a, b, why)], place problems)."""
+    """Returns (text, routed [(a, b, bends, room)], failed [(a, b, why)], place problems). Every arrow of a moved box, every arrow
+    named in extra, and every arrow a frame push cut is routed again (model.route_arrows); then model.settle routes again any other
+    arrow the move left invalid (a box moved onto it). Nothing is left for a later step."""
+    before = text
     lines = text.split('\n')
-    todo = []
-    for i, ln in enumerate(lines):
-        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
-        if at and (at[0] in moves or at[1] in moves or at[:2] in extra):
-            todo.append((i, at))
-    slots = {}
-    for i, at in todo:
-        gone = take_out(lines, i)
-        slots[i] = (lines[i], gone[1] if len(gone) > 1 else None)
-        for k in gone:
-            lines[k] = GONE
-    text = move_and_grow('\n'.join(lines), moves, grows)
-    # The jump arcs over the arrows just taken out go now, before routing: a stale arc splits the line it sits on, and route.py keeps
-    # every other arrow away from a split point, so an arc over nothing can close a channel. hops.py keeps the lines in place.
-    text, _, _ = hops.add_hops(text, marks=False)          # marks=False: the line numbers of the slots must not move
-    where = problems_of_place(text, moves)
+    todo = [i for i, ln in enumerate(lines) if svgmeta.is_arrow(ln) and (lambda at: at and (at.a in moves or at.b in moves or at[:2] in extra))(model.arrow_at(ln))]
     sc0, _ = model.read(text)
-    centre = lambda n: (sc0.boxes[n][0] + sc0.boxes[n][2] / 2, sc0.boxes[n][1] + sc0.boxes[n][3] / 2)
-    order = sorted(todo, key=lambda t: (-draw.IMPORTANCE.get(t[1][2], 2),
-                                        sum(abs(p - q) for p, q in zip(centre(t[1][0]), centre(t[1][1])))))
-    routed, failed = [], []
-    lines = text.split('\n')                              # one list for the whole loop: a slot may come to hold two lines of markup
-    for i, (a, b, kind) in order:
-        text = '\n'.join(lines)
-        sc, _ = model.read(text)
-        for k, r in enumerate(keep_out):                  # an obstacle like a box, under a key no box has
-            sc.boxes[-1 - k] = tuple(r)
-        pts = route.route(sc, a, b, *(sides or {}).get((a, b), ('*', '*')))
-        for k in range(len(keep_out)):
-            del sc.boxes[-1 - k]
-        if not pts:
-            failed.append((a, b, 'no path: the arrow is left out'))
-            continue
-        old, lab_at = slots[i]
-        lines[i] = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), old, count=1)
-        if (a, b) in (sides or {}) or (a, b) in extra:   # the user named this arrow's route: reroute.py --improve leaves it alone
-            lines[i] = svgmeta.pin(lines[i])
-        sc.arrows.append(list(pts))
-        lab = route.place_label_any(sc, pts, kind)
-        if lab:
-            label = '\n'.join(draw.label(kind, lab[0], lab[1], lab[2]))
-            if lab_at is not None:                        # the slot of its old label
-                lines[lab_at] = label
-            else:                                         # it had none: the label goes after the path; writing it over line i lost the arrow
-                lines[i] += '\n' + label
-        routed.append((a, b, len(pts) - 2, bool(sc.left_frame)))
-    text = '\n'.join(l for l in '\n'.join(lines).split('\n') if l != GONE)
+    homes = {n: route.frame_of(sc0, n) for n in moves if n in sc0.boxes}
+    text = move_and_grow(text, moves, grows)
+    text, cut, grown = fit_frames(text, {n: r for n, r in homes.items() if r})
+    text, pend = model.take_out(text, todo + cut, sides, pin=set(sides or {}) | set(extra))
+    text, _, _ = hops.add_hops(text)                     # the jump arcs over the arrows just taken out go before routing
+    where = problems_of_place(text, moves) + ['frame "%s" grown %dpx (what lies below moved down)' % g for g in grown]
+    res = model.route_arrows(text, pend, keep_out)
+    where += ['frame "%s" grown %dpx to make room for an arrow' % g for g in res.grown]
+    text, _, more = model.settle(before, res.text, [(p.a, p.b) for p in pend])
+    where += more
+    failed = [(a, b, why) for a, b, _, why in res.failed]
     if failed:
         meta = svgmeta.read(text)
-        for a, b, _ in failed:
-            svgmeta.add_nopath(meta, a, b, next(k for _, (x, y, k) in todo if (x, y) == (a, b)), 'no path after move.py')
+        for a, b, kind, _ in res.failed:
+            svgmeta.add_nopath(meta, a, b, kind, 'no path after move.py')
         text = svgmeta.write(text, meta)
-    return text, routed, failed, where
+    return text, res.routed, failed, where + [model.no_label(x) for x in res.unlabelled]
 
 
 def main():
@@ -214,9 +199,6 @@ def main():
         moves[n] = (place(box[n]['x'], sx), place(box[n]['y'], sy))
     before = model.repair(text, count_only=True)[1]
     res, routed, failed, where = move(text, moves, grows, extra, sides, keep_out)
-    res, _, _ = hops.add_hops(res)
-    res, _, bad = model.relabel(res, hop_pad=20)
-    res, _, nolab = model.label_missing(res, [(a, b) for a, b, _, _ in routed])   # a label left off before the arcs were drawn
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
@@ -228,16 +210,12 @@ def main():
     open(out, 'w', encoding='utf-8').write(res)
     for n, (x, y) in moves.items():
         print('#%d: x %s y %s' % (n, collapse.fmt(x), collapse.fmt(y)))
-    for a, b, bends, left in routed:
-        print('#%d -> #%d: %d bends%s' % (a, b, bends, ' (no path inside their frame: it leaves it)' if left else ''))
+    for a, b, bends, room in routed:
+        print('#%d -> #%d: %d bends%s' % (a, b, bends, '' if room else ' (WARN: no path of the cheapest had room for the full label)'))
     for p in where:
         print('PROBLEM', p)
     for a, b, why in failed:
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
-    for x, y, why in bad:
-        print('PROBLEM label near (%d,%d): %s' % (x, y, why))
-    for x in nolab:
-        print('PROBLEM', model.no_label(x))
     print('next: check_diag.py %s' % out)
 
 

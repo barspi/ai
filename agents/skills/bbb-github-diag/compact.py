@@ -176,7 +176,7 @@ def main():
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:     # a move must never leave the diagram worse than it was
         print('REFUSED: closing the gaps would leave %d arrows invalid (%d before). Nothing written. Collapse fewer boxes at a time, '
-              'or run with --force and repair the arrows by hand.' % (after, before))
+              'or run with --force and then model.py repair OUT.svg OUT.svg.' % (after, before))
         for p in bad:
             print('PROBLEM', p)
         sys.exit(1)

@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Add new boxes and arrows to an existing lineage SVG (collapsed or not). Nothing else is redrawn or moved.
+"""Add new boxes and arrows to an existing lineage SVG (collapsed or not). Nothing else is redrawn or moved, but for one case: a frame
+with no room grows down (frames.grow), and what lies below it moves down by as much, its cut arrows routed again.
 
 usage: add_nodes.py IN.svg OUT.svg SPEC.json [--snapshot snap.json]
 
 The file is the source of truth: a revision starts from the previous file (new_revision.py), is refreshed (refresh_meta.py --apply), gets
 its new boxes and arrows from this script, then check_diag.py. The script finds free space for a box and routes every arrow in the
 diagram as it is now (route.py reads the current boxes, frames, labels and arrows), then redoes the jump arcs (hops.py).
+A box goes in free space beside `near` (rules.near_for when the spec has none). When its frame has no free spot, it goes at the
+frame's bottom, beside `near` where it can (bottom_spot), and the frame grows to hold it: frames.grow pushes down every frame and box
+below that overlaps it horizontally, so the box never lands on the frame below. Arrows go through model.route_arrows: an arrow between
+two boxes of one frame never leaves it (the frame grows when it has no room), and each path leaves room for its label where one of
+the cheapest paths can.
 
 SPEC.json:
 { "repo": "owner/name",
@@ -118,6 +124,49 @@ def _place_best(sc, w, h, near, going_right, frame, rects):
     return min(cands, key=cost) if cands else None
 
 
+def bottom_spot(sc, w, h, near, frame):
+    """When `frame` has no free spot: the place at its bottom, beside `near` when it can be (right of it, under it, left of it,
+    else any column of the frame), just under the lowest box of that column and clear of the arrows there. Returns (x, y, px the frame
+    must grow by so the box keeps frames.BOTTOM_PAD above its bottom border). The spot that needs the least growth wins; ties: the
+    nearest to `near`. The frame then grows by frames.grow (what lies below moves down), never by overlapping the frame below."""
+    import frames
+    fx, fy, fw, fh = frame
+    members = [r for r in sc.boxes.values() if route.holds(frame, r)]
+    xs = []
+    if near in sc.boxes and route.holds(frame, sc.boxes[near]):
+        nx, _, nw, _ = sc.boxes[near]
+        xs = [nx + nw + GAP_X, nx, nx - w - GAP_X]
+    xs += sorted({r[0] for r in members})
+    xs = [x for x in dict.fromkeys(xs) if fx + 20 <= x and x + w <= fx + fw - 20]
+    tall = model.route.Scene(sc.boxes, [f if f != frame else (fx, fy, fw, fh + 10 ** 5) for f in sc.frames], sc.labels, sc.pills,
+                             sc.arrows, sc.bounds)       # the frame as it will be once grown: no bottom border in the way
+    tall_frame = (fx, fy, fw, fh + 10 ** 5)
+    best = None
+    for k, x in enumerate(xs):
+        y = max([r[1] + r[3] for r in members if r[0] < x + w + 30 and x < r[0] + r[2] + 30] + [fy + 10]) + 30
+        while not is_free(tall, (x, y, w, h), tall_frame):
+            y += STEP
+        need = max(0.0, y + h + frames.BOTTOM_PAD - (fy + fh))
+        key = (need, k)
+        if best is None or key < best[0]:
+            best = (key, (x, y, need))
+    return best[1] if best else None
+
+
+def insert_box(text, markup, before_boxes=False):
+    """Insert lines of markup: a box after the last box (before the first label, which is drawn over the boxes); with before_boxes,
+    an arrow before the first box (arrows are drawn under the boxes)."""
+    ls = text.split('\n')
+    if before_boxes:
+        k = next(i for i, l in enumerate(ls) if l.startswith('<g id="n'))
+    else:
+        k = next((i for i, l in enumerate(ls) if re.match(r'<rect [^>]*fill="#fffdf7"', l)), None)
+        if k is None:
+            k = max(i for i, l in enumerate(ls) if l == '</g>' and any(x.startswith('<g id="n') for x in ls[max(0, i - 60):i])) + 1
+    ls[k:k] = markup.split('\n') if isinstance(markup, str) else markup
+    return '\n'.join(ls)
+
+
 def move_legend(lines, dx):
     """Shift the legend block (between <!--legend--> markers, else from its background rectangle to the first line that is not part of it)."""
     a = next((i for i, l in enumerate(lines) if l == '<!--legend-->'), None)
@@ -160,19 +209,22 @@ def main():
             sys.exit('#%s is already in %s' % (b['num'], src))
     prs = set(info['prs']) | {b['num'] for b in spec.get('boxes', []) if draw.STY[b['state']]['kind'] == 'PR'}
     ctx = draw.Ctx(spec['repo'], titles, prs)
-    _, boxg, _, frames = __import__('collapse').parse(text)
-    def frame_by_name(name):
-        """The frame whose visible title is `name`, else the first whose title contains it (case ignored)."""
-        full = [f for f in frames if svgmeta.frame_name(lines[f['tl']]) == name]
-        f = full[0] if full else next(f for f in frames if name.lower() in svgmeta.frame_name(lines[f['tl']]).lower())
-        return (f['x'], f['y'], f['w'], f['h']), f
     kept = svgmeta.boxes(text)
     placed_frame = {n: v['frame'] for n, v in kept.items()}         # the frame of every box, for the vote of rules.frame_for
     roots = (svgmeta.read(text) or {}).get('roots', ())
     spec_arrows = [(a['from'], a['to'], a['kind']) for a in spec.get('arrows', [])]
 
-    box_markup, label_markup, path_markup, problems, grow, nopath, drawn = [], [], [], [], {}, [], set()
+    import collapse, frames
+    problems, nopath, pending = [], [], []
     for b in spec.get('boxes', []):
+        lines = text.split('\n')
+        _, _, _, frs = collapse.parse(text)
+
+        def frame_by_name(name):
+            """The frame whose visible title is `name`, else the first whose title contains it (case ignored)."""
+            full = [f for f in frs if svgmeta.frame_name(lines[f['tl']]) == name]
+            f = full[0] if full else next(f for f in frs if name.lower() in svgmeta.frame_name(lines[f['tl']]).lower())
+            return (f['x'], f['y'], f['w'], f['h']), f
         h = draw.box_height(b)
         fr, fobj = (None, None)
         mine = [e for e in spec_arrows if b['num'] in e[:2]]
@@ -202,109 +254,90 @@ def main():
                     going_right = False
             partners = [a.get('to') if a.get('from') == b['num'] else a.get('from') for a in spec.get('arrows', []) if b['num'] in (a.get('from'), a.get('to'))]
             spot = place(sc, draw.BOX_W, h, near, going_right, fr, partners)
-            if spot is None and fr is not None:                       # no room inside the frame: below its last box, and the frame grows
-                members = [r for r in sc.boxes.values() if fr[0] <= r[0] < fr[0] + fr[2] and fr[1] <= r[1] < fr[1] + fr[3]]
-                spot = (members[0][0] if members else fr[0] + 60, max([m[1] + m[3] for m in members] + [fr[1] + 40]) + 28)
-                grow[fobj['name']] = (fobj, spot[1] + h + 24)
+            if spot is None and fr is not None:                       # the frame is full: its bottom, beside `near`; the frame grows
+                bs = bottom_spot(sc, draw.BOX_W, h, near, fr)
+                if bs:
+                    x, y, need = bs
+                    if need > 0:
+                        push = frames.grow(text, fr, need)
+                        text, cut = model.take_out(push.text, push.cut)     # the arrows the push cut: routed with the new ones
+                        pending += cut
+                        print('frame "%s" grown %spx; what lies below moved down (%d boxes)' % (fobj['name'], draw.fmt(need), len(push.moved)))
+                    spot = (x, y)
             if spot is None:
                 problems.append('NO FREE SPACE for #%s: decide a place yourself ("x", "y" in the spec)' % b['num'])
                 continue
             x, y = spot
         b = dict(b, frame=svgmeta.frame_name(lines[fobj['tl']]) if fobj else None, github=records.get(str(b['num'])) or b.get('github'))
         markup, hh = draw.box(ctx, b, x, y)
-        box_markup.append(markup)
-        sc.boxes[b['num']] = (x, y, float(draw.BOX_W), float(hh))
-        if b.get('new'):
-            sc.pills.append((x + 3 - 26, y + 3 - 26, 52, 52))
+        text = insert_box(text, markup)
         print('#%s: x %s y %s w %s h %s  (bottom %s)' % (b['num'], draw.fmt(x), draw.fmt(y), draw.BOX_W, draw.fmt(hh), draw.fmt(y + hh)))
-        if fr is not None and y + hh + 24 > fr[1] + fr[3]:
-            grow[fobj['name']] = (fobj, y + hh + 24)
+        if fr is not None:                                            # a box given by hand, lower than the frame: the frame grows
+            cur = next(f for f in collapse.parse(text)[3] if abs(f['x'] - fr[0]) < .5 and abs(f['y'] - fr[1]) < .5)
+            need = y + hh + frames.BOTTOM_PAD - (cur['y'] + cur['h'])
+            if need > 0:
+                push = frames.grow(text, (cur['x'], cur['y'], cur['w'], cur['h']), need)
+                text, cut = model.take_out(push.text, push.cut)
+                pending += cut
+        sc, _ = model.read(text)
 
-    maxx = max(r[0] + r[2] for r in sc.boxes.values())
-    maxy = max(r[1] + r[3] for r in sc.boxes.values())
+    sc, info = model.read(text)
     leg = info['legend']
+    maxx = max(r[0] + r[2] for r in sc.boxes.values())
     if leg and maxx + 60 > leg[0]:                       # the legend keeps its place right of the farthest box: move it with the new column
         dx = maxx + 60 - leg[0]
+        lines = text.split('\n')
         move_legend(lines, dx)
-        sc.bounds = (sc.bounds[0], sc.bounds[1], sc.bounds[2] + dx, sc.bounds[3])
+        text = '\n'.join(lines)
         print('legend moved %s px to the right' % draw.fmt(dx))
-        maxx = max(maxx, leg[0] + dx + leg[2])
+    drawn = set()
     for a in spec.get('arrows', []):
         kind = a['kind']
         if kind not in draw.EDGE:
             sys.exit('unknown arrow word "%s": use one of %s' % (kind, ', '.join(draw.EDGE)))
-        if 'points' in a:
+        if 'points' in a:                                    # a shape the user asked for: drawn as given
             pts = [tuple(p) for p in a['points']]
-            lab = tuple(a['label']) if 'label' in a else route.place_label(sc, pts, kind)
+            lab = tuple(a['label']) if 'label' in a else route.place_label(model.read(text)[0], pts, kind)
+            text = insert_box(text, [draw.arrow(pts, kind, a['from'], a['to'])] + (draw.label(kind, *lab) if lab else []), before_boxes=True)
+            drawn.add((a['from'], a['to']))
+            continue
+        if a['from'] not in sc.boxes or a['to'] not in sc.boxes:
+            problems.append('arrow #%s -> #%s names a box that is not in the diagram' % (a['from'], a['to']))
+            continue
+        text, p = model.new_arrow(text, a['from'], a['to'], kind)
+        pending.append(p)
+    # the router picks the sides (every pair at once, the cheapest path); an arrow inside one frame never leaves it, and its frame
+    # grows when it has no room (model.route_arrows, frames.grow); each path leaves room for its label where it can
+    res = model.route_arrows(text, pending)
+    s = res.text
+    new_pairs = {(a['from'], a['to']) for a in spec.get('arrows', [])}
+    for a_, b_, kind, why in res.failed:
+        if (a_, b_) in new_pairs:
+            problems.append('NO PATH for #%s %s #%s (%s): kept in the metadata ("nopath"); name it in the box note, and say what would '
+                            'have to move' % (a_, kind, b_, why))
         else:
-            ra, rb = sc.boxes.get(a['from']), sc.boxes.get(a['to'])
-            if not ra or not rb:
-                problems.append('arrow #%s -> #%s names a box that is not in the diagram' % (a['from'], a['to']))
-                continue
-            # the router picks the sides: it searches every pair at once (the same side twice too) and keeps the cheapest path. Never
-            # try side pairs in a fixed order and take the first that has a path: that took an 8-bend detour out of the far side of a
-            # box when the arrow could leave the near side and run down beside its column with 2 bends.
-            pts = route.route(sc, a['from'], a['to'], '*', '*')
-            if not pts:
-                problems.append('NO PATH for #%s %s #%s: kept in the metadata ("nopath"); name it in the box note, and say what would have to move' % (a['from'], kind, a['to']))
-                nopath.append((a['from'], a['to'], kind))
-                continue
-            lab = route.place_label(sc, pts, kind)
-        sc.arrows.append(list(pts))
-        path_markup.append(draw.arrow(pts, kind, a['from'], a['to']))
-        drawn.add((a['from'], a['to']))
-        shift = None
-        if not lab:                                               # a short arrow: 8px of shaft, else beside its shaft
-            any_ = route.place_label_any(sc, pts, kind)
-            if any_:
-                lab, shift = any_[:2], any_[2]
-                if any_[3]:
-                    problems.append('the label of #%s %s #%s fits only with less than 20px of shaft (a short arrow): check it by eye'
-                                    % (a.get('from', '?'), kind, a.get('to', '?')))
-        if lab:
-            label_markup += draw.label(kind, lab[0], lab[1], shift)
-            dx, dy = shift or (0, 0)
-            sc.labels.append((lab[0] + dx - draw.label_width(kind) / 2, lab[1] + dy - 9, draw.label_width(kind), 18.0))
-        else:
-            problems.append('no free straight stretch for the label of #%s %s #%s' % (a.get('from', '?'), kind, a.get('to', '?')))
-        for px, py in pts:
-            maxx, maxy = max(maxx, px), max(maxy, py)
-
-    s = '\n'.join(lines)
-    ls = s.split('\n')
-    i_box = next(i for i, l in enumerate(ls) if l.startswith('<g id="n'))
-    i_lbl = next((i for i, l in enumerate(ls) if re.match(r'<rect [^>]*fill="#fffdf7"', l)), None)
-    if i_lbl is None:                                           # a diagram with no labels yet: after the last box group
-        i_lbl = max(i for i, l in enumerate(ls) if l == '</g>' and any(x.startswith('<g id="n') for x in ls[max(0, i - 60):i])) + 1
-    ls[i_lbl:i_lbl] = box_markup + label_markup               # after the last box, before the existing labels
-    ls[i_box:i_box] = path_markup                             # arrows under the boxes, like the others
-    s = '\n'.join(ls)
-
-    for name, (fobj, bottom) in grow.items():
-        pat = re.compile(r'(<rect x="%s" y="%s" width="[\d.]+" height=")[\d.]+(" rx="18")' % (re.escape(draw.fmt(fobj['x'])), re.escape(draw.fmt(fobj['y']))))
-        s, n = pat.subn(lambda m: m.group(1) + draw.fmt(bottom - fobj['y']) + m.group(2), s, count=1)
-        maxy = max(maxy, bottom)
-        print('frame "%s": bottom edge now %s%s' % (name, draw.fmt(bottom), '' if n else ' (NOT CHANGED: edit it by hand)'))
-        if any(f['y'] > fobj['y'] and f['y'] < bottom + 10 and f['x'] < fobj['x'] + fobj['w'] and f['x'] + f['w'] > fobj['x'] for f in frames if f is not fobj):
-            problems.append('the frame "%s" now touches the frame below it: move that frame down (collapse.py --moves)' % name)
-
-    m = re.match(r'<svg [^>]*width="(\d+)" height="(\d+)" viewBox="0 0 \d+ \d+"', s)
-    W, H = int(m.group(1)), int(m.group(2))
-    nW, nH = max(W, int(maxx) + 80), max(H, int(maxy) + 70)
-    if (nW, nH) != (W, H):
-        s = s.replace('width="%d" height="%d" viewBox="0 0 %d %d"' % (W, H, W, H), 'width="%d" height="%d" viewBox="0 0 %d %d"' % (nW, nH, nW, nH), 1)
-        s = re.sub(r'<rect x="0" y="0" width="%d" height="%d" fill="(#[0-9a-f]{6})"/>' % (W, H),          # the page, whatever its colour
-                   lambda q: '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (nW, nH, q.group(1)), s, count=1)
-        print('canvas %dx%d -> %dx%d' % (W, H, nW, nH))
-    s, hops_added, hops_removed = hops.add_hops(s)           # the jump arcs of the whole diagram, recomputed
+            problems.append('NO PATH for #%s %s #%s after a frame grew (%s): kept in the metadata ("nopath")' % (a_, kind, b_, why))
+        nopath.append((a_, b_, kind))
+    problems += ['frame "%s" grown %dpx to make room for an arrow' % g for g in res.grown]
+    problems += ['WARN: #%s -> #%s: no path of the cheapest had room for the full label' % (a_, b_) for a_, b_, _, room in res.routed if not room]
+    problems += [model.no_label(x) for x in res.unlabelled]
+    drawn |= {(a_, b_) for a_, b_, _, _ in res.routed}
+    sc, _ = model.read(s)
+    W = int(re.match(r'<svg [^>]*width="(\d+)"', s).group(1))
+    nW = max([W] + [int(r[0] + r[2]) + 80 for r in sc.boxes.values()] + [int(x) + 80 for pts in sc.arrows for x, _ in pts])
+    if nW != W:
+        m = re.match(r'<svg [^>]*width="(\d+)" height="(\d+)" viewBox="0 0 \d+ \d+"', s)
+        H = int(m.group(2))
+        s = s.replace('width="%d" height="%d" viewBox="0 0 %d %d"' % (W, H, W, H), 'width="%d" height="%d" viewBox="0 0 %d %d"' % (nW, H, nW, H), 1)
+        s = re.sub(r'<rect x="0" y="0" width="%d" height="%d" fill="(#[0-9a-f]{6})"/>' % (W, H),
+                   lambda q: '<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (nW, H, q.group(1)), s, count=1)
+        print('canvas width %d -> %d' % (W, nW))
     # second pass: each new arrow was routed before the boxes and arrows after it in the spec were placed, so a cheaper path may
     # exist now (route.path_cost); reroute.reroute keeps a new path only when it costs less
     import reroute
-    s, better, _ = reroute.reroute(s, sorted(drawn), improve=True)
+    s, better, _ = reroute.reroute(s, sorted(drawn & new_pairs), improve=True)
     if better:
-        s, _, _ = hops.add_hops(s)
-        s, _, _ = model.relabel(s, hop_pad=20)
-        s, _, nolab = model.label_missing(s, [(d[0], d[1]) for d in better])
+        s, nolab = model.finish(s, [(d[0], d[1]) for d in better])
         for a_, b_, bends, _, old_bends in better:
             print('routed again: #%d -> #%d, %d bends (was %d)' % (a_, b_, bends, old_bends))
         problems += [model.no_label(x) for x in nolab]
@@ -321,7 +354,7 @@ def main():
     missing = [k for k in used if '>%s<' % draw.esc(k) not in s]
     if missing:
         problems.append('the legend has no line for: %s (add one)' % ', '.join(missing))
-    print('wrote %s: %d boxes, %d arrows, %d jump arcs added, %d stale removed' % (out, len(box_markup), len(path_markup), hops_added, hops_removed))
+    print('wrote %s: %d boxes, %d arrows' % (out, len(spec.get('boxes', [])), len(drawn & new_pairs)))
     for p in problems:
         print('PROBLEM', p)
     print('next: check_diag.py %s <previous revision>' % out)

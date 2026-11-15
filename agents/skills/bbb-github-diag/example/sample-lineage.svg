@@ -209,15 +209,15 @@
 <text class="lbl" x="458.5" y="429.5" text-anchor="middle" style="fill:#1c2430">child</text>
 <rect x="435.9" y="699.5" width="45.2" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
 <text class="lbl" x="458.5" y="712.5" text-anchor="middle" style="fill:#1c2430">child</text>
-<rect x="377.4" y="721.5" width="45.2" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
-<text class="lbl" x="400.0" y="734.5" text-anchor="middle" style="fill:#1c2430">child</text>
+<rect x="377.4" y="723.5" width="45.2" height="18.0" rx="4" fill="#fffdf7" stroke="#1c2430" stroke-width="0.9"/>
+<text class="lbl" x="400.0" y="736.5" text-anchor="middle" style="fill:#1c2430">child</text>
 <rect x="1081.0" y="556.8" width="56.1" height="18.0" rx="4" fill="#fffdf7" stroke="#6e6a64" stroke-width="0.9"/>
 <text class="lbl" x="1109.0" y="569.8" text-anchor="middle" style="fill:#6e6a64">related</text>
 <g id="xmarks">
 <path class="xmark" d="M1115.0,757.5 L1126.0,768.5 M1126.0,757.5 L1115.0,768.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/>
 </g>
 <!--legend-->
-<rect x="2229.0" y="190" width="500" height="428" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
+<rect x="2229.0" y="190" width="500" height="448" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>
 <text class="lgb" x="2245.0" y="220" style="font-size:16px">How to read this graph</text>
 <rect x="2245.0" y="248" width="88" height="30" rx="7" fill="#f8e8e4" stroke="#8a3030" stroke-width="1.4"/>
 <text class="pill" x="2289.0" y="267" text-anchor="middle" style="fill:#8a3030">open</text>
@@ -233,30 +233,31 @@
 <text class="lg" x="2245.0" y="318">Red cross on a closed issue: closed by hand, the work not done.</text>
 <text class="lg" x="2245.0" y="338">Red <tspan style="font-weight:700">new</tspan> corner: added in the latest revision.</text>
 <text class="lg" x="2245.0" y="358"><tspan style="font-weight:700">Bold</tspan> lines are claims that hold now (blocks, found, not merged).</text>
-<line x1="2245.0" y1="396" x2="2291.0" y2="396" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
-<text class="lgb" x="2303.0" y="400" style="font-size:12.5px">child</text>
-<text class="lg" x="2429.0" y="400" style="font-size:12px">B is a formal child of umbrella A</text>
-<line x1="2245.0" y1="424" x2="2291.0" y2="424" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
-<text class="lgb" x="2303.0" y="428" style="font-size:12.5px">follow-up</text>
-<text class="lg" x="2429.0" y="428" style="font-size:12px">B was filed for what A left out</text>
-<line x1="2245.0" y1="452" x2="2291.0" y2="452" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
-<text class="lgb" x="2303.0" y="456" style="font-size:12.5px">led to</text>
-<text class="lg" x="2429.0" y="456" style="font-size:12px">work on A produced B</text>
-<line x1="2245.0" y1="480" x2="2291.0" y2="480" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
-<text class="lgb" x="2303.0" y="484" style="font-size:12.5px">closed by</text>
-<text class="lg" x="2429.0" y="484" style="font-size:12px">B is the pull request that closed issue A</text>
-<line x1="2245.0" y1="508" x2="2291.0" y2="508" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
-<text class="lgb" x="2303.0" y="512" style="font-size:12.5px">work done by</text>
-<text class="lg" x="2429.0" y="512" style="font-size:12px">B worked on A without closing it</text>
-<line x1="2245.0" y1="536" x2="2291.0" y2="536" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
-<text class="lgb" x="2303.0" y="540" style="font-size:12.5px">supersedes</text>
-<text class="lg" x="2429.0" y="540" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
-<line x1="2245.0" y1="564" x2="2291.0" y2="564" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
-<text class="lgb" x="2303.0" y="568" style="font-size:12.5px">blocked by</text>
-<text class="lg" x="2429.0" y="568" style="font-size:12px">A cannot finish until B is done</text>
-<line x1="2245.0" y1="592" x2="2291.0" y2="592" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
-<text class="lgb" x="2303.0" y="596" style="font-size:12.5px">related</text>
-<text class="lg" x="2429.0" y="596" style="font-size:12px">related work, neither is the parent</text>
+<text class="lg" x="2245.0" y="378"><tspan style="text-decoration:line-through">Struck</tspan> lines no longer hold (a block that is over).</text>
+<line x1="2245.0" y1="416" x2="2291.0" y2="416" stroke="#1c2430" stroke-width="1.9" marker-end="url(#h-child)"/>
+<text class="lgb" x="2303.0" y="420" style="font-size:12.5px">child</text>
+<text class="lg" x="2429.0" y="420" style="font-size:12px">B is a formal child of umbrella A</text>
+<line x1="2245.0" y1="444" x2="2291.0" y2="444" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="2303.0" y="448" style="font-size:12.5px">follow-up</text>
+<text class="lg" x="2429.0" y="448" style="font-size:12px">B was filed for what A left out</text>
+<line x1="2245.0" y1="472" x2="2291.0" y2="472" stroke="#8a4b12" stroke-width="1.9" marker-end="url(#h-led)"/>
+<text class="lgb" x="2303.0" y="476" style="font-size:12.5px">led to</text>
+<text class="lg" x="2429.0" y="476" style="font-size:12px">work on A produced B</text>
+<line x1="2245.0" y1="500" x2="2291.0" y2="500" stroke="#1d4e89" stroke-width="1.9" marker-end="url(#h-closed)"/>
+<text class="lgb" x="2303.0" y="504" style="font-size:12.5px">closed by</text>
+<text class="lg" x="2429.0" y="504" style="font-size:12px">B is the pull request that closed issue A</text>
+<line x1="2245.0" y1="528" x2="2291.0" y2="528" stroke="#1d4e89" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-work)"/>
+<text class="lgb" x="2303.0" y="532" style="font-size:12.5px">work done by</text>
+<text class="lg" x="2429.0" y="532" style="font-size:12px">B worked on A without closing it</text>
+<line x1="2245.0" y1="556" x2="2291.0" y2="556" stroke="#b02a2a" stroke-width="1.9" marker-end="url(#h-cross)"/>
+<text class="lgb" x="2303.0" y="560" style="font-size:12.5px">supersedes</text>
+<text class="lg" x="2429.0" y="560" style="font-size:12px">pull request A replaced B (B closed unmerged)</text>
+<line x1="2245.0" y1="584" x2="2291.0" y2="584" stroke="#8a3030" stroke-width="1.9" marker-end="url(#h-blocked)"/>
+<text class="lgb" x="2303.0" y="588" style="font-size:12.5px">blocked by</text>
+<text class="lg" x="2429.0" y="588" style="font-size:12px">A cannot finish until B is done</text>
+<line x1="2245.0" y1="612" x2="2291.0" y2="612" stroke="#6e6a64" stroke-width="1.9" stroke-dasharray="7 5" marker-end="url(#h-ref)"/>
+<text class="lgb" x="2303.0" y="616" style="font-size:12.5px">related</text>
+<text class="lg" x="2429.0" y="616" style="font-size:12px">related work, neither is the parent</text>
 <!--/legend-->
 <!-- collapsed boxes: data-collapsed and data-keywords on the first rect of a box group; run collapse.py again after an edit. Pop-ups (g id="popN") are siblings of the boxes and come before the script element: keep boxes and pop-ups direct children of the root, or the hover rule stops working. -->
 <g id="pop101" class="pop">

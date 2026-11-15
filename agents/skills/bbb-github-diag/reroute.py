@@ -13,10 +13,10 @@ routes that opened up. It never makes an arrow worse by that measure, and it nev
 --pin A>B ... / --unpin A>B ...: mark (or unmark) arrows whose route the user chose (`data-pinned="1"` on the path, svgmeta.pin);
 nothing is routed. move.py pins every arrow named in its --sides or --reroute.
 A>B names one drawn arrow by its two boxes (its data-from and data-to, svgmeta.py). --frame-leavers takes every arrow whose two boxes are
-in the same frame but whose path leaves that frame (check_diag.py fails them). Each one, in turn: its path and its label are removed,
-route.py finds a new path in the picture as it is now (an arrow inside one frame is searched inside it first), the label goes on the new
-path. Then hops.py redoes the jump arcs and model.relabel() moves labels that now sit badly. An arrow that finds no path keeps its old
-one and is printed. Nothing is written when the result has more invalid arrows than the input (exit 1), unless --force.
+in the same frame but whose path leaves that frame (check_diag.py fails them). They are taken out with their labels and
+model.route_arrows routes them again in the picture as it is now: an arrow inside one frame never leaves it (the frame grows down when
+it has no room, frames.grow), and each path leaves room for its label where one of the cheapest paths can. Then the jump arcs and every
+label that sits badly are redone (model.finish). An arrow that finds no path keeps its old one and is printed. Nothing is written when the result has more invalid arrows than the input (exit 1), unless --force.
 """
 import os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
@@ -80,54 +80,46 @@ def bends_of(text):
     return out
 
 
+def _lines_of(text, pairs):
+    """{(a, b): [line indexes]} of the drawn arrows with these ends."""
+    out = {tuple(p): [] for p in pairs}
+    for i, ln in enumerate(text.split('\n')):
+        at = svgmeta.is_arrow(ln) and model.arrow_at(ln)
+        if at and at[:2] in out:
+            out[at[:2]].append(i)
+    return out
+
+
 def reroute(text, pairs, improve=False):
-    """Returns (text, done, failed). improve: keep a new path only when route.path_cost says it costs less than the old one."""
-    done, failed = [], []
-    for a, b in pairs:
+    """Returns (text, done [(a, b, bends, short label, old bends)], failed [(a, b, why)]).
+    Without improve: the arrows are taken out with their labels and model.route_arrows routes them again (an arrow inside one frame
+    never leaves it; the frame grows when it has no room); an arrow with no path keeps its old markup.
+    improve: one arrow at a time, a new path is kept only when route.path_cost says it costs less than the old one; frames never grow."""
+    found = _lines_of(text, pairs)
+    failed = [(a, b, '%d drawn arrows with these ends' % len(v)) for (a, b), v in found.items() if len(v) != 1]
+    one = [(p, v[0]) for p, v in found.items() if len(v) == 1]
+    if not improve:
+        bends0 = {p: len(route.straight(model.arrow_points(text.split('\n')[i]))) - 2 for p, i in one}
+        t, pend = model.take_out(text, [i for _, i in one])
+        res = model.route_arrows(t, pend, keep_old=True)
+        failed += [(a, b, why + ': the old one stays') for a, b, _, why in res.failed]
+        return res.text, [(a, b, bends, not room, bends0.get((a, b), 0)) for a, b, bends, room in res.routed], failed
+    done = []
+    for (a, b), _ in one:
         lines = text.split('\n')
-        hit = [i for i, l in enumerate(lines) if svgmeta.is_arrow(l) and (svgmeta.arrow_of(l) or (None, None))[:2] == (a, b)]
-        if len(hit) != 1:
-            failed.append((a, b, '%d drawn arrows with these ends' % len(hit)))
+        i = _lines_of(text, [(a, b)])[(a, b)][0]
+        if svgmeta.is_pinned(lines[i]):                    # the user chose this route
             continue
-        i = hit[0]
-        if improve and svgmeta.is_pinned(lines[i]):            # the user chose this route
+        old_pts = model.arrow_points(lines[i])
+        t, (p,) = model.take_out(text, [i])
+        sc = model.scene(t)
+        res = route.route_labelled(sc, a, b, p.kind, *p.sides)
+        if not res or route.path_cost(sc, res[0], a, b) >= route.path_cost(sc, old_pts, a, b) - 1:
             continue
-        kind = svgmeta.arrow_of(lines[i])[2]
-        segs = route.segments(model.arrow_points(lines[i]))
-        gone = {i}
-        for j in range(len(lines)):                       # its label: a label of its word centred on one of its stretches
-            lab = draw.label_at(lines, j)
-            if lab and lab[5] == kind:
-                cx, cy = lab[0] + lab[2] / 2, lab[1] + lab[3] / 2
-                if any((o == 'h' and abs(c - cy) < 1 and lo - 1 <= cx <= hi + 1) or (o == 'v' and abs(c - cx) < 1 and lo - 1 <= cy <= hi + 1) for o, c, lo, hi in segs):
-                    gone |= set(range(j, j + 1 + lab[4]))
-                    lab_at = j
-                    break
-        else:
-            lab_at = None
-        rest = '\n'.join(l for k, l in enumerate(lines) if k not in gone)
-        sc, _ = model.read(rest)
-        pts = route.route(sc, a, b, '*', '*')
-        if not pts:
-            failed.append((a, b, 'no path: the old one stays'))
-            continue
-        if improve:
-            old_cost = route.path_cost(sc, model.arrow_points(lines[i]), a, b)
-            new_cost = route.path_cost(sc, pts, a, b)
-            if new_cost >= old_cost - 1:
-                continue
-        old_pts = route.straight(model.arrow_points(lines[i]))
-        lines[i] = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), lines[i], count=1)
-        sc.arrows.append(list(pts))
-        lab = route.place_label_any(sc, pts, kind)
-        if lab_at is not None:                            # the old label lines go; the new label takes their place
-            n_old = len([k for k in gone if k != i])
-            lines[lab_at:lab_at + n_old] = draw.label(kind, lab[0], lab[1], lab[2]) if lab else []
-        elif lab:
-            k = next((k for k, l in enumerate(lines) if l == '<!--legend-->'), len(lines) - 2)
-            lines[k:k] = draw.label(kind, lab[0], lab[1], lab[2])
-        text = '\n'.join(lines)
-        done.append((a, b, len(pts) - 2, bool(sc.left_frame), len(old_pts) - 2))
+        pts, lab, room = res
+        line = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), p.line, count=1)
+        text = t.replace(p.slot, '\n'.join([line] + (draw.label(p.kind, lab[0], lab[1], lab[2]) if lab else [])), 1)
+        done.append((a, b, len(pts) - 2, not room, len(route.straight(old_pts)) - 2))
     return text, done, failed
 
 
@@ -182,9 +174,7 @@ def main():
         print('total path cost %.0f -> %.0f' % (total0, sum(costs(res).values())))
     else:
         res, done, failed = reroute(text, pairs)
-    res, _, _ = hops.add_hops(res)
-    res, _, bad = model.relabel(res, hop_pad=20)
-    res, _, nolab = model.label_missing(res, [(d[0], d[1]) for d in done])   # a label left off before the arcs were drawn
+    res, nolab = model.finish(res, [(d[0], d[1]) for d in done])    # jump arcs, labels: nothing left for a later step
     after = model.repair(res, count_only=True)[1]
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
@@ -196,8 +186,8 @@ def main():
     open(out, 'w', encoding='utf-8').write(res)
     for x in nolab:
         print('PROBLEM', model.no_label(x))
-    for a, b, bends, left, old_bends in done:
-        print('#%d -> #%d: %d bends (was %d)%s' % (a, b, bends, old_bends, ' (no path inside their frame: it leaves it)' if left else ''))
+    for a, b, bends, short, old_bends in done:
+        print('#%d -> #%d: %d bends (was %d)%s' % (a, b, bends, old_bends, ' (WARN: no path of the cheapest had room for the full label)' if short else ''))
     if passes:                                             # what the user should look at: the arrows that took more bends
         b0, b1 = bends_of(text), bends_of(res)
         changed = [p for p in b1 if p in b0 and b0[p][1] != b1[p][1]]
@@ -209,8 +199,6 @@ def main():
             print('  MORE BENDS #%d -> #%d: %d (was %d)' % (p[0], p[1], b1[p][0], b0[p][0]))
     for a, b, why in failed:
         print('PROBLEM #%d -> #%d: %s' % (a, b, why))
-    for x, y, why in bad:
-        print('PROBLEM label near (%d,%d): %s' % (x, y, why))
     print('next: check_diag.py %s' % out)
 
 

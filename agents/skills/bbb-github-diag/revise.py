@@ -15,7 +15,8 @@ Steps (each one is safe to run again, so a second run with --answers continues w
   4. add_nodes.py                                  places the boxes, routes the arrows
   5. refresh_meta.py --apply                       stores the records of the new boxes and draws what their texts state (relate.py)
   6. check_diag.py NEW OLD [--keep-new]
-  7. --render: render_region.py of the area of the added boxes (a PNG in the temp folder; look at it)
+  7. only with --render: render_region.py of the area of the added boxes (a PNG in the temp folder), once, for the user at the
+     end. Nothing renders by default: an agent judges the result by the FAILS and WARNS of check_diag.py, never by a picture.
 
 Prints: what was done, then DECISIONS (numbered) and FAILS. Exit 0 when there are none, 3 otherwise. The full output of every step
 is in the log file it names (read it only when a line of the summary is not enough).

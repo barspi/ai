@@ -15,17 +15,20 @@ never closer than 22px (HARD_H: their 18px labels then fit one above the other w
 line is crossed only at a right angle, 30px or more from either of its ends (END_CLEAR); never turns within 40px of a box edge (so it
 leaves and enters straight). Costs: a step 1, a bend 30, a crossing 35, a side other than the facing one 20, a border of a frame that
 holds neither end 60, of a frame that holds an end 75 (so leaving such a frame and coming back costs 150). An arrow whose two boxes are
-in the same frame is searched inside that frame first and leaves it only when no path exists inside (route() then records the pair in
-sc.left_frame). It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
-The search runs inside a window around the two boxes (the window grows when nothing is found), on a 5px lattice. Two searches give
-the same costs: `vis` (ovg.py, the default), A* on an orthogonal visibility graph whose nodes are only where a path may need to turn,
-and `grid` (_route_grid below), A* over every lattice cell, kept to compare. The environment variable BBB_ROUTER=grid|vis picks one.
-place_label() keeps a label 7px from every other arrow.
+in the same frame is searched inside that frame and nowhere else (None: model.route_arrows grows the frame, frames.grow). An arrow
+between two frames is searched in the box round the two frames and the corridor between them (frames_window), then on the whole
+canvas. It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
+The search runs on a 5px lattice. Two searches give the same costs: `vis` (ovg.py, the default), A* on an orthogonal visibility graph
+whose nodes are only where a path may need to turn, with Yen's k shortest paths for route(accept=...), and `grid` (_route_grid
+below), A* over every lattice cell (the cheapest path only), kept to compare. The environment variable BBB_ROUTER=grid|vis picks one.
+route_labelled() accepts a path only when its label has room (the cheapest of the K_PATHS cheapest that has). place_label() keeps a
+label 7px from every other arrow and LABEL_SHAFT px of shaft from a bend, an end or a jump arc (drawn, or that hops.py will draw).
+Label and obstacle questions go to the scene's spatial index (spatial.py), so they read only what is near.
 """
-import heapq, math, os, time
+import heapq, itertools, math, os, time
 from array import array
 
-import draw
+import draw, spatial
 
 G = 5
 BOXM, LABM, FPROX, TURN_FREE, EDGE_MARGIN = 26, 7, 30, 40, 24
@@ -41,23 +44,58 @@ FRAME_COST = 60     # per border crossed of a frame that holds neither end: goin
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
 LAST_COST = None    # the cost of the last path _route() found
+K_PATHS = 16        # route(accept=...) tries at most this many of the cheapest paths (Yen) for one that passes the test
+LABEL_SHAFT = 20    # px of straight shaft a label needs on each side (check_diag.py warns below it)
+WINDOW_MARGIN = 2 * FPROX  # a cross-frame search window: the two frames and what lies between them, and this much around
 STATS = {'calls': 0, 'build': 0.0, 'search': 0.0}    # _route() calls and their seconds: obstacle structures, then the search itself
 OUT = {'R': 0, 'L': 2, 'B': 1, 'T': 3}               # direction numbers: 0 east, 1 south, 2 west, 3 north
 DX, DY = (1, 0, -1, 0), (0, 1, 0, -1)
 
 
+def _rect_box(r):
+    return (r[0], r[1], r[0] + r[2], r[1] + r[3])
+
+
+# What the label test (_hit) asks the index for, per Scene list: [(bounding box, payload)] of one item.
+_HIT_ENTRIES = {
+    'boxes': lambda kv: [(_rect_box(kv[1]), kv[1])],
+    'labels': lambda r: [(_rect_box(r), r)],
+    'pills': lambda r: [(_rect_box(r), r)],
+    'hops': lambda hp: [((min(hp[0], hp[2]), min(hp[1], hp[3]), max(hp[0], hp[2]), max(hp[1], hp[3])), hp)],
+    'arrows': lambda pts: [(((c, lo, c, hi) if o == 'v' else (lo, c, hi, c)), (pts, (o, c, lo, hi))) for o, c, lo, hi in segments(pts)],
+}
+
+
 class Scene:
+    """The obstacles of one diagram. Its lists are spatial.Tracked: append to them freely (an arrow, a label); any other change, or a
+    new list assigned, makes the spatial index (near()) index that list again. Items are frozen on the way in: boxes, labels, pills
+    and hops as tuples, an arrow as a tuple of points."""
+    boxes = spatial.TrackedAttr()
+    labels = spatial.TrackedAttr(spatial.freeze_rect)
+    pills = spatial.TrackedAttr(spatial.freeze_rect)
+    arrows = spatial.TrackedAttr(spatial.freeze_path)
+    hops = spatial.TrackedAttr(spatial.freeze_rect)      # jump arcs already in the picture: (x0, y0, x1, y1) of each; labels keep clear
+
     def __init__(self, boxes, frames=(), labels=(), pills=(), arrows=(), bounds=None):
         self.bounds = bounds                               # (x0, y0, x1, y1): the area arrows may use (not the header, not the legend)
-        self.boxes, self.frames = dict(boxes), list(frames)
-        self.labels, self.pills = list(labels), list(pills)
-        self.arrows = [list(a) for a in arrows]
-        self.hops = []                                     # jump arcs already in the picture: (x0, y0, x1, y1) of each; labels keep clear of them
-        self.left_frame = []                               # (a, b) of arrows that had to leave their common frame (no path inside)
-        self.index = None                                  # ovg.Index: the labels, pills and arrows above as obstacles (vis router)
+        self.boxes, self.frames = boxes, list(frames)
+        self.labels, self.pills, self.arrows, self.hops = labels, pills, arrows, ()
+        self._layers = {}
+
+    def layer(self, key, source, entries):
+        """The spatial.Grid of the list named `source`, made by entries(item) -> [(box, payload)], brought up to date."""
+        lay = self._layers.get(key)
+        if lay is None:
+            lay = self._layers[key] = spatial.Layer(entries)
+        return lay.sync(getattr(self, source))
+
+    def near(self, source, box):
+        """The items of one list (boxes: their rectangles; arrows: (path, segment) per segment) whose bounding box meets box."""
+        return self.layer(source, source, _HIT_ENTRIES[source]).query(box)
 
     def add(self, pts, kind=None, lab=None):
-        self.arrows.append(list(pts))
+        if pts:
+            self.arrows.append(pts)
         if lab:
             w = draw.label_width(kind)
             self.labels.append((lab[0] - w / 2, lab[1] - 9, w, 18))
@@ -118,36 +156,56 @@ def _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
     return False
 
 
-def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
-    """One search, by the router the environment variable BBB_ROUTER names: `vis` (ovg.search, the default) or `grid` (_route_grid).
-    Both take the same arguments and return (points, cost) or None; the cost goes to LAST_COST."""
-    global LAST_COST
+def _paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
+    """The paths of one search window, cheapest first, as a generator of (points, cost), by the router the environment variable
+    BBB_ROUTER names: `vis` (ovg.search_paths, the default: Yen's k shortest paths) or `grid` (_route_grid: the cheapest only)."""
     which = os.environ.get('BBB_ROUTER', 'vis')
+    STATS['calls'] += 1
     if which == 'vis':
         import ovg                                               # here, not at the top: ovg imports this module
-        search = ovg.search
+        yield from ovg.search_paths(sc, a, b, sa, sb, pad, natural, inside, prove_none, span_a, span_b)
     elif which == 'grid':
-        search = _route_grid
+        found = _route_grid(sc, a, b, sa, sb, pad, natural, inside, prove_none, span_a, span_b)
+        if found:
+            yield found
     else:
         raise ValueError('BBB_ROUTER=%r: use grid or vis' % which)
-    STATS['calls'] += 1
-    found = search(sc, a, b, sa, sb, pad, natural, inside, prove_none, span_a, span_b)
-    if found is None:
+
+
+def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None, accept=None):
+    """One search window: the cheapest path, or with `accept` (a test on the points) the cheapest of the K_PATHS cheapest that passes
+    it, else the cheapest (the caller learns that from accept itself). None when the window holds no path. The cost goes to
+    LAST_COST."""
+    global LAST_COST
+    first = None
+    for pts, cost in itertools.islice(_paths(sc, a, b, sa, sb, pad, natural, inside, prove_none, span_a, span_b),
+                                      1 if accept is None else K_PATHS):
+        if first is None:
+            first = pts, cost
+        if accept is None or accept(pts):
+            LAST_COST = cost
+            return pts
+    if first is None:
         return None
-    pts, LAST_COST = found
-    return pts
+    LAST_COST = first[1]
+    return first[0]
 
 
 def _window(sc, ra, rb, pad, inside):
-    """(x0, y0, x1, y1, NX, NY): the search window around boxes ra and rb (or the frame `inside`) and its lattice. The lattice point
-    (i, j) is (x0 + i * G, y0 + j * G); NX and NY points across and down."""
+    """(x0, y0, x1, y1, NX, NY): the search window and its lattice. The window is the frame `inside` (with two lattice steps around
+    it), else `pad` px around boxes ra and rb, or `pad` itself when it is a box (x0, y0, x1, y1); always within the scene's bounds.
+    The lattice point (i, j) is (x0 + i * G, y0 + j * G); NX and NY points across and down."""
     bx0, by0, bx1, by1 = (int(v) for v in (sc.bounds or (0, 0, 10 ** 6, 10 ** 6)))
-    x0 = max(bx0, int(min(ra[0], rb[0]) - pad))
-    y0 = max(by0, int(min(ra[1], rb[1]) - pad))
-    x1 = min(bx1, int(max(ra[0] + ra[2], rb[0] + rb[2]) + pad))
-    y1 = min(by1, int(max(ra[1] + ra[3], rb[1] + rb[3]) + pad))
-    if inside:                                   # the window is the frame itself
+    if inside:
         x0, y0, x1, y1 = int(inside[0]) - 2 * G, int(inside[1]) - 2 * G, int(inside[0] + inside[2]) + 2 * G, int(inside[1] + inside[3]) + 2 * G
+    elif isinstance(pad, tuple):
+        x0, y0, x1, y1 = (int(v) for v in pad)
+        x0, y0, x1, y1 = max(bx0, x0), max(by0, y0), min(bx1, x1), min(by1, y1)
+    else:
+        x0 = max(bx0, int(min(ra[0], rb[0]) - pad))
+        y0 = max(by0, int(min(ra[1], rb[1]) - pad))
+        x1 = min(bx1, int(max(ra[0] + ra[2], rb[0] + rb[2]) + pad))
+        y1 = min(by1, int(max(ra[1] + ra[3], rb[1] + rb[3]) + pad))
     return x0, y0, x1, y1, (x1 - x0) // G + 1, (y1 - y0) // G + 1
 
 
@@ -440,6 +498,12 @@ def holds(f, r):
     return f[0] <= r[0] and r[0] + r[2] <= f[0] + f[2] and f[1] <= r[1] and r[1] + r[3] <= f[1] + f[3]
 
 
+def frame_of(sc, n):
+    """The smallest frame that holds box n, or None."""
+    r = sc.boxes[n]
+    return min((f for f in sc.frames if holds(f, r)), key=lambda f: f[2] * f[3], default=None)
+
+
 def common_frame(sc, a, b):
     """The smallest frame that holds both boxes, or None."""
     ra, rb = sc.boxes[a], sc.boxes[b]
@@ -447,58 +511,99 @@ def common_frame(sc, a, b):
     return min(both, key=lambda f: f[2] * f[3]) if both else None
 
 
-def route(sc, a, b, sa='R', sb='L', pad=260, span_a=None, span_b=None):
+def frames_window(sc, a, b):
+    """The search window of an arrow between two frames: the frame of each box (the box itself when no frame holds it), the corridor
+    between them (the box round both), and WINDOW_MARGIN around that."""
+    rs = [frame_of(sc, n) or sc.boxes[n] for n in (a, b)]
+    m = WINDOW_MARGIN
+    return (min(r[0] for r in rs) - m, min(r[1] for r in rs) - m, max(r[0] + r[2] for r in rs) + m, max(r[1] + r[3] for r in rs) + m)
+
+
+def route(sc, a, b, sa='R', sb='L', pad=None, span_a=None, span_b=None, accept=None):
     """Path from side `sa` of box a to side `sb` of box b (sides R, L, T, B), or None when there is no path that keeps the rules.
     sa='*' and sb='*' let the search pick the sides: the pair that faces the other box is preferred, any other side is taken when it
     saves a bend or a crossing (an arrow to a box up and to the right leaves from the top, not from the bottom and around).
-    span_a, span_b: (lo, hi), the part of that end's side the search may use (y on R or L, x on T or B); None: all of it."""
+    span_a, span_b: (lo, hi), the part of that end's side the search may use (y on R or L, x on T or B); None: all of it.
+    accept(points) -> bool: a test a path must pass (route_labelled() asks for room for the label); the K_PATHS cheapest paths of
+    the window are tried in cost order, and the cheapest is returned when none passes.
+
+    Where it searches. Two boxes in one frame: inside that frame, its border a hard limit, and nowhere else: None means the frame
+    has no room (model.route_arrows then grows it, frames.grow). Boxes in two frames: in frames_window() (the two frames and the
+    corridor between them), then, when that holds no path, the whole canvas. pad (a number) replaces frames_window by a window that
+    many px around the two boxes, for callers that want a small one."""
     natural = None
     if sa == '*' or sb == '*':
         natural = sides_for(sc.boxes[a], sc.boxes[b])[0]
         sa, sb = ('RLTB' if sa == '*' else sa), ('RLTB' if sb == '*' else sb)
-    pin = dict(span_a=span_a, span_b=span_b)
+    pin = dict(span_a=span_a, span_b=span_b, accept=accept)
     fr = common_frame(sc, a, b)
-    if fr:                                       # both boxes in one frame: the arrow stays inside it (an almost hard rule)
-        pts = _route(sc, a, b, sa, sb, 10 ** 6, natural, inside=fr, **pin)
-        if pts:
-            return pts
-        if hasattr(sc, 'left_frame'):
-            sc.left_frame.append((a, b))
-    # After a search that found nothing, the next ones also walk back from the target (prove_none): when the target is walled in,
-    # that ends each of them at once, where the search would visit its whole window. It never changes a result.
-    for k in range(3):
-        pts = _route(sc, a, b, sa, sb, pad, natural, prove_none=bool(fr or k), **pin)
-        if pts:
-            return pts
-        pad *= 2
-    # Last try: the whole canvas. A long detour (around a fork, over a frame) can leave even the largest window above; NO PATH is
-    # reported only when there is truly no path that keeps the rules.
+    if fr:
+        return _route(sc, a, b, sa, sb, 10 ** 6, natural, inside=fr, **pin)
+    pts = _route(sc, a, b, sa, sb, frames_window(sc, a, b) if pad is None else pad, natural, **pin)
+    if pts:
+        return pts
+    # After a search that found nothing, the whole canvas, walking back from the target too (prove_none): when the target is walled
+    # in, that ends the search at once, where it would visit the whole canvas. It never changes a result.
     return _route(sc, a, b, sa, sb, 10 ** 6, natural, prove_none=True, **pin)
 
 
+def route_labelled(sc, a, b, kind, sa='*', sb='*', w=None, h=18.0, span_a=None, span_b=None):
+    """route() whose path must leave room for the arrow's label: one straight stretch with the label's length plus LABEL_SHAFT px of
+    shaft on each side, where the label touches no box, label, pill or other arrow (place_label with shaft=LABEL_SHAFT). Returns
+    (points, label, room): label as place_label_any gives it, (cx, cy, shift, short), at the place the test found; room is False when
+    no path of the K_PATHS cheapest had room, so the cheapest was taken and its label placed as well as it goes (or None). None when
+    there is no path."""
+    room = lambda pts: place_label(sc, pts, kind, w, h, shaft=LABEL_SHAFT)
+    pts = route(sc, a, b, sa, sb, span_a=span_a, span_b=span_b, accept=lambda p: room(p) is not None)
+    if pts is None:
+        return None
+    lab = room(pts)
+    if lab:
+        return pts, (lab[0], lab[1], None, False), True
+    return pts, place_label_any(sc, pts, kind, w, h), False
+
+
 def _hit(rect, sc, own=None, pad=2, hop_pad=20, g=LABM):
-    """Does a label at rect touch a box, a label, a pill (pad), a jump arc (hop_pad) or come closer than g to another arrow?"""
+    """Does a label at rect touch a box, a label, a pill (pad), a jump arc (hop_pad) or come closer than g to another arrow? Asks the
+    scene's spatial index for what lies within the largest of those margins, so only nearby items are tested."""
     x, y, w, h = rect
-    for (bx, by, bw, bh) in list(sc.boxes.values()) + sc.labels + sc.pills:
+    m = max(pad, hop_pad, g)
+    q = (x - m, y - m, x + w + m, y + h + m)
+    for (bx, by, bw, bh) in itertools.chain(sc.near('boxes', q), sc.near('labels', q), sc.near('pills', q)):
         if bx - pad < x + w and bx + bw + pad > x and by - pad < y + h and by + bh + pad > y:
             return True
-    for (x0, y0, x1, y1) in getattr(sc, 'hops', ()):             # a jump arc breaks the straight stretch: keep hop_pad px clear of it
+    for (x0, y0, x1, y1) in sc.near('hops', q):                 # a jump arc breaks the straight stretch: keep hop_pad px clear of it
         if min(x0, x1) - hop_pad < x + w and max(x0, x1) + hop_pad > x and min(y0, y1) - hop_pad < y + h and max(y0, y1) + hop_pad > y:
             return True
-    for k, pts in enumerate(sc.arrows):
-        if own is not None and pts == list(own):
+    mine = spatial.freeze_path(own) if own is not None else None
+    for pts, (o, c, lo, hi) in sc.near('arrows', q):
+        if pts == mine:
             continue
-        for o, c, lo, hi in segments(pts):
-            if (o == 'h' and y - g < c < y + h + g and lo < x + w + g and hi > x - g) or \
+        if (o == 'h' and y - g < c < y + h + g and lo < x + w + g and hi > x - g) or \
                 (o == 'v' and x - g < c < x + w + g and lo < y + h + g and hi > y - g):
-                return True
+            return True
     return False                                                 # (a label is opaque: it may sit over the dotted border of a frame)
 
 
-def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
+HOP_R = 7            # hops.py: the radius of a jump arc
+HOP_END = 12         # hops.py: no arc within this of either end of a run
+
+
+def _future_hops(sc, y, lo, hi, own):
+    """The jump arcs hops.py will draw on a horizontal stretch at y from lo to hi (the horizontal arrow hops over every vertical one
+    that crosses it, HOP_END px or more from the ends of the run): [(x0, x1)] of each, from the arrows in the scene but `own`."""
+    mine = spatial.freeze_path(own)
+    return [(c - HOP_R, c + HOP_R) for pts, (o, c, lo2, hi2) in sc.near('arrows', (lo, y, hi, y))
+            if o == 'v' and pts != mine and lo + HOP_END < c < hi - HOP_END and lo2 + 3 < y < hi2 - 3]
+
+
+def place_label(sc, pts, kind, w=None, h=18.0, strict=True, shaft=None):
     """Centre of the label for an arrow: the middle of a straight stretch where the label touches nothing. The stretch that ends in the
     arrowhead counts up to the base of the head (11px). Returns None when no stretch is long enough. A new label has the width of its word
-    and 18px; an existing label of another size (a two-line one is 30px tall) passes its own w and h."""
+    and 18px; an existing label of another size (a two-line one is 30px tall) passes its own w and h. The label keeps px of shaft on
+    each side: `shaft` on every stretch when given; else LABEL_SHAFT at the tail, the tip and a jump (8 when not strict), 8 elsewhere.
+    A jump cuts a stretch like a bend: one already drawn (sc.hops), and on a horizontal stretch one hops.py will draw where a vertical
+    arrow crosses it (_future_hops), so a label never ends up next to an arc drawn after it."""
     w = w if w is not None else draw.label_width(kind)
     best = None
     own_pts = pts
@@ -514,8 +619,8 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
         ext = w if horiz else h
         # a jump arc on this stretch breaks it in two, like a bend: the label goes on one piece, never over the arc
         on = lambda hp: (abs(hp[1] - p[1]) < 1 and abs(hp[3] - p[1]) < 1) if horiz else (abs(hp[0] - p[0]) < 1 and abs(hp[2] - p[0]) < 1)
-        cuts = sorted((min(hp[0], hp[2]), max(hp[0], hp[2])) if horiz else (min(hp[1], hp[3]), max(hp[1], hp[3]))
-                      for hp in getattr(sc, 'hops', ()) if on(hp))
+        cuts = sorted([(min(hp[0], hp[2]), max(hp[0], hp[2])) if horiz else (min(hp[1], hp[3]), max(hp[1], hp[3]))
+                       for hp in getattr(sc, 'hops', ()) if on(hp)] + (_future_hops(sc, p[1], lo, hi, own_pts) if horiz else []))
         cuts = [c for c in cuts if c[1] > lo and c[0] < hi]
         pieces, s = [], lo
         for c0, c1 in cuts:
@@ -523,7 +628,7 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
             s = c1
         pieces.append((s, hi))
         edge_seg = k in (0, n - 1) or bool(cuts)                 # a stretch at the tail, the tip or a jump needs 20px of shaft each side
-        margin = (20 if strict else 8) if edge_seg else 8
+        margin = shaft if shaft is not None else (LABEL_SHAFT if strict else 8) if edge_seg else 8
         whole = n == 1                                           # a straight arrow: its label belongs in the middle of the shaft
         for plo, phi in pieces:
             if phi - plo < ext + 2 * margin:
@@ -539,7 +644,7 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
             for pos in slide:
                 cx, cy = (pos, p[1]) if horiz else (p[0], pos)
                 rect = (cx - w / 2, cy - h / 2, w, h)
-                if _hit(rect, sc, own=own_pts, hop_pad=20 if strict else 8):
+                if _hit(rect, sc, own=own_pts, hop_pad=LABEL_SHAFT if strict or shaft else 8):
                     continue
                 if whole:                                        # check_diag.py fails a straight arrow's label off its middle
                     score = -abs(pos - (lo + hi) / 2)
@@ -551,10 +656,11 @@ def place_label(sc, pts, kind, w=None, h=18.0, strict=True):
 
 
 def place_label_any(sc, pts, kind, w=None, h=18.0):
-    """The label of an arrow, in the one order every script uses: on a stretch with 20px of shaft each side; else with 8px (a short
-    arrow: check it by eye); else beside its shaft (place_label_beside). Returns (cx, cy, shift, short): shift is None on the shaft
-    and (dx, dy) beside it (draw.label shift); short is True when only 8px of shaft is left. None when there is no place at all."""
-    lab = place_label(sc, pts, kind, w, h)
+    """The label of an arrow, in the one order every script uses: on a stretch with LABEL_SHAFT px of shaft each side; else with
+    that much at the tail, the tip and a jump only; else with 8px (a short arrow: check_diag.py warns with the measure); else beside
+    its shaft (place_label_beside). Returns (cx, cy, shift, short): shift is None on the shaft and (dx, dy) beside it (draw.label
+    shift); short is True when only 8px of shaft is left. None when there is no place at all."""
+    lab = place_label(sc, pts, kind, w, h, shaft=LABEL_SHAFT) or place_label(sc, pts, kind, w, h)
     if lab:
         return lab[0], lab[1], None, False
     lab = place_label(sc, pts, kind, w, h, strict=False)

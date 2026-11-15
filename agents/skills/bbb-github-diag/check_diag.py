@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Geometry, text and content checks for an issue/PR lineage SVG. No rendering.
 usage: check_diag.py new.svg [old.svg] [--keep-new]
+FAIL means broken: frames, boxes or labels that overlap (a label over a box, a path or another label), a box across a frame border,
+a path through a box, a tip or a tail off its box, an unmarked crossing, two paths on top of each other, an arrow that leaves the
+frame its two boxes are in, text past its limit, a label on no arrow, a metadata or content error. WARN is cosmetic and carries its
+measure: a label shaft under 20px, a label off centre, parallel lines closer than 13.5px, a short jog, crossing slots, a far legend.
+The last two lines are `WARNS n` and `FAILS n`.
 With old.svg (the frozen previous revision) the `new` pills must be on exactly the boxes added since; with --keep-new, also on the
 boxes that had one in old.svg.
 Exit code 1 when a check fails. Checks the SVG text and path geometry only."""
@@ -12,13 +17,23 @@ from fonts import load      # finds Helvetica/Arial/Liberation/DejaVu and Menlo/
 _files = [a for a in sys.argv[1:] if not a.startswith('--')]
 new = open(_files[0], encoding='utf-8').read()
 old = open(_files[1], encoding='utf-8').read() if len(_files) > 1 else None
-fails = 0
+fails = warns = 0
 
 
 def fail(msg):
+    """Something is broken: an overlap, a path through a box, an end off its box, an unmarked crossing, an arrow out of its frame,
+    text past its limit, a metadata error. Exit 1."""
     global fails
     fails += 1
     print('FAIL', msg)
+
+
+def warn(msg):
+    """Something is cosmetic, with its measure: a short label shaft, a label off centre, parallel lines close together, a short jog.
+    Never a reason to loop: SKILL.md, "Stop rule"."""
+    global warns
+    warns += 1
+    print('WARN', msg)
 
 
 md.parseString(new)
@@ -52,11 +67,13 @@ for m in re.finditer(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="
     x, y, w, h = (float(v) for v in m.groups())
     labels.append((x + sh[0], y + sh[1], w, h) if sh else (x, y, w, h))
     shifts.append(sh)
-paths = []
-for m in re.finditer(r'<path d="M([^"]+)" fill="none"', new):
+paths, ends = [], []              # ends: (data-from, data-to) of each path, or None
+for m in re.finditer(r'<path d="M([^"]+)" fill="none"[^>]*>', new):
     d = m.group(1)
     pts = [(float(a), float(b)) for a, b in re.findall(r'(-?\d+\.?\d*),(-?\d+\.?\d*)', d)]
     paths.append((pts, 'A' in d))
+    e = re.search(r'data-from="(\d+)" data-to="(\d+)"', m.group(0))
+    ends.append((int(e.group(1)), int(e.group(2))) if e else None)
 frames = [tuple(float(v) for v in m.groups()) for m in re.finditer(
     r'<rect x="([\d.-]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="18" fill="#ffffff"', new)]
 print(len(boxes), 'boxes', len(paths), 'paths', len(labels), 'labels', len(frames), 'frames')
@@ -67,9 +84,21 @@ for i, (ax, ay, aw, ah) in enumerate(frames):
         if ax < bx_ + bw_ - 1 and bx_ < ax + aw - 1 and ay < by_ + bh_ - 1 and by_ < ay + ah - 1:
             fail(f'frames at ({ax:.0f},{ay:.0f}) and ({bx_:.0f},{by_:.0f}) overlap')
 
+# ---- boxes: no two overlap, and none lies across the border of a frame (half in, half out)
+_bl = sorted(boxes.items())
+for i, (n, (ax, ay, aw, ah)) in enumerate(_bl):
+    for m, (bx_, by_, bw_, bh_) in _bl[i + 1:]:
+        if ax < bx_ + bw_ - 1 and bx_ < ax + aw - 1 and ay < by_ + bh_ - 1 and by_ < ay + ah - 1:
+            fail(f'boxes #{n} and #{m} overlap')
+    for (fx, fy, fw, fh) in frames:
+        inside = fx <= ax and ax + aw <= fx + fw and fy <= ay and ay + ah <= fy + fh
+        apart = ax + aw <= fx + 1 or ax >= fx + fw - 1 or ay + ah <= fy + 1 or ay >= fy + fh - 1
+        if not inside and not apart:
+            fail(f'box #{n} lies across the border of the frame at ({fx:.0f},{fy:.0f})')
+
 # ---- no line on which way arrows run, in the header or the legend: each arrow reads as its label says (draw.set_header removes them)
 if 'Arrows point from the earlier item' in new or 'Arrows run from the earlier item' in new:
-    print('WARN the header or the legend still explains which way arrows run: refresh_meta.py --apply (or draw.set_header) removes it')
+    warn('the header or the legend still explains which way arrows run: refresh_meta.py --apply (or draw.set_header) removes it')
 
 # ---- collapsed boxes: keywords fit on one line, the pop-up exists, sits at the same corner, comes before the script and is a sibling of its box
 _tags = [(m.start(), m.group(0)) for m in re.finditer(r'<g[\s>]|</g>|<script', new)]
@@ -229,7 +258,7 @@ for i, (pts, arcs) in enumerate(paths):
     for k in range(1, len(pts) - 2):
         d = abs(pts[k + 1][0] - pts[k][0]) + abs(pts[k + 1][1] - pts[k][1])
         if 0.5 < d < 30 and k >= 1:
-            print(f'WARN path {i} has a {d:.0f}px jog near ({pts[k][0]:.0f},{pts[k][1]:.0f}): make it straight or 30px or more')   # a warning: the rule says about 30px
+            warn(f'path {i} has a {d:.0f}px jog near ({pts[k][0]:.0f},{pts[k][1]:.0f}): make it straight or 30px or more')   # a warning: the rule says about 30px
 
 # ---- labels
 for k, (x, y, w, h) in enumerate(labels):
@@ -281,9 +310,9 @@ for k, (x, y, w, h) in enumerate(labels):
         left, right = sorted((s0, s1))
         above, below = a - left, right - b
         if min(above, below) < 20:
-            fail(f'label {k} at ({x:.0f},{y:.0f}) leaves {above:.0f}/{below:.0f}px of straight shaft (need 20)')
+            warn(f'label {k} at ({x:.0f},{y:.0f}) leaves {above:.0f}/{below:.0f}px of straight shaft (want 20)')
         if tail_here and tip_here and abs(above - below) > 12.5:
-            fail(f'label {k} at ({x:.0f},{y:.0f}) is off center on its shaft: {above:.0f} vs {below:.0f}px')
+            warn(f'label {k} at ({x:.0f},{y:.0f}) is off center on its shaft: {above:.0f} vs {below:.0f}px')
 
 # ---- crossings between plain paths (jumps are drawn with arcs, so arc paths are skipped)
 plain = [s for s in segs if not s[5]]
@@ -298,13 +327,17 @@ for a in plain:
             fail(f'unintended crossing of paths {a[0]} and {b[0]} near ({v[2]:.0f},{h[2]:.0f})')
 print('plain crossings', cross)
 
-# ---- parallel spacing closer than 13.5px
+# ---- parallel lines: on top of each other is a break (two arrows read as one), but for a fork or a merge (one tail box or one tip
+#      box: a shared trunk); closer than 13.5px is cosmetic
 for a in segs:
     for b in segs:
         if a[0] >= b[0] or a[1] != b[1]:
             continue
-        if min(a[4], b[4]) - max(a[3], b[3]) > 20 and 0.5 < abs(a[2] - b[2]) < 13.5:
-            fail(f'parallel lines of paths {a[0]} and {b[0]} only {abs(a[2] - b[2]):.1f}px apart')
+        fork = ends[a[0]] and ends[b[0]] and (ends[a[0]][0] == ends[b[0]][0] or ends[a[0]][1] == ends[b[0]][1])   # a shared trunk
+        if min(a[4], b[4]) - max(a[3], b[3]) > 20 and abs(a[2] - b[2]) <= 0.5 and not fork:
+            fail(f'paths {a[0]} and {b[0]} run on top of each other for {min(a[4], b[4]) - max(a[3], b[3]):.0f}px near {a[1]}={a[2]:.0f}')
+        elif min(a[4], b[4]) - max(a[3], b[3]) > 20 and 0.5 < abs(a[2] - b[2]) < 13.5:
+            warn(f'parallel lines of paths {a[0]} and {b[0]} only {abs(a[2] - b[2]):.1f}px apart (want 13.5)')
 
 # ---- content
 for n in sorted(boxes):
@@ -371,7 +404,7 @@ if _lg:
     _lx, _ly, _lw, _lh = (float(v) for v in _lg.groups())
     _right = max(bx + bw for (bx, by, bw, bh) in list(boxes.values()) + frames)       # the farthest right edge of the nodes
     if _ly > 300 or _lx + _lw < _right - 20:
-        print(f'WARN legend right edge {_lx + _lw:.0f} (top {_ly:.0f}) should be in the top row and reach the farthest right node edge {_right:.0f}: move it to the top right of the chart')
+        warn(f'legend right edge {_lx + _lw:.0f} (top {_ly:.0f}) should be in the top row and reach the farthest right node edge {_right:.0f}: move it to the top right of the chart')
 if best[0]:
     print(f'largest empty rectangle {best[3][0] * G}x{best[3][1] * G}px at ({best[1] * G},{best[2] * G})')
 # ---- what the file keeps about itself (svgmeta.py): each box's frame and GitHub record, each arrow's two boxes and kind, the block
@@ -380,7 +413,7 @@ for _lvl, _msg in svgmeta.problems(new):
     if _lvl == 'error':
         fail('metadata: ' + _msg)
     else:
-        print('WARN metadata: ' + _msg)
+        warn('metadata: ' + _msg)
 # ---- a "Blocked by" line names ONE blocker; it is bold while the box and that blocker are open, struck once either is closed
 #      (rules.blocked_notes; refresh_meta.py --apply rewrites them). The states come from the records the file keeps.
 import svg_state as _ss
@@ -419,14 +452,15 @@ import reroute                                # an arrow between two boxes of on
 for _a, _b in reroute.leaves_frame(new):
     fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d (or move a box)' % (_a, _b, _a, _b))
 for _a, _b, _k, _why in __import__('rules').far_low(new):      # a far low arrow from closed work is not drawn (rules.far_low)
-    print('WARN far low arrow #%d %s #%d: %s; rules.py prune drops it into "nopath"' % (_a, _k, _b, _why))
+    warn('far low arrow #%d %s #%d: %s; rules.py prune drops it into "nopath"' % (_a, _k, _b, _why))
 import ports                                  # two arrows of one side of a box that cross each other: never needed (ports.py)
 for _e, _f in ports.crossing_pairs(new):
-    print('WARN #%d -> #%d and #%d -> #%d: both on the %s side of #%d, and they cross each other: ports.py IN OUT orders the slots'
+    warn('#%d -> #%d and #%d -> #%d: both on the %s side of #%d, and they cross each other: ports.py IN OUT orders the slots'
           % (_e.arrow.a, _e.arrow.b, _f.arrow.a, _f.arrow.b, _e.side, _e.box))
 import rules                                  # arrows a person should look at again: asked, never failed (rules.py review)
 for _f in rules.review(new):
     print('ASK %s: %s' % (_f['check'], _f['message']))
 
+print('WARNS', warns)
 print('FAILS', fails)
 sys.exit(1 if fails else 0)

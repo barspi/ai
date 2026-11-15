@@ -207,7 +207,7 @@ A collapsed node is a box drawn in short form: only its first line and one line 
 1. Inside a frame, stack the collapsed boxes with a pitch of box height plus about 14px (a vertical arrow between two boxes needs 80px for its label). Put a parent or a closing pull request at the middle of its children, so the middle arrow is straight and the fork spreads up and down, with the lanes nested (the higher an up-arrow starts, the nearer its lane; the lower a down-arrow starts, the nearer its lane).
 2. Shrink the frame to its content: 40px above, 20px below.
 3. Move the frames below it up by the same amount, and everything that hangs on them (boxes, frame titles, arrows). A column of frames keeps 34px of visible gap. Where a frame is next to other frames (not only above and below), a frame that moves up must not run into the frame on its side: the checker fails overlapping frames.
-4. Look at the changed regions once (render only that region, not the whole canvas). A second pair of eyes helps here: a reviewer who knows these rules finds overlaps and dead gaps a script does not measure.
+4. Judge the result by the numbers of `check_diag.py` (FAILS, WARNS with their measures), not by a picture. Render once, at the end, for the user (see "Looking at the picture").
 
 **Pitfalls.**
 
@@ -328,7 +328,7 @@ Use the plane. Rows and columns are for alignment, not a substitute for edges.
   - One query with aliases, `i123: issueOrPullRequest(number:123){...}`, asking only for the fields the diagram shows (title, state, `updatedAt`, assignees, opener, comment count, merge commit). 87 boxes cost 3 of 5000 rate-limit points. Above about 200 boxes, split into several queries.
   - Never reread the text of a box whose `updatedAt` did not change.
   - Find new items with `gh api 'repos/OWNER/REPO/issues?state=all&since=T&per_page=100' --paginate --jq '<only the fields needed>'`, filter in the script, and print only the items that link to a box. Never print issue bodies into the conversation.
-  - Do the sync in one command and the edits and the check in a second one. A revision should need about five tool calls: refresh and discover, read only the changed or new items, add boxes and check, render one crop, update notes.
+  - Do the sync in one command and the edits and the check in a second one. A revision should need about five tool calls: refresh and discover, read only the changed or new items, add boxes and check, update notes; one render at the end, for the user.
   - `gh` sandbox and token rules: see Requirements.
   - Most of the elapsed time is the model's reasoning, not the scripts (measured: about 85% model, 12% tools). So let `add_nodes.py` decide placement from the geometry of the file and the diagram's notes, and keep a new box in free space rather than shifting neighbours.
 - **Finding new items:** add `--discover`. It lists the issues and pull requests created, closed or merged since the last run (the metadata block's `lastRun`; `--since ISO8601` looks further back and does not move it) that are not boxes yet. It prints in full only the ones that name a box (`#N` in the title or body) or are named by a box's text. The rest is compressed: same-area items (the `area:` title prefix) as a list of numbers, and counts of unrelated, only-commented and ignored items. Items that were only commented on or edited are not candidates. Judge thematic relation from the title and the area list; open an item only when that is not enough. Every reported candidate must end the revision as a new box, or as a decision: ask the user about doubtful ones (with the GitHub link), then add the declined ones to `ignored` (`svgmeta.py ignore`) so they are not reported again.
@@ -360,7 +360,8 @@ Some arrows have no clean path: the tail's side is full of other arrows, or a co
 Rules for a hard arrow:
 
 - Never draw it under a box or under a label. Keep it about 26px from boxes and 7px from labels, and clear of any `new` pill. A label keeps 7px from every other arrow too (`route.place_label`).
-- An arrow between two boxes of the same frame stays inside that frame, with as few bends as it can (an almost hard rule: `route.py` searches the frame first, and leaves it only when no path exists inside; `check_diag.py` fails it then).
+- An arrow between two boxes of the same frame never leaves that frame (a hard rule: `route.route` searches only the frame's inside). When the frame has no room for it, the frame grows down one step at a time (`model.GROW_STEP`, at most `model.GROW_STEPS`): `frames.grow` is the one operation that makes room, like inserting a row; every frame or box below that overlaps it horizontally moves down by the same amount, a move may cascade, and the arrows that ran through what moved are routed again in the same run. Nothing moves sideways or up, so frames that did not overlap never do. `model.route_arrows` does this for `add_nodes.py`, `move.py`, `reroute.py`, `build.py` and every `model.repair`. When even the largest growth leaves no path, the frame keeps its size and the arrow goes to `nopath`. An arrow between two frames is searched in the box round its two frames and the corridor between them (`route.frames_window`), then on the whole canvas.
+- A path is accepted only when it leaves room for its label: one straight stretch with the label's length plus 20px of shaft each side (`route.LABEL_SHAFT`) where the label touches no box, label, pill or other arrow, and no jump arc that `hops.py` will draw (`route.route_labelled`). When the cheapest path has none, the next cheapest is tried (Yen's k shortest paths on the router's graph, at most `route.K_PATHS`); when none of them has room, the cheapest is kept and reported as a WARN. The label goes where the test found room. After all arrows of a run are drawn, the ones still without room are tried once more in the finished picture (`model.retry_short`).
 - Spacing comes from the labels. Two parallel horizontal arrows are never closer than 22px (`route.HARD_H`): their 18px labels then fit one above the other with a 4px gap, and that is also the pitch of the entries on one side of a box. Two parallel vertical arrows are never closer than 14px (`route.HARD_V`); their labels go at different heights, so a label (35–41px each side of its line) does not reach the other arrow. Closer than 42px (`route.LABEL_ROOM`) a vertical pays a small cost per step (`route.NEAR_COST`), so it leaves room for a label when that is cheap; a short tight way still beats a long detour around the picture.
 - Costs of the search (`route.py`): a 5px step 1, a bend 30, a crossing 35 (barely more than a bend: a crossing with a clean jump is not much worse), a side other than the facing one 20, a border of a frame that holds neither end 60 (through it: 120), a border of a frame that holds one end or both 75 (leaving it and coming back: 150).
 - A low arrow (`related`, `references`, `mentioned`) from closed work that would travel far (`rules.far_low`) is not drawn; it goes to `nopath`.
@@ -381,7 +382,7 @@ Rules for a hard arrow:
 2. `reroute.py vN.1.svg vN.1.svg --pin A>B ...` for every route the user chose in this conversation or earlier ones (moves with `--sides`, corridors, "make it go below").
 3. `reroute.py vN.1.svg vN.1.svg --improve` (about 20 s for 240 arrows; about 45 s with `BBB_ROUTER=grid`). Read its last lines: the total path cost before and after, and each `MORE BENDS` arrow, which traded bends for crossings, frame borders or length. Name those to the user.
 4. `check_diag.py vN.1.svg vN.svg --keep-new` (the pills are kept on purpose).
-5. `render_region.py` on the regions the user cares about, in both files, and one overview at reduced width.
+5. When the numbers are final: `render_region.py` on the regions the user cares about, in both files, once, for the user.
 - If no path meets the rules, leave that arrow out of the picture, name it in the box note and in your report, and say what would have to move to make room. Do not draw it with a worse path.
 
 ## Files
@@ -430,7 +431,8 @@ Some choices used to be judgment. Each now has a fixed rule with a fixed tie-bre
 | the frame of a new box | `rules.frame_for`: each arrow to a box already drawn votes for that box's frame with its importance (3, 2, 1); the roots do not vote; ties: a frame before none, then more arrows, then the lowest-numbered neighbour. A box whose only arrows go to a root is an ASK | `add_nodes.py`, for a box whose spec has no `frame` |
 | the box a new one goes beside | `rules.near_for`: the most important arrow, then the lowest number | `add_nodes.py`, for a box whose spec has no `near` |
 | why a closed issue was closed (the red cross) | `rules.close_verdict`: the user's answer (`rules.py closed IN.svg N hand\|done "reason"`), then GitHub's close reason, then the closer of the close event, then the phrases of the last comments (`HAND_TEXT`, `DONE_TEXT`), else ASK | `refresh_meta.py` stores it in the box record and `--apply` draws it; `graph_from_snapshot.py` for a new chart |
-| an arrow inside one frame | `route.route`: when both boxes are in one frame the search is that frame's inside; it leaves only when no path exists there (`sc.left_frame`), and `check_diag.py` fails such an arrow (`reroute.py --frame-leavers`) | `build.py`, `add_nodes.py`, `reroute.py` |
+| an arrow inside one frame | `route.route`: when both boxes are in one frame the search is that frame's inside and nowhere else; with no path there, `model.route_arrows` grows the frame down (`frames.grow`: what lies below moves down by as much); `check_diag.py` fails an arrow outside its frame (`reroute.py --frame-leavers` routes it again) | `build.py`, `add_nodes.py`, `move.py`, `reroute.py` |
+| room for a new box in a full frame | `add_nodes.bottom_spot`: at the frame's bottom, beside `near` (right of it, under it, left of it, else any column), the spot that needs the least growth; the frame then grows by `frames.grow`, never by overlapping the frame below | `add_nodes.py` |
 | a far low arrow from closed work | `rules.far_low`: a `related`, `references` or `mentioned` arrow whose tail is closed or merged and whose path is longer than 8 times the median arrow, or passes through a frame that holds neither box, is not drawn; it goes to `nopath` with the reason | `build.py`; `rules.py prune IN.svg` on a diagram; `check_diag.py` warns |
 | arrows to look at again | `rules.review`: `stale-far` (a medium or low arrow from work that ended a week or more before the last refresh, across two frames, longer than 8 times the median arrow) `supersedes-missing` and `duplicate-missing` (a box closed for, or as a duplicate of, another box, with no arrow between them) and `number-order` (a `led to`, `follow-up`, `spawned` or `revised by` arrow to a lower number: GitHub numbers items in creation order, so the tip came first) | `check_diag.py` prints them as `ASK` lines; they never fail |
 
@@ -469,7 +471,7 @@ What it is: a search box pinned at the bottom-left of the window, in a deep-blue
 
 ## Check
 
-Check from the SVG text and geometry, with a script, not by looking. A script costs seconds and no image tokens. Look at a rendered image only at the end (see "Looking at the picture").
+Check from the SVG text and geometry, with a script, not by looking. A script costs seconds and no image tokens. Render only once, at the end, for the user (see "Looking at the picture").
 
 The checks below are implemented in `check_diag.py` in this skill's folder: `python3 check_diag.py new.svg [previous.svg]` (it needs Pillow and the fonts found by `fonts.py`). It prints every failure and exits 1 on a failure.
 
@@ -505,6 +507,10 @@ The checks below are implemented in `check_diag.py` in this skill's folder: `pyt
 
 When a check fails, fix the cause and run the script again. Do not look at an image to find out what is wrong.
 
+**FAIL and WARN.** `check_diag.py` prints FAIL only for what is broken: frames, boxes or labels that overlap (a label over a box, a path or another label), a box across a frame border, a path through a box, a tip or a tail off its box, an unmarked crossing, two paths on top of each other (not a fork or a merge, which share a trunk on purpose), an arrow that leaves the frame its two boxes are in, text past its limit, a label on no arrow or drawn away from it, a metadata or content error (links, `new` pills, collapsed-box structure, `Blocked by` lines). Everything cosmetic is a WARN with its measure: a label shaft under 20px, a label off centre, parallel lines closer than 13.5px, a jog under 30px, two arrows of one side that cross, the legend's place. Its last two lines are `WARNS n` and `FAILS n`.
+
+**Stop rule (for the agent).** Accept a result when FAILS ≤ the input's and no FAIL is new. At most 2 repair rounds; then stop and report what is left. Never move a box outside the frame you were asked to change. A WARN is never a reason for another round. Do not render to find out what is wrong: every check is geometry the scripts measure. Nobody edits the SVG by hand: every change has a command (`move.py`, `reroute.py`, `collapse.py`, `add_nodes.py`, `svgmeta.py`, `rules.py`), and each of them leaves nothing stale (it re-attaches and routes again the arrows it touched, redoes the jump arcs and places the labels again, in the same run).
+
 ### Faults to look for, their cause and their fix
 
 The scripts fix the causes below by themselves. When the picture still shows one of these, find which rule did not apply (the box list and arrows of the region: read them from the SVG with `model.read`), say which script left it and why, and fix the script or the graph (a frame, a root, a missing arrow), not the SVG by hand.
@@ -526,13 +532,8 @@ The scripts fix the causes below by themselves. When the picture still shows one
 | NO PATH, mostly into a box with many arrows | the sides of that box are full | the router tries the whole canvas before it gives up. If it still fails, the relation is in the box note (the bold `Blocked by` line); name the arrow in the report |
 | A note that is false or says the same thing twice (`PR #N was not merged` for a merged one) | a script line and a line written by the agent both state the relation, or a state combination the note rule did not cover | correct `graph_from_snapshot.py`'s rule, or drop the agent line that repeats the script's |
 
-Check every new picture for these with one look at the regions with frames and hubs (see below), and run `check_diag.py`.
+Run `check_diag.py` on every new picture; the faults above are geometry it and the scripts measure.
 
 ### Looking at the picture
 
-Look at most twice. Look only at crops of the regions that changed, at reduced size, not at the whole picture. `render_region.py IN.svg OUT.png X Y W H [--scale S]` (or `--box N [--margin PX]`) renders just that region: about 2s, where the whole 7000px canvas takes about 20s. To compare two revisions, render the same region of each. One overview of the whole picture at reduced width (`rsvg-convert -w 2600`) is worth it only after a change that touched arrows all over (an `--improve` pass), to see that no arrow wanders across the picture.
-
-1. After the main layout, when boxes moved or arrows were added: one look at the changed regions.
-2. At the end, after the hard arrows are routed: one look at the regions with jumps and `new` pills. Check that each hop bumps the right way and still reads as one line, and that nothing looks like clutter. Do not look at the jumps before this step.
-
-Skip both looks when only states, dates or text changed. A PNG is only for this look. Do not keep it unless the user asks for one.
+The agent judges by numbers: FAILS and WARNS of `check_diag.py`, and what the scripts print (bends, crossings, length, growth, arrows with no path or no room for a label). No script renders unless asked (`revise.py --render`). Render once, at the end, for the user: `render_region.py IN.svg OUT.png X Y W H [--scale S]` (or `--box N [--margin PX]`) renders just the region that changed (about 2s; the whole 7000px canvas takes about 20s). To compare two revisions, render the same region of each. Never render between steps, and never render to find out what is wrong. Skip the render when only states, dates or text changed. Do not keep a PNG unless the user asks for one.

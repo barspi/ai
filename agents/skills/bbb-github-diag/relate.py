@@ -117,7 +117,7 @@ def missing(text, live, nums, texts=None, repo=None):
         if have & words[pair]:                       # one arrow with one of GitHub's words is enough
             continue
         if have:
-            report.append('#%d %s #%d on GitHub, drawn as %s: change the word by hand if GitHub is right' % (a, kind, b, ', '.join(sorted(have))))
+            report.append('#%d %s #%d on GitHub, drawn as %s: if GitHub is right, svgmeta.py kind IN.svg %d %d "%s"' % (a, kind, b, ', '.join(sorted(have)), a, b, kind))
         elif (a, b) in skip:
             report.append('#%d %s #%d on GitHub, in nopath (not drawn on purpose or no clean path): left out' % (a, kind, b))
         else:

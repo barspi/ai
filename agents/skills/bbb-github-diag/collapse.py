@@ -20,8 +20,10 @@ in the SVG: the first <rect> of a collapsed box carries data-collapsed="1" data-
   --no-cue           leave out the small "..." at the bottom right of a collapsed box
 
 Every arrow that ends on a collapsed or moved box is re-attached keeping its shape and its lanes; its label is put on a straight
-stretch. Arrows between boxes that did not change are left byte for byte. A collapsed box gets taller when many arrows end on one
-side (14px apart) or when a straight arrow must keep its height. Run check_diag.py afterwards.
+stretch. Then, in the same run (settle(), model.settle), every arrow that the re-attachment left invalid is routed again with its label,
+the jump arcs are redone and every label that sits badly is placed again: nothing is left for a later step. Arrows between boxes that
+did not change are left as they are. A collapsed box gets taller when many arrows end on one side (14px apart) or when a straight arrow
+must keep its height. Run check_diag.py afterwards.
 """
 import json, os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
@@ -197,8 +199,10 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
             LABEL.append(dict(i=i, cx=x + w / 2, cy=y + h / 2, w=w, line=ln))
 
     def attach(p, tol=3.0):
+        """The box side the point p lies on, by the boxes as drawn BEFORE this run: a box collapsed again was expanded above, and
+        its arrows still end on its collapsed sides."""
         px, py = p
-        for n, b in BOX.items():
+        for n, b in ((n, box0.get(n, b)) for n, b in BOX.items()):
             x, y, w, h = b['x'], b['y'], b['w'], b['h']
             if y - tol <= py <= y + h + tol:
                 if abs(px - x) <= tol:
@@ -495,6 +499,17 @@ def process(s, sets, moves=None, shrink_frames=False, cue=True, expand_nums=(), 
     return res, log
 
 
+def settle(before, after):
+    """No stale state after a collapse: the arrows re-attached by shape that are now invalid (an end off its box, a run through a box,
+    a run too close beside another) are routed again, with their labels (model.settle), the jump arcs are redone and every label that
+    sits badly is placed again. touched: the arrows with an end on a box whose rectangle changed. Returns (text, rerouted, problems)."""
+    import model, svgmeta
+    old, new = parse(before)[1], parse(after)[1]
+    changed = {n for n, b in new.items() if n in old and any(abs(b[k] - old[n][k]) > .01 for k in 'xywh')}
+    touched = [at[:2] for at in (svgmeta.arrow_of(l) for l in after.split('\n') if svgmeta.is_arrow(l)) if at and set(at[:2]) & changed]
+    return model.settle(before, after, touched)
+
+
 def main():
     args = sys.argv[1:]
     if len(args) < 2 or args[0].startswith('--'):
@@ -536,8 +551,8 @@ def main():
             sys.exit('unknown option ' + a)
     s = open(src, encoding='utf-8').read()
     res, log = process(s, sets, moves, shrink, cue, exp, rem, center)
-    res, hops_added, hops_removed = hops.add_hops(res)                  # arrows were re-attached: redo the jump arcs of the whole diagram
-    log.append('jump arcs: %d added, %d stale removed' % (hops_added, hops_removed))
+    res, n, problems = settle(s, res)
+    log += ['%d arrows routed again (the collapse left them invalid)' % n] + ['PROBLEM ' + p for p in problems]
     open(dst, 'w', encoding='utf-8').write(res)
     print('\n'.join(log) or 'nothing to do')
     print('wrote', dst)
