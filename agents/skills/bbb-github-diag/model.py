@@ -158,15 +158,15 @@ def _plans(sc, p, frame):
     goes past get the overshoot plus the border clearance (route.FPROX and two lattice steps), stretched graded toward them, then
     linear, then with no stretch (profile edge: the room opens at the border) once, 1.5 and 2 times the overshoot, at most GROW_MAX.
     Then, and first when no such path exists (the arrow is walled in by other arrows, not by the border), the stretches that open
-    lanes everywhere in the frame, the smallest growth first: graded toward one side, linear along one axis, a balloon on both,
-    each by STRETCH of the frame's size."""
+    lanes everywhere in the frame, the smallest growth first (left and top count 1.5 times): graded toward one side, linear along
+    one axis, a balloon on both, each by STRETCH of the frame's size; no side grows more than GROW_MAX."""
     soft = route.route_soft(sc, p.a, p.b, frame, *p.sides)
     x, y, w, h = frame
     need = {}
     if soft:
         over = {'left': x - min(q[0] for q in soft), 'right': max(q[0] for q in soft) - x - w,
                 'top': y - min(q[1] for q in soft), 'bottom': max(q[1] for q in soft) - y - h}
-        need = {sd: 10 * math.ceil((v + route.FPROX + 2 * route.G) / 10) for sd, v in over.items() if v > 0}
+        need = {sd: min(GROW_MAX, 10 * math.ceil((v + route.FPROX + 2 * route.G) / 10)) for sd, v in over.items() if v > 0}
     plans = [(need, pr) for pr in ('graded', 'linear')] if need else []
     plans += [({sd: min(GROW_MAX, 10 * math.ceil(v * f / 10)) for sd, v in need.items()}, 'edge') for f in (1, 1.5, 2)] if need else []
     size = {'left': w, 'right': w, 'top': h, 'bottom': h}
@@ -174,7 +174,10 @@ def _plans(sc, p, frame):
              [({'top': .5, 'bottom': .5}, 'linear'), ({'left': .5, 'right': .5}, 'linear'),
               ({'left': .5, 'right': .5, 'top': .5, 'bottom': .5}, 'linear')]
     stretch = [({sd: v * f * size[sd] for sd, v in sh.items()}, pr) for f in STRETCH for sh, pr in shapes]
-    return plans + sorted(stretch, key=lambda pl: sum(pl[0].values()))
+    stretch = [pl for pl in stretch if max(pl[0].values()) <= GROW_MAX]
+    # the least growth first; growing left or up costs half as much again, since it moves the frame out of its column (or the
+    # whole picture, past the top or the left edge)
+    return plans + sorted(stretch, key=lambda pl: sum(v * (1.5 if sd in ('left', 'top') else 1) for sd, v in pl[0].items()))
 
 
 def _grow_for(text, p, frame, keep_out):
@@ -188,7 +191,9 @@ def _grow_for(text, p, frame, keep_out):
     fm = frames_mod()
     for grow_by, profile in _plans(scene(text, keep_out), p, frame):
         push = fm.inflate(text, frame, grow_by, profile)
-        t, cut = take_out(push.text, push.cut)
+        lines1 = push.text.split('\n')                   # what the inflation left invalid (a step too near something) is routed too
+        broken = [i for i in invalid(push.text) if (arrow_at(lines1[i]) or (0, 0))[:2] not in was_bad]
+        t, cut = take_out(push.text, sorted(set(push.cut) | set(broken)))
         sc = scene(t, keep_out)
         if _route_one(sc, p) is None:                     # p first, alone: most plans fail here, at the cost of one search
             continue

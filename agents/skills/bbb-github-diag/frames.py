@@ -312,8 +312,8 @@ def inflate(text, frame, grow_by, profile='linear'):
     Invariants: inside the frame the map is continuous and strictly increasing per axis, with a stretch of 1 or more, so every
     horizontal stretch stays horizontal and every vertical one vertical, the same pairs of stretches cross, and no gap shrinks;
     outside, each part is translated as a whole; no box changes size. Jump arcs are dropped (hops.py redraws them). Push.frames:
-    (old, new) of every frame that grew or moved; Push.moved: the boxes that moved; Push.jogs (via STATS['jogs']): the arrows that
-    got a corridor step. Takes milliseconds."""
+    (old, new) of every frame that grew or moved; Push.moved: the boxes that moved; STATS['jogs']: the arrows of this call that got
+    a corridor step. A frame inside the inflated one follows the map. Takes milliseconds."""
     t0 = time.perf_counter()
     lines, box, pop, fr = collapse.parse(text)
     rects = [_rect(f) for f in fr]
@@ -323,6 +323,7 @@ def inflate(text, frame, grow_by, profile='linear'):
     g = {sd: max(0.0, float(math.ceil(grow_by.get(sd, 0)))) for sd in ('left', 'right', 'top', 'bottom')}
     arrows = [i for i, ln in enumerate(lines) if ln.startswith('<path d="M') and 'marker-end' in ln]
     paths = {i: _straight(_arrow_points(lines[i])) for i in arrows}
+    labels = labels_of(lines, arrows)
     in_any = lambda p: any(_holds(r, (p[0], p[1], 0, 0)) for r in rects)
     corridor = {(i, j): (x, y, 0.0, 0.0) for i in arrows for j, (x, y) in enumerate(paths[i]) if not in_any((x, y))}
     centres = {}                                           # label line -> its centre; one in a corridor moves like a corridor point
@@ -357,10 +358,12 @@ def inflate(text, frame, grow_by, profile='linear'):
                 nr = _grown(nr, side, g[side])
         dxy = disp_f.get(kk, (0, 0))
         new_rects.append((nr[0] + dxy[0], nr[1] + dxy[1], nr[2], nr[3]))
-    nf = new_rects[k0]
     flat = profile == 'edge'
     mx = (lambda v: v) if flat else axis_map(frame[0], frame[0] + frame[2], g['left'], g['right'], profile)
     my = (lambda v: v) if flat else axis_map(frame[1], frame[1] + frame[3], g['top'], g['bottom'], profile)
+    for kk, r in enumerate(rects):                         # a frame inside the inflated one follows the map, like its boxes
+        if kk != k0 and _holds(frame, r):
+            new_rects[kk] = (mx(r[0]), my(r[1]), mx(r[0] + r[2]) - mx(r[0]), my(r[1] + r[3]) - my(r[1]))
 
     def where(x, y, key=None):
         """The new place of a point: the map inside the frame, else the move of the frame (or corridor block) it is in."""
@@ -430,10 +433,14 @@ def inflate(text, frame, grow_by, profile='linear'):
         d = lines[i].split('"')[1]
         out[i] = lines[i].replace('d="%s"' % d, 'd="M%s"' % ' L'.join('%s,%s' % (collapse.fmt(x), collapse.fmt(y)) for x, y in res), 1)
     del drawn_v
-    for j, (cx, cy) in centres.items():                    # every label: its centre goes where its point goes
+    left_alone = {j for i in cut for j in labels.get(i, ())}   # a cut arrow keeps its path and its label for take_out
+    owner = {j: i for i, rng in labels.items() for j in rng}
+    for j, (cx, cy) in centres.items():                    # every other label: its centre goes where its point goes
         lab = draw.label_at(lines, j)
-        if lab:
+        if lab and j not in left_alone:
             nx, ny = where(cx, cy, ('label', j))
+            if owner.get(j) in jogged:                     # its stretch took a step: onto the nearest point of the new path
+                nx, ny = _nearest(new_paths[owner[j]], nx, ny)
             for kk in range(j, j + 1 + lab[4]):
                 out[kk] = collapse.shift_line(out[kk], nx - cx, ny - cy)
     res = '\n'.join(out)
@@ -462,11 +469,14 @@ def _shift_legend(text, dx):
     return '\n'.join(lines)
 
 
+END_CLEAR = 30           # px: no crossing this close to the end of a stretch (route.END_CLEAR), so hops.py can mark it
+MIN_JOG = 30             # px: no new stretch shorter than this (route.MIN_JOG)
+
+
 def _with_steps(pts, orig, boxes, frames_now, paths, me):
     """The points of an arrow with one step (a jog) on each stretch that lost its right angle: on a stretch that was horizontal
-    and whose two ends moved to different heights, a vertical step at the first free place along it, in a corridor (outside every
-    frame), JOG_ROOM from boxes and from the vertical stretches of other arrows; likewise across. None when a stretch has no such
-    place."""
+    and whose two ends moved to different heights, a vertical step at the first place along it where the three new stretches (the
+    two halves and the step) are free (_step_free); likewise across. None when a stretch has no such place."""
     out = [pts[0]]
     for j in range(1, len(pts)):
         p, q = out[-1], pts[j]
@@ -474,14 +484,8 @@ def _with_steps(pts, orig, boxes, frames_now, paths, me):
             out.append(q)
             continue
         horiz = abs(orig[j - 1][1] - orig[j][1]) < .01
-        a, b = (p[0], q[0]) if horiz else (p[1], q[1])
-        step = None
-        lo, hi = sorted((a, b))
-        c = lo + 10
-        while c <= hi - 10 and step is None:
-            if _step_free(c, p, q, horiz, boxes, frames_now, paths, me):
-                step = c
-            c += 5
+        lo, hi = sorted((p[0], q[0]) if horiz else (p[1], q[1]))
+        step = next((c for c in _frange(lo + MIN_JOG, hi - MIN_JOG, 5) if _step_free(c, p, q, horiz, boxes, frames_now, paths, me)), None)
         if step is None:
             return None
         out += [(step, p[1]), (step, q[1])] if horiz else [(p[0], step), (q[0], step)]
@@ -489,26 +493,52 @@ def _with_steps(pts, orig, boxes, frames_now, paths, me):
     return _straight(out)
 
 
+def _nearest(pts, x, y):
+    """The point of the polyline pts nearest to (x, y)."""
+    best = None
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        px, py = min(max(x, min(x0, x1)), max(x0, x1)), min(max(y, min(y0, y1)), max(y0, y1))
+        d = abs(px - x) + abs(py - y)
+        if best is None or d < best[0]:
+            best = (d, px, py)
+    return best[1], best[2]
+
+
+def _frange(lo, hi, step):
+    v = lo
+    while v <= hi:
+        yield v
+        v += step
+
+
 def _step_free(c, p, q, horiz, boxes, frames_now, paths, me):
-    """May the step of _with_steps sit at c (an x for a vertical step, a y for a horizontal one)?"""
+    """May the step of _with_steps sit at c (an x for a vertical step, a y for a horizontal one)? The step lies in a corridor (outside
+    every frame, 10px clear of its border) and JOG_ROOM from boxes; the step and the two halves of the stretch keep JOG_ROOM[1]
+    from parallel stretches of other arrows, run through no box, and cross other arrows only END_CLEAR or more from either end."""
     bm, vm = JOG_ROOM
     if horiz:
-        seg = ('v', c, min(p[1], q[1]), max(p[1], q[1]))
+        step = ('v', c, min(p[1], q[1]), max(p[1], q[1]))
+        halves = [('h', p[1], min(p[0], c), max(p[0], c)), ('h', q[1], min(q[0], c), max(q[0], c))]
     else:
-        seg = ('h', c, min(p[0], q[0]), max(p[0], q[0]))
-    o, cc, lo, hi = seg
-    for x, y, w, h in frames_now:                         # in a corridor: outside every frame, 10px clear of its border
-        if _meets(seg, (x - 10, y - 10, w + 20, h + 20)):
-            return False
-    for x, y, w, h in boxes:
-        if _meets(seg, (x - bm, y - bm, w + 2 * bm, h + 2 * bm)):
-            return False
+        step = ('h', c, min(p[0], q[0]), max(p[0], q[0]))
+        halves = [('v', p[0], min(p[1], c), max(p[1], c)), ('v', q[0], min(q[1], c), max(q[1], c))]
+    if any(_meets(step, (x - 10, y - 10, w + 20, h + 20)) for x, y, w, h in frames_now):
+        return False
+    if any(_meets(step, (x - bm, y - bm, w + 2 * bm, h + 2 * bm)) for x, y, w, h in boxes):
+        return False
+    new = [step] + halves
+    if any(_meets(sg, (x + 1, y + 1, w - 2, h - 2)) for sg in halves for x, y, w, h in boxes):
+        return False
     for k, pts in paths.items():
         if k == me:
             continue
         for o2, c2, lo2, hi2 in _segments(pts):
-            if o2 == o and abs(c2 - cc) < vm and min(hi, hi2) > max(lo, lo2):
-                return False
+            for o, cc, lo, hi in new:
+                if o2 == o and abs(c2 - cc) < vm and min(hi, hi2) - max(lo, lo2) > 0:
+                    return False
+                if o2 != o and lo < c2 < hi and lo2 < cc < hi2 and \
+                        min(c2 - lo, hi - c2, cc - lo2, hi2 - cc) < END_CLEAR:
+                    return False
     return True
 
 
@@ -554,6 +584,20 @@ def set_canvas_height(text, need):
                         'height="%d" viewBox="0 0 %s %d"' % (H, m.group(3), H), 1)
     return re.sub(r'(<rect x="0" y="0" width="[\d.]+" height=")%s(" fill="#[0-9a-f]{6}"/>)' % m.group(2),
                   lambda q: q.group(1) + str(H) + q.group(2), text, count=1)
+
+
+def by_name(text, name):
+    """The rectangle of the frame whose title is `name` now (a frame keeps its title when inflate or grow move it), or None."""
+    import svgmeta
+    lines, _, _, fr = collapse.parse(text)
+    return next((_rect(f) for f in fr if svgmeta.frame_name(lines[f['tl']]) == name), None)
+
+
+def name_of(text, rect):
+    """The title of the frame at `rect`, or None."""
+    import svgmeta
+    lines, _, _, fr = collapse.parse(text)
+    return next((svgmeta.frame_name(lines[f['tl']]) for f in fr if all(abs(a - b) < .5 for a, b in zip(_rect(f), rect))), None)
 
 
 def set_canvas_width(text, need):

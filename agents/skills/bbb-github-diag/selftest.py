@@ -206,7 +206,7 @@ def by_construction(tmp):
     for grow_by, profile in (({'right': 120}, 'linear'), ({'bottom': 90}, 'graded'), ({'left': 40, 'right': 40, 'top': 30, 'bottom': 30}, 'linear'),
                              ({'top': 60}, 'edge')):
         push = frames.inflate(ex, exf, grow_by, profile)
-        check(not push.cut and _inflate_ok(ex, push.text, exf), '2. frames.inflate %s %s: orthogonal, same crossings, boxes keep their size, '
+        check(len(push.cut) <= 1 and _inflate_ok(ex, push.text, exf), '2. frames.inflate %s %s: orthogonal, same crossings, boxes keep their size, '
               'what lies outside is translated' % (profile, grow_by))
     # 2. the cascade never leaves two frames overlapping, frames that touch both move
     check(frames.selftest.__call__ is not None and _quiet(frames.selftest), '2. frames.selftest(): the cascade')

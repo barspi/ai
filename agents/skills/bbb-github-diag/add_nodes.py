@@ -158,17 +158,20 @@ def bottom_spot(sc, w, h, near, frame):
     return best[1] if best else None
 
 
-def make_room(text, frame, spot, h, rounds=3):
+def make_room(text, frame, spot, h, near, rounds=3):
     """Grow `frame` for the spot bottom_spot chose and settle the push before the box goes in: the arrows the push cut are routed
     again at once (model.route_arrows; one with no path keeps its old markup). Then the spot is checked against the picture as it
     now is, every arrow included: when an arrow runs there, the spot moves down at most two box heights to a free place (the frame
-    grows again when it must); else it stays, and main() routes again the arrows the box lands on (model.settle).
+    grows again when it must); else it stays, and main() routes again the arrows the box lands on (model.settle). The frame is
+    found again by its title; when routing the cut arrows inflated it (frames.inflate moves things), the spot is chosen again.
     Returns (text, (x, y), px grown in all, [PROBLEM lines])."""
     import frames
     x, y, need = spot
     grown, problems = 0.0, []
+    name = frames.name_of(text, frame)
     for _ in range(rounds):
         if need > 0:
+            frame = frames.by_name(text, name)
             push = frames.grow(text, frame, need)
             text, cut = model.take_out(push.text, push.cut, keep=push.cut)
             res = model.route_arrows(text, cut)
@@ -176,7 +179,11 @@ def make_room(text, frame, spot, h, rounds=3):
             problems += ['NO PATH for #%s %s #%s after a frame grew (%s): its old path stays, and check_diag.py fails it'
                          % (a, k, b, why) for a, b, k, why in res.failed]
         sc, _ = model.read(text)
-        frame = next(f for f in sc.frames if abs(f[0] - frame[0]) < .5 and abs(f[1] - frame[1]) < .5)    # as drawn now
+        now = frames.by_name(text, name)
+        if now[:2] != frame[:2] or now[2] != frame[2]:      # inflated while its cut arrows were routed: choose the spot again
+            again = bottom_spot(sc, draw.BOX_W, h, near, now)
+            x, y = again[:2] if again else (x, y)
+        frame = now
         tall = (frame[0], frame[1], frame[2], frame[3] + 10 ** 5)
         probe = model.route.Scene(sc.boxes, [tall if f == frame else f for f in sc.frames], sc.labels, sc.pills, sc.arrows, sc.bounds)
         free = next((y2 for y2 in range(int(y), int(y + 2 * h) + 1, STEP) if is_free(probe, (x, y2, draw.BOX_W, h), tall)), y)
@@ -273,6 +280,7 @@ def main():
         if b.get('frame'):
             try:
                 fr, fobj = frame_by_name(b['frame'])
+                fname = svgmeta.frame_name(lines[fobj['tl']])          # the frame is found by its title from here on
             except StopIteration:
                 sys.exit('no frame with "%s" in its title' % b['frame'])
         if 'x' in b and 'y' in b:
@@ -290,7 +298,7 @@ def main():
             if spot is None and fr is not None:                       # the frame is full: its bottom, beside `near`; the frame grows
                 bs = bottom_spot(sc, draw.BOX_W, h, near, fr)
                 if bs:
-                    text, spot, px, lost = make_room(text, fr, bs, h)
+                    text, spot, px, lost = make_room(text, fr, bs, h, near)
                     print('frame "%s" grown %spx; what lies below moved down' % (fobj['name'], draw.fmt(px)))
                     problems += lost
                     sc, _ = model.read(text)
@@ -298,7 +306,7 @@ def main():
                 problems.append('NO FREE SPACE for #%s: decide a place yourself ("x", "y" in the spec)' % b['num'])
                 continue
             x, y = spot
-        b = dict(b, frame=svgmeta.frame_name(lines[fobj['tl']]) if fobj else None, github=records.get(str(b['num'])) or b.get('github'))
+        b = dict(b, frame=fname if fobj else None, github=records.get(str(b['num'])) or b.get('github'))
         markup, hh = draw.box(ctx, b, x, y)
         before_box = text
         text = insert_box(text, markup)
@@ -308,10 +316,10 @@ def main():
             print('#%s: %d arrows it landed on routed again' % (b['num'], n_moved))
         print('#%s: x %s y %s w %s h %s  (bottom %s)' % (b['num'], draw.fmt(x), draw.fmt(y), draw.BOX_W, draw.fmt(hh), draw.fmt(y + hh)))
         if fr is not None:                                            # a box given by hand, lower than the frame: the frame grows
-            cur = next(f for f in collapse.parse(text)[3] if abs(f['x'] - fr[0]) < .5 and abs(f['y'] - fr[1]) < .5)
-            need = y + hh + frames.BOTTOM_PAD - (cur['y'] + cur['h'])
+            cur = frames.by_name(text, fname)
+            need = y + hh + frames.BOTTOM_PAD - (cur[1] + cur[3])
             if need > 0:
-                push = frames.grow(text, (cur['x'], cur['y'], cur['w'], cur['h']), need, members={b['num']})
+                push = frames.grow(text, cur, need, members={b['num']})
                 text, cut = model.take_out(push.text, push.cut, keep=push.cut)
                 pending += cut
         sc, _ = model.read(text)

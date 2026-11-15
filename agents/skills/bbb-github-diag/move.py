@@ -123,9 +123,11 @@ def fit_frames(text, homes):
         other = [f for f in rects if route.holds(f, r) and not route.holds(f, home)]
         if home[0] <= r[0] and r[0] + r[2] <= home[0] + home[2] and home[1] <= r[1] and not other:
             by_home.setdefault(home, []).append(n)          # still in, or under, its own frame and not moved into another one
+    names = {home: frames.name_of(text, home) for home in by_home}    # a frame is found again by its title
     for home, ns in by_home.items():                       # one growth per frame, for all its moved boxes at once
         _, box, _, frs = collapse.parse(text)
-        f = next(f for f in frs if abs(f['x'] - home[0]) < .5 and abs(f['y'] - home[1]) < .5)
+        r = frames.by_name(text, names[home])
+        f = {'x': r[0], 'y': r[1], 'w': r[2], 'h': r[3], 'name': names[home]}
         need = max(box[n]['y'] + box[n]['h'] for n in ns) + frames.BOTTOM_PAD - (f['y'] + f['h'])
         if need > 0:
             push = frames.grow(text, (f['x'], f['y'], f['w'], f['h']), need, members=set(ns))

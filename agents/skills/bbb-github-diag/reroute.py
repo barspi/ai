@@ -103,6 +103,8 @@ def reroute(text, pairs, improve=False):
         t, pend = model.take_out(text, [i for _, i in one])
         res = model.route_arrows(t, pend, keep_old=True)
         failed += [(a, b, why + ': the old one stays') for a, b, _, why in res.failed]
+        for g in res.grown:
+            print('frame "%s" inflated (%s) to make room for an arrow' % g)
         return res.text, [(a, b, bends, not room, bends0.get((a, b), 0)) for a, b, bends, room in res.routed], failed
     done = []
     for (a, b), _ in one:
