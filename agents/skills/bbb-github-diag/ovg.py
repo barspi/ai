@@ -53,7 +53,9 @@ RECT, HLINE, VLINE = range(3)
 # (besides BLK), the kind of line it crosses, of frame border, and the kind that costs per step (none along a row).
 STOP, CROSS, FRAME, PER_STEP = (NOH, NOV), (CRV, CRH), (FRV, FRH), (None, NEAR)
 BUCKET = 16                                      # lattice lines per bucket of the per-call feature lists
-MAX_STATE_PATHS = 96                             # search_paths stops after this many state paths (duplicates included)
+MAX_ALTERNATIVES = 12                            # search_paths: at most this many searches (the first and the alternatives)
+PEN_STEP = 2                                     # a step along a stretch of a path found before costs this much more
+PEN_BAND = 4                                     # lattice lines (20px) each side of such a stretch: about a label's half height and gap
 
 
 def _feature_box(f):
@@ -431,11 +433,14 @@ def search(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
 
 
 def search_paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
-    """The paths of search(), cheapest first, as a generator of (points, cost): the k shortest loopless paths of Yen's algorithm
-    (J. Y. Yen, "Finding the k shortest loopless paths in a network", Management Science 17, 1971) on the search graph, the lattice
-    and its features built once. The next path is searched only when the caller asks for it, so a caller that takes the first pays
-    for one search. Paths differ as point lists: on this graph a straight run passes every stop on it, so two state sequences from
-    the same start are two different polylines."""
+    """The paths of search() as a generator of (points, cost): the cheapest first, then alternatives that differ from all before
+    them, by the iterative penalty method for dissimilar paths (P. Akguen, E. Erkut and R. Batta, "On finding dissimilar paths",
+    European Journal of Operational Research 121, 2000): after each path, every step along a stretch within PEN_BAND lattice lines of
+    one of its stretches costs PEN_STEP more, and the search runs again on the same lattice. (Yen's k shortest paths were tried
+    first: on this lattice its next paths are the first one shifted by 5px, one start cell or one jog at a time, so even 1000 of them
+    hold no other route.) The cost yielded is the path's own cost, without penalties. The next path is searched only when the caller
+    asks for it, so a caller that takes the first pays for one search. A polyline is yielded once; at most MAX_ALTERNATIVES
+    searches."""
     t0 = time.perf_counter()
     ra, rb = sc.boxes[a], sc.boxes[b]
     lat = _Lattice(sc, a, b, pad, inside)
@@ -453,63 +458,50 @@ def search_paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fa
     goal_cost = {(i * NY + j) * 4 + d: extra for (i, j), ds in goals.items() for d, extra in ds.items()}
     h = _heuristic(goals)
     walk = lat.walk_back(starts, goals) if prove_none else None
+    penalised = ({}, {})                                  # per axis: line -> [(lo, hi)] of the stretches of the paths found
     drawn = set()
-    for states, costs in itertools.islice(_yen(lat, sorted(sources.items()), goal_cost, h, walk), MAX_STATE_PATHS):
+    for _ in range(MAX_ALTERNATIVES):
+        found = _astar(lat, sorted(sources.items()), goal_cost, h, walk, penalised)
+        walk = None
         R.STATS['search'] += lat.search_secs
         R.STATS['build'] += lat.build_secs
         lat.search_secs = lat.build_secs = 0.0
+        if found is None:
+            return
+        states, cost = found
+        for (i, j, d), (i2, j2, _) in zip(_decode(states, NY), _decode(states[1:], NY)):
+            axis = d & 1 if (i, j) == (i2, j2) else (0 if j == j2 else 1)
+            line, lo, hi = (j, min(i, i2), max(i, i2)) if axis == 0 else (i, min(j, j2), max(j, j2))
+            penalised[axis].setdefault(line, []).append((lo, hi))
         pts = R._finish(states, NY, lat.x0, lat.y0, ra, rb)
         if tuple(pts) not in drawn:                       # R.unjog can make two state paths one polyline: yield it once
             drawn.add(tuple(pts))
-            yield pts, costs[-1]
+            yield pts, cost
 
 
-def _yen(lat, sources, goal_cost, h, walk):
-    """Yen's k shortest loopless paths over the search states, from a virtual source joined to every start state (sources: [(state,
-    cost)]) to the goal states: a generator of (states, cumulative costs), cheapest first. Path k+1 is the cheapest of the candidates:
-    for each state of path k taken as the spur (the virtual source included), the root up to it is kept, its states are removed from
-    the graph, the edges that the paths found so far take out of the spur after the same root are removed, and the cheapest spur path
-    is searched from it with the root's cost."""
-    first = _astar(lat, sources, goal_cost, h, walk)
-    if first is None:
-        return
-    found = [first]
-    yield first
-    cands, seen, tie = [], {tuple(first[0])}, itertools.count()
-    while True:
-        states, costs = found[-1]
-        for i in range(-1, len(states) - 1):               # i = -1: the spur is the virtual source, so another start state
-            root = states[:i + 1]
-            used = {p[0][i + 1] for p in found if p[0][:i + 1] == root}
-            if i < 0:
-                spur = _astar(lat, [sc for sc in sources if sc[0] not in used], goal_cost, h)
-                path = spur
-            else:
-                spur = _astar(lat, [(states[i], costs[i])], goal_cost, h, banned_states=frozenset(root[:-1]),
-                              banned_edges=frozenset((states[i], u) for u in used))
-                path = spur and (states[:i] + spur[0], costs[:i] + spur[1])
-            if path and tuple(path[0]) not in seen:
-                seen.add(tuple(path[0]))
-                heapq.heappush(cands, (path[1][-1], next(tie), path))
-        if not cands:
-            return
-        found.append(heapq.heappop(cands)[2])
-        yield found[-1]
+def _decode(states, NY):
+    return [((st >> 2) // NY, (st >> 2) % NY, st & 3) for st in states]
 
 
-def _astar(lat, sources, goal_cost, h, walk=None, banned_states=frozenset(), banned_edges=frozenset()):
+def _penalty(penalised, axis, line, lo, hi):
+    """What a stretch on `line` of `axis` from position lo to hi pays for running along the stretches of the paths found before."""
+    near = penalised[axis]
+    return PEN_STEP * sum(max(0, min(hi, h2) - max(lo, l2)) for k in range(line - PEN_BAND, line + PEN_BAND + 1) for l2, h2 in near.get(k, ()))
+
+
+def _astar(lat, sources, goal_cost, h, walk=None, penalised=({}, {})):
     """A* over (node, direction) from the source states [(state, cost)] to the goal states (goal_cost: state -> side cost):
-    (the states of the cheapest path, the cost reached at each) or None. walk: a _Lattice.walk_back to advance one step per node
-    taken; the search stops when it says False. banned_states, banned_edges: what Yen's algorithm removes for a spur search.
+    (the states of the cheapest path, its cost without penalties) or None. walk: a _Lattice.walk_back to advance one step per node
+    taken; the search stops when it says False. penalised: the stretches of the paths found before (search_paths); a step along
+    them pays _penalty on top of its cost, and the heuristic, which counts no penalty, stays a lower bound.
     Heap entries (f, g, state), the state packed as (i * NY + j) * 4 + direction: the grid search's order, so ties break alike where
     the two visit the same states. Adds to lat.search_secs (the time of the search less the rows and columns built on the way)."""
     t0, built0 = time.perf_counter(), lat.build_secs
     NY = lat.NY
-    prune = not banned_states and not banned_edges        # the dominance cut below holds only for the whole graph
-    dist, prev, pq = {}, {}, []
+    dist, real, prev, pq = {}, {}, {}, []
     for st, c0 in sources:
         if c0 < dist.get(st, math.inf):
-            dist[st] = c0
+            dist[st] = real[st] = c0
             heapq.heappush(pq, (c0 + h(*divmod(st >> 2, NY), st & 3), c0, st))
     end = None
     while pq:
@@ -536,16 +528,17 @@ def _astar(lat, sources, goal_cost, h, walk=None, banned_states=frozenset(), ban
                 continue
             i2, j2, c = nxt
             s2 = (i2 * NY + j2) * 4 + nd
-            if s2 in banned_states or (st, s2) in banned_edges:
-                continue
-            c2 = cost + c + (R.TURN_COST if nd != d else 0) + goal_cost.get(s2, 0)
+            step = c + (R.TURN_COST if nd != d else 0) + goal_cost.get(s2, 0)
+            pen = _penalty(penalised, nd & 1, *((j, min(i, i2), max(i, i2)) if nd & 1 == 0 else (i, min(j, j2), max(j, j2)))) \
+                if penalised[nd & 1] else 0
+            c2 = cost + step + pen
             # s2 ^ 1 and s2 ^ 3 are the same node going the two perpendicular ways; a turn is allowed at every stop but a goal. When one
             # of them is cheaper by more than a turn, it can do all that s2 can for less (but turn back the way it came, which only
             # retraces a path its own predecessors cover more cheaply), so s2 is on no cheapest path.
-            if prune and s2 not in goal_cost and min(dist.get(s2 ^ 1, math.inf), dist.get(s2 ^ 3, math.inf)) + R.TURN_COST < c2:
+            if s2 not in goal_cost and min(dist.get(s2 ^ 1, math.inf), dist.get(s2 ^ 3, math.inf)) + R.TURN_COST < c2:
                 continue
             if c2 < dist.get(s2, math.inf):
-                dist[s2] = c2
+                dist[s2], real[s2] = c2, real[st] + step
                 prev[s2] = st
                 heapq.heappush(pq, (c2 + (0 if s2 in goal_cost else h(i2, j2, nd)), c2, s2))
     lat.search_secs += time.perf_counter() - t0 - (lat.build_secs - built0)
@@ -555,7 +548,7 @@ def _astar(lat, sources, goal_cost, h, walk=None, banned_states=frozenset(), ban
     while states[-1] in prev:
         states.append(prev[states[-1]])
     states.reverse()
-    return states, [dist[st] for st in states]
+    return states, real[end]
 
 
 def selftest(seeds=20):

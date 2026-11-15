@@ -6,7 +6,9 @@ usage: move.py IN.svg OUT.svg [N@X,Y ...] [--grow NAME:SIDE:PX ...] [--reroute A
 N@X,Y        the new top-left corner of box N (its pop-up moves with it). X or Y may be `=` to keep it, or start with `+`/`-`
              (relative: 3133@=,+124 moves #3133 down 124px).
 --grow       moves one side of the frame whose visible title is NAME outward by PX (SIDE: left, right, top, bottom; a negative PX
-             moves it inward). The frame title moves with a left or top side.
+             moves it inward). The frame title moves with a left or top side. A bottom side grown outward is frames.grow: every
+             frame and box below that overlaps it horizontally moves down as much. The other sides move no neighbour: an overlap
+             they make is printed as a PROBLEM.
 --reroute    an arrow to route again although neither of its boxes moved (A>B, as reroute.py).
 --sides      A>B=SA,SB: the sides (R, L, T, B, or * for any) this arrow must leave A and enter B by, when the user chose a channel
              (3240>3238=R,R: up the right side of a column). Without it the search picks the sides.
@@ -115,23 +117,40 @@ def take_out(lines, i):
 
 
 def fit_frames(text, homes):
-    """Grow each frame that a moved box now sticks out of at the bottom, by frames.grow (what lies below moves down), so that the box
-    keeps frames.BOTTOM_PAD px above the bottom border. homes {box: frame rect it was in before the move}. Returns (text, line indexes
-    of the arrows the pushes cut, [(frame title, px)])."""
+    """Grow each frame that a moved box now reaches below, by frames.grow (what lies below moves down; the box itself is a member of
+    the frame and stays where it was asked to go), so that the box keeps frames.BOTTOM_PAD px above the bottom border. homes {box:
+    frame rect it was in before the move}; a box moved out of its frame sideways or above it is not followed (problems_of_place
+    reports it). Returns (text, line indexes of the arrows the pushes cut, [(frame title, px)])."""
     import frames
     cut, grown = set(), []
     for n, rect in homes.items():
         _, box, _, frs = collapse.parse(text)
         b = box[n]
         f = next((f for f in frs if abs(f['x'] - rect[0]) < .5 and abs(f['y'] - rect[1]) < .5), None)
-        if f is None or not (f['x'] <= b['x'] and b['x'] + b['w'] <= f['x'] + f['w'] and f['y'] <= b['y'] < f['y'] + f['h']):
-            continue                                       # left its frame (problems_of_place says so) or was never in one
+        if f is None or not (f['x'] <= b['x'] and b['x'] + b['w'] <= f['x'] + f['w'] and f['y'] <= b['y']):
+            continue
         need = b['y'] + b['h'] + frames.BOTTOM_PAD - (f['y'] + f['h'])
         if need > 0:
-            push = frames.grow(text, (f['x'], f['y'], f['w'], f['h']), need)
+            push = frames.grow(text, (f['x'], f['y'], f['w'], f['h']), need, members={n})
             text, cut = push.text, cut | set(push.cut)
             grown.append((f['name'], need))
     return text, sorted(cut), grown
+
+
+def grow_bottoms(text, grows):
+    """The --grow requests that move a bottom border down: frames.grow, the one operation that makes room (what lies below moves down
+    by as much). Returns (text, line indexes of the arrows the pushes cut, the other requests)."""
+    import frames
+    cut, rest = set(), []
+    for name, side, px in grows:
+        lines, _, _, frs = collapse.parse(text)
+        hit = [f for f in frs if svgmeta.frame_name(lines[f['tl']]) == name]
+        if side == 'bottom' and px > 0 and len(hit) == 1:
+            push = frames.grow(text, (hit[0]['x'], hit[0]['y'], hit[0]['w'], hit[0]['h']), px)
+            text, cut = push.text, cut | set(push.cut)
+        else:
+            rest.append((name, side, px))
+    return text, sorted(cut), rest
 
 
 def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
@@ -143,11 +162,19 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
     todo = [i for i, ln in enumerate(lines) if svgmeta.is_arrow(ln) and (lambda at: at and (at.a in moves or at.b in moves or at[:2] in extra))(model.arrow_at(ln))]
     sc0, _ = model.read(text)
     homes = {n: route.frame_of(sc0, n) for n in moves if n in sc0.boxes}
+    text, cut0, grows = grow_bottoms(text, grows)
     text = move_and_grow(text, moves, grows)
     text, cut, grown = fit_frames(text, {n: r for n, r in homes.items() if r})
-    text, pend = model.take_out(text, todo + cut, sides, pin=set(sides or {}) | set(extra))
+    where_now = svgmeta.drawn_frames(text)                # after every growth: the frame each moved box is in now
+    for n in moves:
+        text = svgmeta.set_box(text, n, frame=where_now.get(n))
+    text, pend = model.take_out(text, todo + cut0 + cut, sides, pin=set(sides or {}) | set(extra))
     text, _, _ = hops.add_hops(text)                     # the jump arcs over the arrows just taken out go before routing
     where = problems_of_place(text, moves) + ['frame "%s" grown %dpx (what lies below moved down)' % g for g in grown]
+    frs = model.read(text)[0].frames                      # a left, right or top --grow, or a shrink, moves no neighbour
+    where += ['frames at (%d,%d) and (%d,%d) overlap after --grow: grow the bottom side instead (what lies below moves down)'
+              % (a[0], a[1], b[0], b[1]) for k, a in enumerate(frs) for b in frs[k + 1:]
+              if a[0] < b[0] + b[2] - 1 and b[0] < a[0] + a[2] - 1 and a[1] < b[1] + b[3] - 1 and b[1] < a[1] + a[3] - 1]
     res = model.route_arrows(text, pend, keep_out)
     where += ['frame "%s" grown %dpx to make room for an arrow' % g for g in res.grown]
     text, _, more = model.settle(before, res.text, [(p.a, p.b) for p in pend])

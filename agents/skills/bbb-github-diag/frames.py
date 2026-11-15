@@ -10,7 +10,8 @@ placement call it.
 The rule (a cascade over the frames and the boxes, each a rigid block, everything moved by the same dy):
 1. the frame grows dy at its bottom, and so does every frame that holds it;
 2. a frame or a box moves down when its top is at or below the old bottom of a frame or box that grew or moved and the two overlap
-   horizontally (they share more than TOUCH px of x); a frame that moves carries everything inside it;
+   horizontally (they share more than TOUCH px of x); a frame that moves carries everything inside it; the boxes of the grown frame
+   (members_of: its own boxes, one that sticks out at its bottom, one it grows to hold) never move;
 3. repeat until nothing more moves.
 Nothing moves sideways and nothing moves up, so the gaps between frames stay as they were and two frames that did not overlap before
 do not overlap after. The canvas grows when the lowest thing moved needs it (CANVAS_BOTTOM px below it).
@@ -85,11 +86,20 @@ def _end_box(p, boxes):
     return None
 
 
-def cascade(frames, boxes, grown_frame):
+def members_of(frame, boxes, also=()):
+    """The boxes that belong to `frame` and so never move when it grows: those in `also` (a box the frame grows to hold, below its
+    bottom border) and every box whose top is inside the frame and whose sides are within it (one that sticks out at the bottom)."""
+    x, y, w, h = frame
+    return set(also) | {n for n, r in boxes.items() if x <= r[0] and r[0] + r[2] <= x + w and y <= r[1] < y + h}
+
+
+def cascade(frames, boxes, grown_frame, members=()):
     """The blocks the rule moves when grown_frame grows (module docstring, steps 1 to 3): (indexes of the frames that grow, indexes
-    of the frames that move, numbers of the boxes that move). frames: [rect]; boxes: {num: rect}."""
+    of the frames that move, numbers of the boxes that move). frames: [rect]; boxes: {num: rect}; members: boxes of the grown frame
+    (members_of), which never move."""
     grow = {k for k, f in enumerate(frames) if _holds(f, grown_frame)}
-    move_f, move_b = set(), set()
+    move_f, move_b = set(), set(members_of(grown_frame, boxes, members))
+    keep = set(move_b)
     pushers = [frames[k] for k in grow]
     changed = True
     while changed:
@@ -108,7 +118,7 @@ def cascade(frames, boxes, grown_frame):
                 move_b.add(n)
                 pushers.append(r)
                 changed = True
-    return grow, move_f, move_b
+    return grow, move_f, move_b - keep
 
 
 def _arrow_points(line):
@@ -144,16 +154,17 @@ def labels_of(lines, idxs):
     return out
 
 
-def grow(text, frame, dy):
+def grow(text, frame, dy, members=()):
     """Grow the frame whose rectangle is `frame` (x, y, w, h) by dy px at its bottom and push down what lies below (module
-    docstring). Returns a Push."""
+    docstring). members: boxes that belong to the frame although they lie below its bottom border (a box it grows to hold); they
+    stay where they are. Returns a Push."""
     lines, box, pop, fr = collapse.parse(text)
     rects = [_rect(f) for f in fr]
     hit = [k for k, r in enumerate(rects) if all(abs(a - b) < .5 for a, b in zip(r, frame))]
     if not hit:
         raise ValueError('no frame at %s' % (frame,))
     boxes = {n: _rect(b) for n, b in box.items()}
-    grow_k, move_k, move_b = cascade(rects, boxes, rects[hit[0]])
+    grow_k, move_k, move_b = cascade(rects, boxes, rects[hit[0]], members)
     out = list(lines)
     changes = []
     for k in grow_k | move_k:
@@ -227,6 +238,9 @@ def selftest():
         bad.append('frames moved %s, want {1, 2, 4}' % sorted(mf))
     if mb != {2, 3}:
         bad.append('boxes moved %s, want {2, 3}' % sorted(mb))
+    g2, mf2, mb2 = cascade(F, dict(boxes, m=(20, 310, 100, 40)), F[0], members={'m'})
+    if 'm' in mb2 or 2 not in mb2:
+        bad.append('a box the frame grows to hold moved, or a box below it did not (%s)' % sorted(map(str, mb2)))
     dy = 40
     after = [(x, y + dy, w, h) if k in mf else (x, y, w, h + dy) if k in g else (x, y, w, h) for k, (x, y, w, h) in enumerate(F)]
     for k, r in enumerate(after):

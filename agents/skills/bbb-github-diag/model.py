@@ -138,25 +138,41 @@ def _route_one(sc, p):
     return route.route_labelled(sc, p.a, p.b, p.kind, *p.sides)
 
 
+def _by_importance(items, sc):
+    """Pending arrows, the most important first (draw.IMPORTANCE), then the shortest (box centres)."""
+    import draw
+    centre = lambda n: (sc.boxes[n][0] + sc.boxes[n][2] / 2, sc.boxes[n][1] + sc.boxes[n][3] / 2) if n in sc.boxes else (0, 0)
+    return sorted(items, key=lambda p: (-draw.IMPORTANCE.get(p.kind, 2), sum(abs(u - v) for u, v in zip(centre(p.a), centre(p.b)))))
+
+
 def _grow_for(text, p, frame, keep_out):
     """The smallest growth of `frame` (a whole number of GROW_STEP px, at most GROW_STEPS) after which the arrow p has a path inside
-    it: (text, scene, route_labelled result, [Pending] of the arrows the push cut, px), or None. Each try starts from `text`, so a
-    growth that does not help leaves nothing behind."""
-    def attempt(k):
+    it AND every arrow the push cut has one too: a growth is taken whole or not at all, so it never costs an arrow it did not ask
+    for. Returns (text with all of them drawn, scene, [(Pending, route_labelled result)], px), or None. Each try starts from `text`,
+    so a growth that does not help leaves nothing behind."""
+    def attempt(k, whole):
+        """Grow k steps; route p, and with `whole` every cut arrow too. The result, or None when one finds no path."""
         push = frames_mod().grow(text, frame, k * GROW_STEP)
         t, cut = take_out(push.text, push.cut)
         sc = scene(t, keep_out)
-        res = _route_one(sc, p)
-        return (t, sc, res, cut, k * GROW_STEP) if res else None
-    # The most growth first: when even that leaves no path, no growth does (more room never closes a path), and the frame stays.
-    # Else a binary search for the fewest steps that give one.
-    best = attempt(GROW_STEPS)
-    lo, hi = 0, GROW_STEPS                                # no path with lo steps; a path with hi steps
-    while best and hi - lo > 1:
+        drawn = []
+        for q in [p] + (_by_importance(cut, sc) if whole else []):
+            res = _route_one(sc, q)
+            if res is None:
+                return None
+            t = _fill(t, sc, q, res)
+            drawn.append((q, res))
+        return t, sc, drawn, k * GROW_STEP
+    # The most growth first, for p alone: when even that gives no path, no growth does (a growth only adds room inside the frame
+    # and takes cut arrows away), and the frame stays. Else a binary search for the fewest steps that give p a path, and from there
+    # up, the first growth after which every cut arrow has a path too.
+    if attempt(GROW_STEPS, False) is None:
+        return None
+    lo, hi = 0, GROW_STEPS                                # no path for p with lo steps; a path with hi steps
+    while hi - lo > 1:
         mid = (lo + hi) // 2
-        got = attempt(mid)
-        lo, hi, best = (lo, mid, got) if got else (mid, hi, best)
-    return best
+        lo, hi = (lo, mid) if attempt(mid, False) else (mid, hi)
+    return next((got for k in range(hi, GROW_STEPS + 1) if (got := attempt(k, True))), None)
 
 
 def frames_mod():
@@ -174,28 +190,43 @@ def scene(text, keep_out=()):
 
 def route_arrows(text, pending, keep_out=(), keep_old=False):
     """Route every Pending arrow in the picture as it is, the most important first (draw.IMPORTANCE), then the shortest, each in the
-    picture with the ones before it. Each path must leave room for its label (route.route_labelled: the cheapest of the k cheapest
+    picture with the ones before it. Each path must leave room for its label (route.route_labelled: the cheapest of a few cheapest
     that has room, else the cheapest). An arrow between two boxes of one frame stays in that frame: when the frame has no room for
     it, the frame grows down (frames.grow, the one operation that makes room, which pushes down what lies below and cuts the arrows
-    that ran through it: they join the queue). An arrow with no path is left out (or, keep_old, keeps the markup it had).
-    Then a second pass routes again, in the finished picture, each arrow that had no room for its label (kept only when it now has),
-    and finish(): jump arcs, labels. Returns a Routed. The text holds no slot afterwards."""
-    import draw, svgmeta
+    that ran through it; _grow_for routes them in the same step, and takes the growth only when all of them find a path).
+    An arrow with no path is left out. keep_old: the arrows are routed one at a time with the others still drawn as they were, and
+    one with no path keeps the markup it had (so an old path is never put back into channels that others took while it was out).
+    Then the arrows that had no room for their label are tried once more in the finished picture (retry_short), and finish():
+    jump arcs, labels. Returns a Routed. The text holds no slot afterwards."""
     sc = scene(text, keep_out)
-    centre = lambda n: (sc.boxes[n][0] + sc.boxes[n][2] / 2, sc.boxes[n][1] + sc.boxes[n][3] / 2) if n in sc.boxes else (0, 0)
-    queue = sorted(pending, key=lambda p: (-draw.IMPORTANCE.get(p.kind, 2), sum(abs(u - v) for u, v in zip(centre(p.a), centre(p.b)))))
-    routed, failed, grown, done = [], [], [], []
+    queue = _by_importance(pending, sc)
+    if keep_old:                                          # everything back as it was; each arrow is taken out on its turn
+        for p in queue:
+            text = text.replace(p.slot, p.old, 1)
+        sc = scene(text, keep_out)
+    results, failed, grown = {}, [], []
     while queue:
         p = queue.pop(0)
+        key = (p.a, p.b, p.kind)
+        if key in results:
+            continue                                      # already routed again by a growth that cut it
+        if keep_old:
+            lines = text.split('\n')
+            i = next((i for i, ln in enumerate(lines) if svgmeta_arrow(ln) == key), None)
+            if i is None:
+                continue
+            text, got = take_out(text, [i])
+            p = got[0]._replace(sides=p.sides, pin=p.pin)
+            sc = scene(text, keep_out)
         res = _route_one(sc, p)
+        drawn = [(p, res)] if res else []
         fr = route.common_frame(sc, p.a, p.b) if res is None and p.a in sc.boxes and p.b in sc.boxes else None
         if fr:
             more = _grow_for(text, p, fr, keep_out)
             if more:
-                text, sc, res, cut, px = more
-                queue += cut
+                text, sc, drawn, px = more
                 grown.append((_frame_title(text, fr), px))
-        if res is None:
+        if not drawn:
             why = 'a box is not in the diagram' if p.a not in sc.boxes or p.b not in sc.boxes else \
                 'no path inside its frame, even grown %dpx' % (GROW_STEP * GROW_STEPS) if fr else 'no path'
             failed.append((p.a, p.b, p.kind, why))
@@ -203,27 +234,37 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
             if keep_old and p.old:
                 sc = scene(text, keep_out)
             continue
-        text = _fill(text, sc, p, res)
-        routed.append((p.a, p.b, len(res[0]) - 2, res[2]))
-        done.append((p.a, p.b))
+        if not fr:
+            text = _fill(text, sc, p, res)
+        for q, r in drawn:
+            results[(q.a, q.b, q.kind)] = (len(r[0]) - 2, r[2])
     text = '\n'.join(l for l in text.split('\n') if not l.startswith('<!--slot:'))
-    text, unlabelled = finish(text, done)
-    routed, again = retry_short(text, routed, keep_out)
+    routed = [(a, b, bends, room) for (a, b, _), (bends, room) in results.items()]
+    kinds = {(a, b): k for a, b, k in results}
+    text, unlabelled = finish(text, list(kinds))
+    routed, again = retry_short(text, routed, keep_out, kinds)
     if again != text:
-        text, unlabelled = finish(again, done)
+        text, unlabelled = finish(again, list(kinds))
     return Routed(text, routed, failed, grown, unlabelled)
 
 
-def retry_short(text, routed, keep_out=()):
-    """Rip-up and retry of the arrows that had no room for their label (routed: [(a, b, bends, room)]): each was routed before the
-    arrows after it were drawn; in the finished picture one of its k cheapest paths may have room. A new path is kept only when it
-    has. Returns (routed, text)."""
+def svgmeta_arrow(line):
+    """(a, b, kind) of an arrow line that carries them, else None."""
+    at = arrow_at(line)
+    return tuple(at) if at else None
+
+
+def retry_short(text, routed, keep_out=(), kinds=None):
+    """Rip-up and retry of the arrows that had no room for their label (routed: [(a, b, bends, room)]; kinds {(a, b): kind}): each
+    was routed before the arrows after it were drawn; in the finished picture one of its cheapest paths may have room. A new path is
+    kept only when it has. Returns (routed, text)."""
     routed = list(routed)
     for k, (a, b, bends, room) in enumerate(routed):
         if room:
             continue
         lines = text.split('\n')
-        i = next((i for i, ln in enumerate(lines) if (arrow_at(ln) or (0, 0))[:2] == (a, b)), None)
+        want = (a, b, (kinds or {}).get((a, b)))
+        i = next((i for i, ln in enumerate(lines) if (svgmeta_arrow(ln) or ())[:2] == (a, b) and want[2] in (None, svgmeta_arrow(ln)[2])), None)
         if i is None:
             continue
         t, got = take_out(text, [i])
@@ -269,16 +310,22 @@ def finish(text, pairs):
 
 
 def invalid(text):
-    """{line index: why} of every arrow that is not valid as drawn: an end that touches no box, a run through a box, or a run closer
-    than 14px beside another arrow (the later one of the two)."""
+    """{line index: why} of every arrow that is not valid as drawn: an end that touches no box, a run that leaves the frame its two
+    boxes are in, a run through a box, or a run closer than 14px beside another arrow or on top of it (the later one of the two; on
+    top of an arrow that shares its tail box or its tip box is a fork's trunk, and valid)."""
     sc, info = read(text)
     lines = info['lines']
     arrows = [(i, arrow_points(ln)) for i, ln in enumerate(lines) if ln.startswith('<path d="M') and 'marker-end' in ln]
-    out = {}
+    out, box_ends = {}, {}
     for i, pts in arrows:
         ends = [next((n for n, r in sc.boxes.items() if _side(p, r)), None) for p in (pts[0], pts[-1])]
+        box_ends[i] = ends
         if None in ends:
             out[i] = 'an end touches no box'
+            continue
+        fr = route.common_frame(sc, *ends)
+        if fr and any(not (fr[0] - 1 <= x <= fr[0] + fr[2] + 1 and fr[1] - 1 <= y <= fr[1] + fr[3] + 1) for x, y in pts):
+            out[i] = 'leaves the frame its two boxes are in'
             continue
         q = (min(x for x, _ in pts), min(y for _, y in pts), max(x for x, _ in pts), max(y for _, y in pts))
         for (x, y, w, h) in sc.near('boxes', q):
@@ -289,9 +336,11 @@ def invalid(text):
     seen = []
     for i, pts in arrows:
         for o, c, lo, hi in route.segments(pts):
-            if any(o == o2 and 0.5 < abs(c - c2) < 13.5 and min(hi, hi2) - max(lo, lo2) > 20 for o2, c2, lo2, hi2 in seen):
-                out.setdefault(i, 'runs closer than 14px beside another arrow')
-        seen += route.segments(pts)
+            for k, (o2, c2, lo2, hi2) in seen:
+                fork = None not in box_ends[i] and (box_ends[i][0] == box_ends[k][0] or box_ends[i][1] == box_ends[k][1])
+                if o == o2 and min(hi, hi2) - max(lo, lo2) > 20 and abs(c - c2) < 13.5 and (abs(c - c2) > 0.5 or not fork):
+                    out.setdefault(i, 'runs closer than 14px beside another arrow, or on top of it')
+        seen += [(i, sg) for sg in route.segments(pts)]
     return out
 
 
@@ -434,30 +483,27 @@ def relabel(text, hop_pad=0, redo=()):
                 k = min(free, key=lambda k: distance(k, cx, cy))
                 own, orphan = sc.arrows[k], True
                 labelled.add(k)
-        sc.labels = [l for l in sc.labels if l != tuple(rect)]  # the label is tested against everything but itself
-        others = sc
-        if own is not None and not orphan and own_k not in redo_k and not route._hit(rect, others, own=own, hop_pad=hop_pad) \
-                and (not off_middle(own, cx, cy) if not shift else route.place_label(others, own, word, w, h, strict=False) is None):
-            sc.labels.append(rect)
-            continue                                        # sits well (a label beside its shaft: while the shaft is still too short)
-        if own is None or word not in route.draw.EDGE:
-            sc.labels.append(rect)
-            failed.append((round(cx), round(cy), 'no arrow of this word to attach the label to'))
-            continue
-        new, nshift = route.place_label(others, own, word, w, h, shaft=route.LABEL_SHAFT) or route.place_label(others, own, word, w, h), None
-        if not new:                                         # no place with the full 20px of shaft: take the best place with 8px and say so
-            new = route.place_label(others, own, word, w, h, strict=False)
-            if new:
-                failed.append((round(new[0]), round(new[1]), 'WARN: the label has less than 20px of shaft (a short arrow)'))
-            else:                                           # a shaft too short for any label: beside it
-                bs = route.place_label_beside(others, own, word, w, h)
-                if not bs:
-                    sc.labels.append(rect)
-                    failed.append((round(cx), round(cy), 'no straight stretch long enough for this label'))
-                    continue
-                new, nshift = bs[:2], bs[2:]
+        with sc.hide('labels', rect) as others:            # the label is tested against everything but itself
+            if own is not None and not orphan and own_k not in redo_k and not route._hit(rect, others, own=own, hop_pad=hop_pad) \
+                    and (not off_middle(own, cx, cy) if not shift else route.place_label(others, own, word, w, h, strict=False) is None):
+                continue                                    # sits well (a label beside its shaft: while the shaft is still too short)
+            if own is None or word not in route.draw.EDGE:
+                failed.append((round(cx), round(cy), 'no arrow of this word to attach the label to'))
+                continue
+            new, nshift = route.place_label(others, own, word, w, h, shaft=route.LABEL_SHAFT) or route.place_label(others, own, word, w, h), None
+            if not new:                                     # no place with the full 20px of shaft: take the best place with 8px and say so
+                new = route.place_label(others, own, word, w, h, strict=False)
+                if new:
+                    failed.append((round(new[0]), round(new[1]), 'WARN: the label has less than 20px of shaft (a short arrow)'))
+                else:                                       # a shaft too short for any label: beside it
+                    bs = route.place_label_beside(others, own, word, w, h)
+                    if not bs:
+                        failed.append((round(cx), round(cy), 'no straight stretch long enough for this label'))
+                        continue
+                    new, nshift = bs[:2], bs[2:]
         route.draw.move_label(lines, i, new[0], new[1], nshift)
         dx, dy = nshift or (0, 0)
+        sc.labels.remove(tuple(rect))                      # the one change to the labels: only a label that moved costs a new index
         sc.labels.append((new[0] + dx - w / 2, new[1] + dy - h / 2, w, h))
         fixed += 1
     return '\n'.join(lines), fixed, failed

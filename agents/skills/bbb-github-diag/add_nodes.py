@@ -35,7 +35,7 @@ at the next refresh_meta.py.
 Prints every new box as `x y w h`, and a PROBLEM line for whatever it could not do (no free space, no path, no room for a label): say so
 to the user; do not draw it worse by hand.
 """
-import json, os, re, sys, tempfile
+import json, math, os, re, sys, tempfile
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -125,29 +125,32 @@ def _place_best(sc, w, h, near, going_right, frame, rects):
 
 
 def bottom_spot(sc, w, h, near, frame):
-    """When `frame` has no free spot: the place at its bottom, beside `near` when it can be (right of it, under it, left of it,
-    else any column of the frame), just under the lowest box of that column and clear of the arrows there. Returns (x, y, px the frame
-    must grow by so the box keeps frames.BOTTOM_PAD above its bottom border). The spot that needs the least growth wins; ties: the
-    nearest to `near`. The frame then grows by frames.grow (what lies below moves down), never by overlapping the frame below."""
+    """When `frame` has no free spot: the place at its bottom, just under the lowest box of a column and clear of the arrows there.
+    Returns (x, y, px the frame must grow by so the box keeps frames.BOTTOM_PAD above its bottom border). The columns of `near` come
+    first (right of it, under it, left of it), the spot among them that needs the least growth; any other column of the frame only
+    when `near` is not in it. Only what the frame holds counts as an obstacle: whatever lies below its bottom border is pushed down
+    by the growth (frames.grow), and an arrow that reaches below it is cut and routed again."""
     import frames
     fx, fy, fw, fh = frame
-    members = [r for r in sc.boxes.values() if route.holds(frame, r)]
+    bottom = fy + fh
+    members = {n: r for n, r in sc.boxes.items() if route.holds(frame, r)}
     xs = []
-    if near in sc.boxes and route.holds(frame, sc.boxes[near]):
-        nx, _, nw, _ = sc.boxes[near]
+    if near in members:
+        nx, _, nw, _ = members[near]
         xs = [nx + nw + GAP_X, nx, nx - w - GAP_X]
-    xs += sorted({r[0] for r in members})
+    near_cols = set(xs)
+    xs += sorted({r[0] for r in members.values()})
     xs = [x for x in dict.fromkeys(xs) if fx + 20 <= x and x + w <= fx + fw - 20]
-    tall = model.route.Scene(sc.boxes, [f if f != frame else (fx, fy, fw, fh + 10 ** 5) for f in sc.frames], sc.labels, sc.pills,
-                             sc.arrows, sc.bounds)       # the frame as it will be once grown: no bottom border in the way
-    tall_frame = (fx, fy, fw, fh + 10 ** 5)
+    tall_frame = (fx, fy, fw, fh + 10 ** 5)                     # the frame as it will be once grown
+    held = model.route.Scene(members, [tall_frame], [r for r in sc.labels if r[1] < bottom], [r for r in sc.pills if r[1] < bottom],
+                             [[p for p in pts] for pts in sc.arrows if max(y for _, y in pts) < bottom], sc.bounds)
     best = None
     for k, x in enumerate(xs):
-        y = max([r[1] + r[3] for r in members if r[0] < x + w + 30 and x < r[0] + r[2] + 30] + [fy + 10]) + 30
-        while not is_free(tall, (x, y, w, h), tall_frame):
+        y = max([r[1] + r[3] for r in members.values() if r[0] < x + w + 30 and x < r[0] + r[2] + 30] + [fy + 10]) + 30
+        while not is_free(held, (x, y, w, h), tall_frame):
             y += STEP
-        need = max(0.0, y + h + frames.BOTTOM_PAD - (fy + fh))
-        key = (need, k)
+        need = float(math.ceil(max(0.0, y + h + frames.BOTTOM_PAD - bottom)))
+        key = (x not in near_cols, need, k)
         if best is None or key < best[0]:
             best = (key, (x, y, need))
     return best[1] if best else None
@@ -276,7 +279,7 @@ def main():
             cur = next(f for f in collapse.parse(text)[3] if abs(f['x'] - fr[0]) < .5 and abs(f['y'] - fr[1]) < .5)
             need = y + hh + frames.BOTTOM_PAD - (cur['y'] + cur['h'])
             if need > 0:
-                push = frames.grow(text, (cur['x'], cur['y'], cur['w'], cur['h']), need)
+                push = frames.grow(text, (cur['x'], cur['y'], cur['w'], cur['h']), need, members={b['num']})
                 text, cut = model.take_out(push.text, push.cut)
                 pending += cut
         sc, _ = model.read(text)

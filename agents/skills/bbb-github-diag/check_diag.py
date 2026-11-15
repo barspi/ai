@@ -450,7 +450,9 @@ for _pop in (False, True):
                         else 'GitHub no longer links #%d as a blocker and no arrow states it' % _named[0]))
 import reroute                                # an arrow between two boxes of one frame stays inside it (route.py; an almost hard rule)
 for _a, _b in reroute.leaves_frame(new):
-    fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d (or move a box)' % (_a, _b, _a, _b))
+    fail('arrow #%d -> #%d leaves the frame its two boxes are in: reroute.py IN OUT %d>%d routes it inside (the frame grows when it '
+         'needs room); when that says "no path", move a box with move.py or drop the arrow with svgmeta.py drop IN %d %d "reason"'
+         % (_a, _b, _a, _b, _a, _b))
 for _a, _b, _k, _why in __import__('rules').far_low(new):      # a far low arrow from closed work is not drawn (rules.far_low)
     warn('far low arrow #%d %s #%d: %s; rules.py prune drops it into "nopath"' % (_a, _k, _b, _why))
 import ports                                  # two arrows of one side of a box that cross each other: never needed (ports.py)

@@ -132,16 +132,17 @@ def main():
 
     # the most important arrows first (draw.IMPORTANCE), each tier longest first: they get the short, simple paths
     for a, b, kind in sorted(P['hard'], key=lambda e: (-draw.IMPORTANCE.get(e[2], 2), span(e))):
-        pts = route.route(sc, a, b, '*', '*')        # one search over every side of both boxes: fewest bends and crossings win
-        if not pts:
+        got = route.route_labelled(sc, a, b, kind)    # every side of both boxes at once; a path with room for its label
+        if not got:
             problems.append('NO PATH for #%s %s #%s: kept in the metadata ("nopath"); name it in the box note, and say what would have to move' % (a, kind, b))
             nopath.append((a, b, kind))
             continue
+        pts, lab = got[0], got[1]
         add(a, b, kind, pts)
-        lab = route.place_label(sc, pts, kind)
         if lab:
-            sc.add(None, kind, lab)
-            label_lines += draw.label(kind, *lab)
+            dx, dy = lab[2] or (0, 0)
+            sc.add(None, kind, (lab[0] + dx, lab[1] + dy))
+            label_lines += draw.label(kind, lab[0], lab[1], lab[2])
         else:
             problems.append('no free straight stretch for the label of #%s %s #%s' % (a, kind, b))
 

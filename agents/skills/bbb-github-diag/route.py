@@ -19,13 +19,13 @@ in the same frame is searched inside that frame and nowhere else (None: model.ro
 between two frames is searched in the box round the two frames and the corridor between them (frames_window), then on the whole
 canvas. It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
 The search runs on a 5px lattice. Two searches give the same costs: `vis` (ovg.py, the default), A* on an orthogonal visibility graph
-whose nodes are only where a path may need to turn, with Yen's k shortest paths for route(accept=...), and `grid` (_route_grid
+whose nodes are only where a path may need to turn, with dissimilar alternatives for route(accept=...), and `grid` (_route_grid
 below), A* over every lattice cell (the cheapest path only), kept to compare. The environment variable BBB_ROUTER=grid|vis picks one.
 route_labelled() accepts a path only when its label has room (the cheapest of the K_PATHS cheapest that has). place_label() keeps a
 label 7px from every other arrow and LABEL_SHAFT px of shaft from a bend, an end or a jump arc (drawn, or that hops.py will draw).
 Label and obstacle questions go to the scene's spatial index (spatial.py), so they read only what is near.
 """
-import heapq, itertools, math, os, time
+import contextlib, heapq, itertools, math, os, time
 from array import array
 
 import draw, spatial
@@ -44,7 +44,7 @@ FRAME_COST = 60     # per border crossed of a frame that holds neither end: goin
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
 LAST_COST = None    # the cost of the last path _route() found
-K_PATHS = 16        # route(accept=...) tries at most this many of the cheapest paths (Yen) for one that passes the test
+K_PATHS = 6         # route(accept=...) tries at most this many paths (the cheapest, then alternatives) for one that passes
 LABEL_SHAFT = 20    # px of straight shaft a label needs on each side (check_diag.py warns below it)
 WINDOW_MARGIN = 2 * FPROX  # a cross-frame search window: the two frames and what lies between them, and this much around
 STATS = {'calls': 0, 'build': 0.0, 'search': 0.0}    # _route() calls and their seconds: obstacle structures, then the search itself
@@ -81,6 +81,7 @@ class Scene:
         self.boxes, self.frames = boxes, list(frames)
         self.labels, self.pills, self.arrows, self.hops = labels, pills, arrows, ()
         self._layers = {}
+        self.hidden = {}                                   # source -> items near() leaves out for a while (hide())
 
     def layer(self, key, source, entries):
         """The spatial.Grid of the list named `source`, made by entries(item) -> [(box, payload)], brought up to date."""
@@ -91,7 +92,19 @@ class Scene:
 
     def near(self, source, box):
         """The items of one list (boxes: their rectangles; arrows: (path, segment) per segment) whose bounding box meets box."""
-        return self.layer(source, source, _HIT_ENTRIES[source]).query(box)
+        found = self.layer(source, source, _HIT_ENTRIES[source]).query(box)
+        gone = self.hidden.get(source)
+        return [x for x in found if x != gone] if gone is not None else found
+
+    @contextlib.contextmanager
+    def hide(self, source, item):
+        """near() leaves out one item of a list while the block runs (a label tested against everything but itself), with no
+        change to the list and so no new index."""
+        self.hidden[source] = spatial.freeze_rect(item)
+        try:
+            yield self
+        finally:
+            del self.hidden[source]
 
     def add(self, pts, kind=None, lab=None):
         if pts:
@@ -158,7 +171,8 @@ def _reachable(goals, starts, blk, noh, nov, nt, NX, NY):
 
 def _paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None):
     """The paths of one search window, cheapest first, as a generator of (points, cost), by the router the environment variable
-    BBB_ROUTER names: `vis` (ovg.search_paths, the default: Yen's k shortest paths) or `grid` (_route_grid: the cheapest only)."""
+    BBB_ROUTER names: `vis` (ovg.search_paths, the default: the cheapest, then
+    dissimilar alternatives) or `grid` (_route_grid: the cheapest only)."""
     which = os.environ.get('BBB_ROUTER', 'vis')
     STATS['calls'] += 1
     if which == 'vis':
@@ -173,7 +187,7 @@ def _paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
 
 
 def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None, accept=None):
-    """One search window: the cheapest path, or with `accept` (a test on the points) the cheapest of the K_PATHS cheapest that passes
+    """One search window: the cheapest path, or with `accept` (a test on the points) the first of K_PATHS (the cheapest, then alternatives) that passes
     it, else the cheapest (the caller learns that from accept itself). None when the window holds no path. The cost goes to
     LAST_COST."""
     global LAST_COST
@@ -547,14 +561,24 @@ def route(sc, a, b, sa='R', sb='L', pad=None, span_a=None, span_b=None, accept=N
     return _route(sc, a, b, sa, sb, 10 ** 6, natural, prove_none=True, **pin)
 
 
+MIN_JOG = 30         # px: a stretch between two bends shorter than this reads as a glitch (check_diag.py warns)
+
+
+def has_jog(pts):
+    """Has the path a stretch between two bends shorter than MIN_JOG? An alternative path with one is never accepted in place of the
+    cheapest (route_labelled)."""
+    return any(hi - lo < MIN_JOG for _, _, lo, hi in segments(straight([tuple(p) for p in pts]))[1:-1])
+
+
 def route_labelled(sc, a, b, kind, sa='*', sb='*', w=None, h=18.0, span_a=None, span_b=None):
     """route() whose path must leave room for the arrow's label: one straight stretch with the label's length plus LABEL_SHAFT px of
-    shaft on each side, where the label touches no box, label, pill or other arrow (place_label with shaft=LABEL_SHAFT). Returns
+    shaft on each side, where the label touches no box, label, pill or other arrow (place_label with shaft=LABEL_SHAFT), and no jog
+    shorter than MIN_JOG. The candidates are the cheapest path, then its alternatives (ovg.search_paths, the penalty method). Returns
     (points, label, room): label as place_label_any gives it, (cx, cy, shift, short), at the place the test found; room is False when
     no path of the K_PATHS cheapest had room, so the cheapest was taken and its label placed as well as it goes (or None). None when
     there is no path."""
     room = lambda pts: place_label(sc, pts, kind, w, h, shaft=LABEL_SHAFT)
-    pts = route(sc, a, b, sa, sb, span_a=span_a, span_b=span_b, accept=lambda p: room(p) is not None)
+    pts = route(sc, a, b, sa, sb, span_a=span_a, span_b=span_b, accept=lambda p: not has_jog(p) and room(p) is not None)
     if pts is None:
         return None
     lab = room(pts)

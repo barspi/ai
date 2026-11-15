@@ -172,11 +172,11 @@ class Layer:
         if src is not self.src or src.edits != self.edits or len(src) < self.n:
             self.src, self.edits, self.n, self.grid = src, src.edits, 0, Grid()
             self.rebuilds += 1
-        items = list(src.items()) if isinstance(src, dict) else src
-        for item in items[self.n:]:
-            for box, payload in self.entries(item):
-                self.grid.add(box, payload)
-        self.n = len(items)
+        if self.n < len(src):                      # a dict is always indexed whole: any change to it counts as an edit
+            for item in (list(src.items()) if isinstance(src, dict) else src[self.n:]):
+                for box, payload in self.entries(item):
+                    self.grid.add(box, payload)
+            self.n = len(src)
         return self.grid
 
 

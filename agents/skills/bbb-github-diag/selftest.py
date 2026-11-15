@@ -215,10 +215,35 @@ def by_construction(tmp):
               '3. the new box is inside its grown frame, in or beside the column of `near` (%s)' % (b,))
         check(sc3.frames[1][1] > 1100 and not any(route.holds(sc3.frames[1], r) or _overlap(r, sc3.frames[1]) for r in [b]),
               '3. the frame below moved; the new box is not on it')
+        need = sc3.frames[0][3] - tight[3]
+        check(b is not None and need <= b[3] + frames.BOTTOM_PAD + 60, '3. the frame grew only by what the box needs (%dpx for a %dpx box)'
+              % (need, b[3] if b else 0))
         f, w, out = checked(open(dst, encoding='utf-8').read(), tmp, 'added2.svg')
         check(f == 0, '3. check_diag.py after add_nodes.py: FAILS 0' + ('' if f == 0 else ':\n' + out))
     else:
         check(False, '3. add_nodes.py in a full frame ran (%s):\n%s' % (code, out))
+    check(model.count_arrows(res.text) == model.count_arrows(text) + 1, '2. the push routed again every arrow it cut: none lost')
+    # 2. move.py: a box moved below the bottom of its frame stays where it was asked to go; the frame grows to hold it, the frame
+    #    below moves, the box keeps its frame in its data-frame
+    src, dst = os.path.join(tmp, 'two.svg'), os.path.join(tmp, 'moved.svg')
+    open(src, 'w', encoding='utf-8').write(text)
+    code, out = call(move, [src, dst, '104@=,+60'])
+    t2 = open(dst, encoding='utf-8').read() if os.path.exists(dst) else ''
+    sc2 = model.scene(t2) if t2 else None
+    check(sc2 is not None and sc2.boxes[104][1] == 960.5 and route.holds(sc2.frames[0], sc2.boxes[104])
+          and sc2.frames[1][1] > 1100 and svgmeta.boxes(t2)[104]['frame'] == 'guest checkout',
+          '2. move.py below the frame bottom: the box stays at y 960.5, the frame grows, the frame below moves (%s)' % (sc2 and sc2.boxes[104],))
+    f, w, out2 = checked(t2, tmp, 'moved2.svg')
+    check(f == 0, '2. check_diag.py after that move: FAILS 0' + ('' if f == 0 else ':\n' + out2))
+    # 2. move.py --grow on a bottom side is the same push
+    code, out = call(move, [src, dst, '--grow', 'guest checkout:bottom:200'])
+    f, w, out2 = checked(open(dst, encoding='utf-8').read(), tmp, 'grown2.svg')
+    check(code == 0 and f == 0 and model.scene(open(dst, encoding='utf-8').read()).frames[1][1] == 1300,
+          '2. move.py --grow NAME:bottom:PX pushes the frame below' + ('' if f == 0 else ':\n' + out2))
+    # 2. reroute.py routes one arrow at a time with the others drawn: no arrow ends invalid that was valid
+    code, out = call(reroute, [src, dst, '--in-frame', 'guest checkout'])
+    check(code == 0 and len(model.invalid(open(dst, encoding='utf-8').read())) <= len(model.invalid(text)),
+          '2. reroute.py --in-frame leaves no new invalid arrow' + ('' if code == 0 else ':\n' + out))
     # 4. label room is a test on the path: the cheapest straight path has no room (a label just above it), the next one has
     sc4 = route.Scene({1: (0, 200, 100, 60), 2: (360, 200, 100, 60)}, labels=[(100, 190, 260, 30)], bounds=(-600, -600, 3000, 3000))
     cheap = route.route(sc4, 1, 2, '*', '*')
