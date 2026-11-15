@@ -9,7 +9,8 @@ usage: selftest.py [--no-static]
    - mypy --check-untyped-defs with the codes that need annotations this code does not carry turned off. What stays on catches a
      record formatted in the wrong order (`'%d %s %d' % arrow` when the fields are a, b, kind), a call with too many arguments, an
      attribute a value does not have.
-2. rules.selftest(): the phrase, close and blocked-note rules.
+2. rules.selftest(): the phrase, close and blocked-note rules. route.selftest(): one small scene per routing rule, with the router
+   BBB_ROUTER names. ovg.selftest(): both routers on random scenes, the same cost for every arrow.
 3. The failure paths, run on a copy of example/sample-lineage.svg: every line that only prints when something goes wrong runs at least
    once, and no script may lose an arrow it did not report:
    - move.py with every label refused (route.place_label_any patched to find nothing): each moved arrow prints its "has no label" PROBLEM;
@@ -25,7 +26,7 @@ import contextlib, io, os, re, shutil, subprocess, sys, tempfile, traceback
 sys.pycache_prefix = os.path.join(tempfile.gettempdir(), 'bbb-github-diag-pycache')
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import model, move, ports, reroute, route, rules, svgmeta
+import model, move, ovg, ports, reroute, route, rules, svgmeta
 
 EXAMPLE = os.path.join(HERE, 'example', 'sample-lineage.svg')
 RUFF_IGNORE = 'F401,F841,F402'                   # dead code only; every other pyflakes rule is an error
@@ -151,6 +152,16 @@ def main():
     with contextlib.redirect_stdout(io.StringIO()) as buf:
         passed = rules.selftest()                # True when every rule case passes
     check(passed, 'rules.selftest()' + ('' if passed else ':\n' + buf.getvalue()))
+    with contextlib.redirect_stdout(io.StringIO()) as buf:
+        try:
+            route.selftest()                     # exits 1 on a failure
+            passed = True
+        except SystemExit:
+            passed = False
+    check(passed, 'route.selftest() (%s router)' % os.environ.get('BBB_ROUTER', 'vis') + ('' if passed else ':\n' + buf.getvalue()))
+    with contextlib.redirect_stdout(io.StringIO()) as buf:
+        passed = ovg.selftest()
+    check(passed, 'ovg.selftest(): ' + buf.getvalue().strip())
     check(model.no_label(model.Arrow(10, 11, 'closed by')) == '#10 closed by #11 has no label: no place on it or beside it',
           'model.no_label wording')
     with tempfile.TemporaryDirectory() as tmp:

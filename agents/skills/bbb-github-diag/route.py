@@ -29,6 +29,8 @@ import draw
 
 G = 5
 BOXM, LABM, FPROX, TURN_FREE, EDGE_MARGIN = 26, 7, 30, 40, 24
+OWN_BOXM = 3        # the two boxes of the arrow being routed keep only this much: its ends start and stop 4px outside them
+FRAME_WALL = 2      # an `inside` search: everything farther out than this inside the frame's border is blocked
 HARD_H = 22         # two horizontal arrows are never closer: their labels (18px tall) then fit one above the other with a 4px gap
 HARD_V = 14         # two vertical arrows are never closer (check_diag.py asks 13.5px); their labels go at different heights
 LABEL_ROOM = 42     # beside a vertical arrow closer than this there is no room for a label (half a 70px label plus LABM): it may, at
@@ -184,9 +186,11 @@ def _ends(ra, rb, sa, sb, nat, span_a, span_b, x0, y0, NX, NY, free):
     return starts, goals
 
 
-def _finish(path, x0, y0, ra, rb):
-    """The points of a path found on the lattice: path is its states (i, j, direction) from the start to the goal, at least at every
-    bend. The corners stay; the first and the last point go onto the box edges (the sides the search chose); unjog() follows."""
+def _finish(states, NY, x0, y0, ra, rb):
+    """The points of a path found on the lattice: states are its search states, (i * NY + j) * 4 + direction, from the start to the
+    goal, at least at every bend. The corners stay; the first and the last point go onto the box edges (the sides the search chose);
+    unjog() follows."""
+    path = [((s >> 2) // NY, (s >> 2) % NY, s & 3) for s in states]
     pts = [(x0 + path[0][0] * G, y0 + path[0][1] * G)]
     for k in range(1, len(path) - 1):
         if path[k + 1][2] != path[k][2]:
@@ -239,7 +243,7 @@ def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fal
             arr[j * NX + i1:j * NX + i2 + 1] = ones
 
     for n, (x, y, w, h) in sc.boxes.items():
-        m = 3 if n in (a, b) else BOXM
+        m = OWN_BOXM if n in (a, b) else BOXM
         mark(blk, x - m, y - m, x + w + m, y + h + m)
     for (x, y, w, h) in sc.labels:
         mark(blk, x - LABM, y - LABM, x + w + LABM, y + h + LABM)
@@ -291,10 +295,10 @@ def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fal
             mark(blk, cx - FPROX, cy - FPROX, cx + FPROX, cy + FPROX)
     if inside:                                                   # stay in the common frame: everything outside it is blocked
         fx, fy, fw, fh = inside
-        mark(blk, x0 - G, y0 - G, fx + 2, y1 + G)
-        mark(blk, fx + fw - 2, y0 - G, x1 + G, y1 + G)
-        mark(blk, x0 - G, y0 - G, x1 + G, fy + 2)
-        mark(blk, x0 - G, fy + fh - 2, x1 + G, y1 + G)
+        mark(blk, x0 - G, y0 - G, fx + FRAME_WALL, y1 + G)
+        mark(blk, fx + fw - FRAME_WALL, y0 - G, x1 + G, y1 + G)
+        mark(blk, x0 - G, y0 - G, x1 + G, fy + FRAME_WALL)
+        mark(blk, x0 - G, fy + fh - FRAME_WALL, x1 + G, y1 + G)
     for r in (ra, rb):                                         # leave and enter a box straight
         x, y, w, h = r
         mark(nt, x - TURN_FREE, y - TURN_FREE, x + w + TURN_FREE, y + h + TURN_FREE)
@@ -386,8 +390,7 @@ def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fal
     path = [end]
     while prev[path[-1]] >= 0:
         path.append(prev[path[-1]])
-    path = [((s >> 2) // NY, (s >> 2) % NY, s & 3) for s in reversed(path)]
-    return _finish(path, x0, y0, ra, rb), dist[end]              # dist[end]: what this path cost the search (selftest() reads it)
+    return _finish(path[::-1], NY, x0, y0, ra, rb), dist[end]              # dist[end]: what this path cost the search (selftest() reads it)
 
 
 def unjog(pts, ra, rb, sa, sb, short=2 * G):
@@ -709,6 +712,7 @@ def selftest():
 if __name__ == '__main__':
     import sys
     if sys.argv[1:] == ['selftest']:
-        selftest()
+        import importlib                         # run the module that ovg.py imports, so that LAST_COST and STATS are one
+        importlib.import_module('route').selftest()
     else:
         sys.exit('usage: route.py selftest   (as a module: see the docstring)')
