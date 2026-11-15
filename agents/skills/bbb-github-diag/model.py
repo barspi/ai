@@ -352,12 +352,35 @@ def _frame_title(text, rect):
 def finish(text, pairs):
     """What every script does after it routed arrows, so that nothing is left for a later step: the jump arcs of the whole diagram
     (hops.py) and the red crosses, every label that now sits badly placed again (relabel, with the checker's 20px of shaft from a
-    jump), and a label for each routed arrow that still has none (label_missing). Returns (text, [Arrow] with no label)."""
+    jump), and a label for each routed arrow that still has none (label_missing); last, labels_on_top: every label after every
+    path. Returns (text, [Arrow] with no label)."""
     import hops
     text, _, _ = hops.add_hops(text)
     text, _, _ = relabel(text, hop_pad=route.LABEL_SHAFT)
     text, _, none = label_missing(text, pairs)
-    return text, none
+    return labels_on_top(text), none
+
+
+def labels_on_top(text):
+    """SVG has no z-index: what comes later in the file is painted on top, so a label written before a path is drawn under it (a
+    routed path is written in its slot, its label beside it, and a later path crosses it). Every label (its rectangle and text lines)
+    that comes before the last arrow path moves, in its order, to the label block: before the first label that follows the last path,
+    else right after that path. Nothing else moves. Run by relabel() and finish(), so every script ends with it."""
+    lines = text.split('\n')
+    last = max((i for i, ln in enumerate(lines) if ln.startswith('<path d="M') and 'marker-end' in ln), default=-1)
+    early, i = [], 0
+    while i < last:
+        lab = route.draw.label_at(lines, i)
+        if lab:
+            early += range(i, i + 1 + lab[4])
+            i += 1 + lab[4]
+        else:
+            i += 1
+    if not early:
+        return text
+    at = next((j for j in range(last + 1, len(lines)) if route.draw.label_at(lines, j)), last + 1)
+    gone = set(early)
+    return '\n'.join([ln for k, ln in enumerate(lines[:at]) if k not in gone] + [lines[k] for k in early] + lines[at:])
 
 
 def invalid(text):
@@ -557,7 +580,7 @@ def relabel(text, hop_pad=0, redo=()):
         sc.labels.remove(tuple(rect))                      # the one change to the labels: only a label that moved costs a new index
         sc.labels.append((new[0] + dx - w / 2, new[1] + dy - h / 2, w, h))
         fixed += 1
-    return '\n'.join(lines), fixed, failed
+    return labels_on_top('\n'.join(lines)), fixed, failed
 
 
 def label_missing(text: str, pairs) -> tuple[str, int, list[Arrow]]:
@@ -595,7 +618,7 @@ def label_missing(text: str, pairs) -> tuple[str, int, list[Arrow]]:
         k = next((i for i in range(len(lines)) if route.draw.label_at(lines, i)), None)
         k = k if k is not None else next((i for i, l in enumerate(lines) if l == '<!--legend-->'), len(lines) - 2)
         lines[k:k] = ins
-    return '\n'.join(lines), added, none
+    return labels_on_top('\n'.join(lines)), added, none
 
 
 def read(text, bounds=None):

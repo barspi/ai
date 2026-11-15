@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Geometry, text and content checks for an issue/PR lineage SVG. No rendering.
 usage: check_diag.py new.svg [old.svg] [--keep-new]
-FAIL means broken: frames, boxes or labels that overlap (a label over a box, a path or another label), a box across a frame border,
+FAIL means broken: frames, boxes or labels that overlap (a label over a box, a path or another label), a label under a path (a path
+written after it in the file is painted over it), a box across a frame border,
 a path through a box, a tip or a tail off its box, an unmarked crossing, two paths on top of each other, an arrow that leaves the
 frame its two boxes are in, text past its limit, a label on no arrow, a metadata or content error. WARN is cosmetic and carries its
 measure: a label shaft under 20px, a label off centre, parallel lines closer than 13.5px, a short jog, crossing slots, a far legend.
@@ -60,15 +61,17 @@ def width(cls, text):
 # ---- parse
 boxes = {int(m.group(1)): tuple(float(v) for v in m.groups()[1:]) for m in re.finditer(
     r'<g id="n(\d+)"(?: data-[\w-]+="[^"]*")*>\s*<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', new)}
-labels, shifts = [], []          # each label as drawn; and its shift when it is drawn beside its shaft (draw.label shift), else None
+labels, shifts, label_at = [], [], []   # each label as drawn; its shift when it is drawn beside its shaft (draw.label shift), else None; where it is in the file
 for m in re.finditer(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="4" fill="#fffdf7"[^>]*>', new):
+    label_at.append(m.start())
     sh = re.search(r' transform="translate\(([-\d.]+),([-\d.]+)\)"', m.group(0))
     sh = (float(sh.group(1)), float(sh.group(2))) if sh else None
     x, y, w, h = (float(v) for v in m.groups())
     labels.append((x + sh[0], y + sh[1], w, h) if sh else (x, y, w, h))
     shifts.append(sh)
-paths, ends = [], []              # ends: (data-from, data-to) of each path, or None
+paths, ends, path_at = [], [], []   # ends: (data-from, data-to) of each path, or None; path_at: where it is in the file
 for m in re.finditer(r'<path d="M([^"]+)" fill="none"[^>]*>', new):
+    path_at.append(m.start())
     d = m.group(1)
     pts = [(float(a), float(b)) for a, b in re.findall(r'(-?\d+\.?\d*),(-?\d+\.?\d*)', d)]
     paths.append((pts, 'A' in d))
@@ -283,6 +286,11 @@ for k, (x, y, w, h) in enumerate(labels):
             continue
         if (o == 'h' and y < c < y + h and lo < x + w and hi > x) or (o == 'v' and x < c < x + w and lo < y + h and hi > y):
             fail(f'label {k} at ({x:.0f},{y:.0f}) covers another path (path {i})')
+    # SVG has no z-index: a path written after a label is painted over it, its own path too (model.labels_on_top fixes the order)
+    later = next((sg[0] for sg in segs if path_at[sg[0]] > label_at[k] and (
+        (sg[1] == 'h' and y < sg[2] < y + h and sg[3] < x + w and sg[4] > x) or (sg[1] == 'v' and x < sg[2] < x + w and sg[3] < y + h and sg[4] > y))), None)
+    if later is not None:
+        fail(f'label {k} at ({x:.0f},{y:.0f}) is under a path (path {later} comes after it in the file and crosses it): model.py relabel puts every label last')
     if own is None:
         fail(f'label {k} at ({x:.0f},{y:.0f}) is not centered on a straight stretch')
         continue

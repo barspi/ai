@@ -290,7 +290,7 @@ A dotted frame may name an area (a module, a component, a theme). The frame does
 Use the plane. Rows and columns are for alignment, not a substitute for edges.
 
 - Leave a gap long enough that the opaque label does not cover the whole shaft: tail and arrowhead stay visible. A gap under about 150px is too small for a `closed by` label.
-- Draw every path first, then every label, so a later path cannot hide an earlier label. Labels sit on top of the stroke.
+- Draw every path first, then every label, so a later path cannot hide an earlier label. Labels sit on top of the stroke. `model.labels_on_top` (run by `model.relabel` and `model.finish`, so by every script) moves each label after the last path; `check_diag.py` fails a label under a path.
 - Put the label on a long segment of its arrow, not on a stub or on a bus shared by many arrows (a shared bus stacks the words).
 - A label always stays on its own arrow. When an arrow moves or is routed again, its label moves with it (to another stretch of the same arrow if needed); a jump arc splits a stretch like a bend. `collapse.py`, `compact.py`, `add_nodes.py` and `build.py` do this, for a label of any height (a two-line one too). A label found with no arrow under it was left behind by an older edit: `model.py relabel` puts it back on the nearest arrow of its word that has no label.
 - When one item has several children, fan the arrows. A vertical column of children with the parent on one side and the closing pull request on the other is the pattern: arrows leave the parent and enter each child; `closed by` arrows leave those children and converge on the pull request. Give each arrow its own vertical position so labels do not overlap and every arrowhead shows.

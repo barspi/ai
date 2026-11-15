@@ -297,6 +297,28 @@ def by_construction(tmp):
     check(re.search(r'^FAIL boxes #121 and #122 overlap', out, re.M) is not None, '7. two boxes on top of each other: FAIL')
 
 
+def room_cases(tmp):
+    """One case per rule of the room work (push.py, model.labels_on_top): labels painted last, no arrow without a label (relaxed
+    rules, then a push), a label that only fits relaxed is moved there by relabel, a detour opened by a one-sided push."""
+    ex = open(EXAMPLE, encoding='utf-8').read()
+    # A. a label written before a path that crosses it is painted under it: check_diag.py fails it; labels_on_top puts it last
+    lines = ex.split('\n')
+    j = next(i for i in range(len(lines)) if route.draw.label_at(lines, i))
+    n = 1 + route.draw.label_at(lines, j)[4]
+    first = next(i for i, ln in enumerate(lines) if svgmeta.is_arrow(ln))
+    early = '\n'.join(lines[:first] + lines[j:j + n] + [ln for i, ln in enumerate(lines[first:], first) if not j <= i < j + n])
+    f, w, out = checked(early, tmp, 'early.svg')
+    check(re.search(r'^FAIL label \d+ at .* is under a path', out, re.M) is not None, 'A. a label before the path that crosses it: FAIL')
+    fixed = model.labels_on_top(early)
+    f, w, out = checked(fixed, tmp, 'ontop.svg')
+    check(f == 0 and len(fixed) == len(early), 'A. labels_on_top puts every label after every path: FAILS 0' + ('' if f == 0 else ':\n' + out))
+    t, _ = model.take_out(ex, [first])                   # a routed path is written in its slot: its label must still end last
+    res = model.route_arrows(t, _)
+    rl = res.text.split('\n')
+    last = max(i for i, ln in enumerate(rl) if svgmeta.is_arrow(ln))
+    check(not any(route.draw.label_at(rl, i) for i in range(last)), 'A. model.route_arrows writes no label before a path')
+
+
 def _inflate_ok(before, after, frame):
     """The invariants of frames.inflate between two texts: every arrow orthogonal; the same pairs of arrows cross, among the arrows
     that do not cross the frame border (one that does may take a corridor step); every box keeps its size; the boxes outside the
@@ -366,6 +388,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         failure_paths(tmp)
         by_construction(tmp)
+        room_cases(tmp)
     print('selftest: %s' % ('OK' if not fails else '%d FAILED: %s' % (len(fails), '; '.join(f.split(':')[0] for f in fails))))
     sys.exit(1 if fails else 0)
 
