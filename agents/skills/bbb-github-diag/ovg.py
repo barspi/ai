@@ -516,7 +516,23 @@ def _astar(lat, starts, goals, nat, walk=None):
 def selftest(seeds=20):
     """Both routers on random scenes (boxes off the lattice, frames, labels, pills, side choices, spans), each arrow routed by both
     in the same scene: the costs must be equal. The grid's path then joins the scene. Prints one line; returns True when all agree."""
-    bad, n, router = [], 0, os.environ.get('BBB_ROUTER')
+    router = os.environ.get('BBB_ROUTER')
+    try:
+        bad, n = _compare(seeds)
+    finally:
+        if router is None:
+            os.environ.pop('BBB_ROUTER', None)
+        else:
+            os.environ['BBB_ROUTER'] = router
+    print('ovg self-test: %d arrows, %d with another cost%s' % (n, len(bad), ''.join('\n  ' + x for x in bad)))
+    return not bad
+
+
+def _compare(seeds):
+    """selftest()'s scenes: ([one line per arrow where the searches disagree], arrows tried). Each arrow: route.route with each
+    router, the same cost; and one vis search of a 260px window, with prove_none and without, the same result (most such windows
+    hold a path, so the walk back must find a start)."""
+    bad, n = [], 0
     for seed in range(seeds):
         rnd = random.Random(seed)
         W, H = rnd.choice([(900, 700), (1400, 1000)])
@@ -553,20 +569,23 @@ def selftest(seeds=20):
                 cost[which] = R.LAST_COST if pts else None
                 if which == 'grid':
                     path = pts
+            # the walk back must never say "no path" where there is one: one window searched with it and without it
+            natural = R.sides_for(boxes[a], boxes[b])[0] if sa == '*' else None
+            sides = ('RLTB', 'RLTB') if sa == '*' else (sa, sb)
+            for proved in (False, True):
+                found = search(sc, a, b, *sides, 260, natural, None, proved, span)
+                cost['vis, 260px' + (', walk back' if proved else '')] = found and found[1]
             n += 1
-            if cost['grid'] != cost['vis'] and not (None not in cost.values() and abs(cost['grid'] - cost['vis']) < 1e-6):
-                bad.append('seed %d #%d -> #%d %s %s: grid %s, vis %s' % (seed, a, b, sa, sb, cost['grid'], cost['vis']))
+            if len({None if c is None else round(c, 6) for c in list(cost.values())[:2]}) > 1 or \
+                    cost['vis, 260px'] != cost['vis, 260px, walk back']:
+                bad.append('seed %d #%d -> #%d %s %s: %s' % (seed, a, b, sa, sb, cost))
             if path:
                 sc.arrows.append(list(path))
-    if router is None:
-        os.environ.pop('BBB_ROUTER', None)
-    else:
-        os.environ['BBB_ROUTER'] = router
-    print('ovg self-test: %d arrows, %d with another cost%s' % (n, len(bad), ''.join('\n  ' + x for x in bad)))
-    return not bad
+    return bad, n
 
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['selftest']:
-        sys.exit(0 if selftest() else 1)
+        import importlib                         # run the module that route.py imports, so that this file loads once
+        sys.exit(0 if importlib.import_module('ovg').selftest() else 1)
     sys.exit('usage: ovg.py selftest   (as a module: route.py uses it)')

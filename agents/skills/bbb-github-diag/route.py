@@ -456,6 +456,8 @@ def route(sc, a, b, sa='R', sb='L', pad=260, span_a=None, span_b=None):
     if sa == '*' or sb == '*':
         natural = sides_for(sc.boxes[a], sc.boxes[b])[0]
         sa, sb = ('RLTB' if sa == '*' else sa), ('RLTB' if sb == '*' else sb)
+    # After a search that found nothing, the next ones also walk back from the target (prove_none): when the target is walled in,
+    # that ends each of them at once, where the search would visit its whole window. It never changes a result.
     pin = dict(span_a=span_a, span_b=span_b)
     fr = common_frame(sc, a, b)
     if fr:                                       # both boxes in one frame: the arrow stays inside it (an almost hard rule)
@@ -464,8 +466,8 @@ def route(sc, a, b, sa='R', sb='L', pad=260, span_a=None, span_b=None):
             return pts
         if hasattr(sc, 'left_frame'):
             sc.left_frame.append((a, b))
-    for _ in range(3):
-        pts = _route(sc, a, b, sa, sb, pad, natural, **pin)
+    for k in range(3):
+        pts = _route(sc, a, b, sa, sb, pad, natural, prove_none=bool(fr or k), **pin)
         if pts:
             return pts
         pad *= 2
@@ -676,6 +678,9 @@ def selftest():
     t = time.time()
     p = route(Sc(ring), 1, 2, '*', '*')
     check('no path is proved fast', p is None and time.time() - t < 5, 'path %s, %.1fs' % (p, time.time() - t))
+    t = time.time()                              # the same ring round the target: the walk back proves it (the search would not)
+    p = route(Sc(ring), 2, 1, '*', '*')
+    check('no path into a walled-in box is proved fast', p is None and time.time() - t < 5, 'path %s, %.1fs' % (p, time.time() - t))
     # 5. a straight arrow's label sits in the middle of its shaft
     sc = Sc({1: A, 2: B})
     pts = [(100, 230), (800, 230)]
