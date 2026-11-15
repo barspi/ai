@@ -69,6 +69,7 @@ class Pending(NamedTuple):
     old: str                    # the markup taken out (path and label lines); put back when route_arrows(keep_old=True) finds no path
     sides: tuple = ('*', '*')   # the sides it must leave a and enter b by (route.route)
     pin: bool = False           # mark the new path as chosen by the user (svgmeta.pin)
+    keep: bool = False          # an arrow the caller did not ask to route (a push cut it): with no path it keeps its old markup
 
 
 class Routed(NamedTuple):
@@ -99,9 +100,11 @@ def label_lines(lines, i):
     return frames_mod().labels_of(lines, [i]).get(i, range(0))
 
 
-def take_out(text, idxs, sides=None, pin=()):
+def take_out(text, idxs, sides=None, pin=(), keep=()):
     """Take the arrows on the lines `idxs` out of the picture, each with its label: a slot marker stays where the path was. Returns
-    (text, [Pending]). sides {(a, b): (sa, sb)} and pin {(a, b)}: what route_arrows should keep to for those arrows."""
+    (text, [Pending]). sides {(a, b): (sa, sb)} and pin {(a, b)}: what route_arrows should keep to for those arrows. keep: line
+    indexes of arrows a push cut, which nobody asked to route: one that finds no path keeps its old markup (check_diag.py then fails it, so the
+    loss is never silent), rather than disappear."""
     lines = text.split('\n')
     boxes = None
     out, gone = [], set()
@@ -116,7 +119,7 @@ def take_out(text, idxs, sides=None, pin=()):
         lab = list(labels.get(i, ()))
         slot = SLOT % next(_slots)
         out.append(Pending(at.a, at.b, at.kind, lines[i], slot, '\n'.join([lines[i]] + [lines[j] for j in lab]),
-                           tuple((sides or {}).get(at[:2], ('*', '*'))), at[:2] in pin))
+                           tuple((sides or {}).get(at[:2], ('*', '*'))), at[:2] in pin, i in keep))
         gone.update(lab)
         lines[i] = slot
     return '\n'.join(l for k, l in enumerate(lines) if k not in gone), out
@@ -148,8 +151,12 @@ def _by_importance(items, sc):
 def _grow_for(text, p, frame, keep_out):
     """The smallest growth of `frame` (a whole number of GROW_STEP px, at most GROW_STEPS) after which the arrow p has a path inside
     it AND every arrow the push cut has one too: a growth is taken whole or not at all, so it never costs an arrow it did not ask
-    for. Returns (text with all of them drawn, scene, [(Pending, route_labelled result)], px), or None. Each try starts from `text`,
+    for. A cut arrow that was already invalid before (an input fault, such as one that leaves its frame) does not veto the growth:
+    with no path it keeps its old markup, as invalid as it was. Returns (text with all of them drawn, scene, [(Pending, route_labelled result)], px), or None. Each try starts from `text`,
     so a growth that does not help leaves nothing behind."""
+    lines0 = text.split('\n')
+    was_bad = {(arrow_at(lines0[i]) or (0, 0))[:2] for i in invalid(text)}
+
     def attempt(k, whole):
         """Grow k steps; route p, and with `whole` every cut arrow too. The result, or None when one finds no path."""
         push = frames_mod().grow(text, frame, k * GROW_STEP)
@@ -158,6 +165,10 @@ def _grow_for(text, p, frame, keep_out):
         drawn = []
         for q in [p] + (_by_importance(cut, sc) if whole else []):
             res = _route_one(sc, q)
+            if res is None and q is not p and (q.a, q.b) in was_bad:
+                t = t.replace(q.slot, q.old, 1)
+                sc = scene(t, keep_out)
+                continue
             if res is None:
                 return None
             t = _fill(t, sc, q, res)
@@ -230,8 +241,8 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
             why = 'a box is not in the diagram' if p.a not in sc.boxes or p.b not in sc.boxes else \
                 'no path inside its frame, even grown %dpx' % (GROW_STEP * GROW_STEPS) if fr else 'no path'
             failed.append((p.a, p.b, p.kind, why))
-            text = text.replace(p.slot, p.old if keep_old else '', 1)
-            if keep_old and p.old:
+            text = text.replace(p.slot, p.old if keep_old or p.keep else '', 1)
+            if (keep_old or p.keep) and p.old:
                 sc = scene(text, keep_out)
             continue
         if not fr:

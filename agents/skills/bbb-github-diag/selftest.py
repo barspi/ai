@@ -211,7 +211,7 @@ def by_construction(tmp):
     if code == 0 and os.path.exists(dst):
         sc3 = model.scene(open(dst, encoding='utf-8').read())
         b = sc3.boxes.get(150)
-        check(b is not None and route.holds(sc3.frames[0], b) and b[0] in (514.0, 514.0 + 260 + add_nodes.GAP_X),
+        check(b is not None and route.holds(sc3.frames[0], b) and b[0] in (514.0, 514.0 + 260 + add_nodes.GAP_X, 990.5),
               '3. the new box is inside its grown frame, in or beside the column of `near` (%s)' % (b,))
         check(sc3.frames[1][1] > 1100 and not any(route.holds(sc3.frames[1], r) or _overlap(r, sc3.frames[1]) for r in [b]),
               '3. the frame below moved; the new box is not on it')

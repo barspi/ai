@@ -44,6 +44,7 @@ FRAME_COST = 60     # per border crossed of a frame that holds neither end: goin
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
 LAST_COST = None    # the cost of the last path _route() found
+ALT_BENDS = 2       # an alternative has at most this many bends more than the cheapest path, or it is not taken
 K_PATHS = 6         # route(accept=...) tries at most this many paths (the cheapest, then alternatives) for one that passes
 LABEL_SHAFT = 20    # px of straight shaft a label needs on each side (check_diag.py warns below it)
 WINDOW_MARGIN = 2 * FPROX  # a cross-frame search window: the two frames and what lies between them, and this much around
@@ -188,7 +189,7 @@ def _paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
 
 def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, span_a=None, span_b=None, accept=None):
     """One search window: the cheapest path, or with `accept` (a test on the points) the first of K_PATHS (the cheapest, then alternatives) that passes
-    it, else the cheapest (the caller learns that from accept itself). None when the window holds no path. The cost goes to
+    it and has at most ALT_BENDS bends more than the cheapest, else the cheapest (the caller learns that from accept itself). None when the window holds no path. The cost goes to
     LAST_COST."""
     global LAST_COST
     first = None
@@ -196,6 +197,8 @@ def _route(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=False, s
                                       1 if accept is None else K_PATHS):
         if first is None:
             first = pts, cost
+        if len(straight(pts)) > len(straight(first[0])) + ALT_BENDS:
+            continue                                             # a detour: room for a label is not worth more bends than that
         if accept is None or accept(pts):
             LAST_COST = cost
             return pts

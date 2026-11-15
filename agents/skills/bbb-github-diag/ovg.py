@@ -459,7 +459,7 @@ def search_paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fa
     h = _heuristic(goals)
     walk = lat.walk_back(starts, goals) if prove_none else None
     penalised = ({}, {})                                  # per axis: line -> [(lo, hi)] of the stretches of the paths found
-    drawn = set()
+    drawn, repeats = set(), 0
     for _ in range(MAX_ALTERNATIVES):
         found = _astar(lat, sorted(sources.items()), goal_cost, h, walk, penalised)
         walk = None
@@ -474,9 +474,13 @@ def search_paths(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fa
             line, lo, hi = (j, min(i, i2), max(i, i2)) if axis == 0 else (i, min(j, j2), max(j, j2))
             penalised[axis].setdefault(line, []).append((lo, hi))
         pts = R._finish(states, NY, lat.x0, lat.y0, ra, rb)
-        if tuple(pts) not in drawn:                       # R.unjog can make two state paths one polyline: yield it once
-            drawn.add(tuple(pts))
-            yield pts, cost
+        if tuple(pts) in drawn:                           # R.unjog can make two state paths one polyline: yield it once; and when
+            repeats += 1                                  # the penalties no longer move the search, there is no other route
+            if repeats >= 2:
+                return
+            continue
+        drawn.add(tuple(pts))
+        yield pts, cost
 
 
 def _decode(states, NY):

@@ -119,19 +119,25 @@ def take_out(lines, i):
 def fit_frames(text, homes):
     """Grow each frame that a moved box now reaches below, by frames.grow (what lies below moves down; the box itself is a member of
     the frame and stays where it was asked to go), so that the box keeps frames.BOTTOM_PAD px above the bottom border. homes {box:
-    frame rect it was in before the move}; a box moved out of its frame sideways or above it is not followed (problems_of_place
-    reports it). Returns (text, line indexes of the arrows the pushes cut, [(frame title, px)])."""
+    frame rect it was in before the move}; a box moved into another frame belongs to that one now (data-frame follows) and is not
+    followed; one moved out of its frame sideways or above it is not followed either (problems_of_place reports it). All the moved
+    boxes of one frame are members of one growth, so none is pushed by another's. Returns (text, line indexes of the arrows the pushes cut, [(frame title, px)])."""
     import frames
     cut, grown = set(), []
-    for n, rect in homes.items():
+    _, box, _, frs = collapse.parse(text)
+    rects = [(f['x'], f['y'], f['w'], f['h']) for f in frs]
+    by_home = {}                                           # frame rect -> the moved boxes it follows
+    for n, home in homes.items():
+        r = (box[n]['x'], box[n]['y'], box[n]['w'], box[n]['h'])
+        other = [f for f in rects if route.holds(f, r) and not route.holds(f, home)]
+        if home[0] <= r[0] and r[0] + r[2] <= home[0] + home[2] and home[1] <= r[1] and not other:
+            by_home.setdefault(home, []).append(n)          # still in, or under, its own frame and not moved into another one
+    for home, ns in by_home.items():                       # one growth per frame, for all its moved boxes at once
         _, box, _, frs = collapse.parse(text)
-        b = box[n]
-        f = next((f for f in frs if abs(f['x'] - rect[0]) < .5 and abs(f['y'] - rect[1]) < .5), None)
-        if f is None or not (f['x'] <= b['x'] and b['x'] + b['w'] <= f['x'] + f['w'] and f['y'] <= b['y']):
-            continue
-        need = b['y'] + b['h'] + frames.BOTTOM_PAD - (f['y'] + f['h'])
+        f = next(f for f in frs if abs(f['x'] - home[0]) < .5 and abs(f['y'] - home[1]) < .5)
+        need = max(box[n]['y'] + box[n]['h'] for n in ns) + frames.BOTTOM_PAD - (f['y'] + f['h'])
         if need > 0:
-            push = frames.grow(text, (f['x'], f['y'], f['w'], f['h']), need, members={n})
+            push = frames.grow(text, (f['x'], f['y'], f['w'], f['h']), need, members=set(ns))
             text, cut = push.text, cut | set(push.cut)
             grown.append((f['name'], need))
     return text, sorted(cut), grown
@@ -168,7 +174,8 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
     where_now = svgmeta.drawn_frames(text)                # after every growth: the frame each moved box is in now
     for n in moves:
         text = svgmeta.set_box(text, n, frame=where_now.get(n))
-    text, pend = model.take_out(text, todo + cut0 + cut, sides, pin=set(sides or {}) | set(extra))
+    pushed_lines = set(cut0 + cut) - set(todo)            # cut by a push, not asked for: kept as it was when it finds no path
+    text, pend = model.take_out(text, todo + sorted(pushed_lines), sides, pin=set(sides or {}) | set(extra), keep=pushed_lines)
     text, _, _ = hops.add_hops(text)                     # the jump arcs over the arrows just taken out go before routing
     where = problems_of_place(text, moves) + ['frame "%s" grown %dpx (what lies below moved down)' % g for g in grown]
     frs = model.read(text)[0].frames                      # a left, right or top --grow, or a shrink, moves no neighbour
@@ -179,10 +186,11 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
     where += ['frame "%s" grown %dpx to make room for an arrow' % g for g in res.grown]
     text, _, more = model.settle(before, res.text, [(p.a, p.b) for p in pend])
     where += more
-    failed = [(a, b, why) for a, b, _, why in res.failed]
+    kept = {(p.a, p.b) for p in pend if p.keep}
+    failed = [(a, b, why + (': its old path stays (a frame push cut it)' if (a, b) in kept else '')) for a, b, _, why in res.failed]
     if failed:
         meta = svgmeta.read(text)
-        for a, b, kind, _ in res.failed:
+        for a, b, kind, _ in (f for f in res.failed if f[:2] not in kept):
             svgmeta.add_nopath(meta, a, b, kind, 'no path after move.py')
         text = svgmeta.write(text, meta)
     return text, res.routed, failed, where + [model.no_label(x) for x in res.unlabelled]
@@ -230,9 +238,10 @@ def main():
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
         sys.exit(1)
-    want, got = model.count_arrows(text) - len(failed), model.count_arrows(res)   # a failed arrow is left out (nopath); no other may go
+    lost = sum(1 for f in failed if 'its old path stays' not in f[2])
+    want, got = model.count_arrows(text) - lost, model.count_arrows(res)   # a failed arrow is left out (nopath); no other may go
     if got != want:
-        print('REFUSED: %d arrows after, %d expected (%d before, %d left out). Nothing written.' % (got, want, want + len(failed), len(failed)))
+        print('REFUSED: %d arrows after, %d expected (%d before, %d left out). Nothing written.' % (got, want, want + lost, lost))
         sys.exit(1)
     open(out, 'w', encoding='utf-8').write(res)
     for n, (x, y) in moves.items():
