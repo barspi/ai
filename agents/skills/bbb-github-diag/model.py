@@ -289,7 +289,8 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
             text = _fill(text, sc, p, res)
         for q, r in drawn:
             results[(q.a, q.b, q.kind)] = (len(r[0]) - 2, r[2])
-    text = '\n'.join(l for l in text.split('\n') if not l.startswith('<!--slot:'))
+    own = {p.slot for p in pending}                       # only this call's slots: a caller may still hold others (add_nodes, settle)
+    text = '\n'.join(l for l in text.split('\n') if l not in own)
     routed = [(a, b, bends, room) for (a, b, _), (bends, room) in results.items()]
     kinds = {(a, b): k for a, b, k in results}
     text, unlabelled = finish(text, list(kinds), room=False)
