@@ -35,7 +35,7 @@ def arrow_points(line):
 
 
 MARKER_KIND = {'h-child': 'child', 'h-closed': 'closed by', 'h-work': 'work done by', 'h-led': 'led to', 'h-blocked': 'blocked by',
-               'h-ref': 'related', 'h-cross': 'supersedes', 'h-evid': 'evidence, does not close', 'h-dup': 'duplicate of'}
+               'h-resolved': 'blocked by', 'h-ref': 'related', 'h-cross': 'supersedes', 'h-evid': 'evidence, does not close', 'h-dup': 'duplicate of'}
 
 
 def _side(p, r, tol=1.5):
@@ -356,8 +356,9 @@ def finish(text, pairs, room=True):
     jump), and a label for every arrow that still has none (label_missing; `pairs`, the arrows the caller routed, are kept for the
     callers and no longer limit it: no arrow is left without a label). Then, with room (the default; never inside a push's own
     routing): push.make_room for each arrow that still has no label, or whose label still covers something (its end boxes move
-    apart, push.py), and push.straighten for each arrow that makes a long detour a small push can save. Last, labels_on_top: every
-    label after every path. Returns (text, [Arrow] with no label)."""
+    apart, push.py), and push.straighten for each arrow that makes a long detour a small push can save. Then labels_on_top: every
+    label after every path. Last, svg_state.grey_resolved: a `blocked by` arrow whose blocker is closed or merged is grey again after
+    it was drawn anew (and normal again once the blocker reopens). Returns (text, [Arrow] with no label)."""
     import hops
     text, _, _ = hops.add_hops(text)
     text, _, _ = relabel(text, hop_pad=route.LABEL_SHAFT)
@@ -373,7 +374,8 @@ def finish(text, pairs, room=True):
         text, _, _ = hops.add_hops(text)
         text, _, _ = relabel(text, hop_pad=route.LABEL_SHAFT)
         text, _, none = label_missing(text, None)
-    return labels_on_top(text), none
+    import svg_state
+    return svg_state.grey_resolved(labels_on_top(text))[0], none
 
 
 def labels_on_top(text):

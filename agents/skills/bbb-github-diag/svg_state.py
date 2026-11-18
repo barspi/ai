@@ -291,6 +291,118 @@ def grow(blk, dy):
                   lambda m: m.group(1) + fmt(float(m.group(2)) + dy) + m.group(3), blk, count=2)
 
 
+# ---------------------------------------------------------------- a block that is over: the `blocked by` arrow goes grey
+STATE_WORD = re.compile(r'>(open|closed|merged|waiting|draft)<')       # the state pill of a box (the last match, as _apply reads it)
+OVER = ('closed', 'merged')
+RES_ATTR = ' data-resolved="1"'
+LEG_ATTR = ' data-legend="resolved"'
+LEG_STEP = 28                        # one arrow row of the legend (draw.legend)
+COLOR = re.compile(r'stroke="#[0-9a-f]{6}"')
+LABEL_FILL = re.compile(r'style="fill:#[0-9a-f]{6}(?:;text-decoration:line-through)?"')
+
+
+def box_done(blk):
+    """Is the box closed or merged: its pill as drawn (apply() keeps it current), else the state in its data-github record."""
+    have = STATE_WORD.findall(blk)
+    if have:
+        return have[-1] in OVER
+    m = re.search(r'data-github="([^"]*)"', blk)
+    st = re.search(r'&quot;state&quot;:&quot;(\w+)&quot;', m.group(1)) if m else None
+    return bool(st) and st.group(1).lower() in OVER
+
+
+def _restyle(line, over, attr, after):
+    """The line with its first stroke colour (attr 'stroke') or its label fill (attr 'fill') in the resolved or the normal style;
+    data-resolved set right after the first match of `after`, or removed."""
+    import draw
+    grey, red = draw.RESOLVED[0], draw.EDGE['blocked by'][0]
+    line = line.replace(RES_ATTR, '')
+    if attr == 'stroke':
+        line = COLOR.sub('stroke="%s"' % (grey if over else red), line, count=1)
+    else:
+        line = LABEL_FILL.sub('style="fill:%s"' % (grey + ';text-decoration:line-through' if over else red), line, count=1)
+    if over:
+        line = re.sub(after, lambda m: m.group(0) + RES_ATTR, line, count=1)
+    return line
+
+
+def grey_resolved(svg):
+    """Every `blocked by` arrow (A blocked by B: from A to B) whose blocker B is closed or merged is drawn greyed out: path and
+    arrowhead grey (draw.RESOLVED), its label's border and text grey and the text struck through; data-resolved="1" on the path and
+    on the label's lines. Every other `blocked by` arrow gets the normal style back (B reopened). Routing, checks, the find box and the
+    hover treat it as any `blocked by` arrow (draw.base_marker, model.MARKER_KIND). While one arrow is grey the picture has the grey
+    arrowhead and one legend row for it; with none, the row goes. Idempotent. Run by model.finish (every script that routes) and by
+    refresh_meta.py --apply (states change there). Returns (svg, [(a, b)] of the grey arrows)."""
+    import draw, model, route
+    grey, gmk = draw.RESOLVED
+    rmk = draw.EDGE['blocked by'][2]
+    done = {n: box_done(svg[a:b]) for n, (a, b) in blocks(svg).items()}
+    lines = svg.split('\n')
+    shafts, out = [], []
+    for i, ln in enumerate(lines):
+        at = svgmeta.is_arrow(ln) and svgmeta.arrow_of(ln)
+        if not at or at[2] != 'blocked by':
+            continue
+        over = bool(done.get(at[1]))
+        ln = _restyle(ln, over, 'stroke', r'data-kind="blocked by"')
+        lines[i] = ln.replace('url(#%s)' % (rmk if over else gmk), 'url(#%s)' % (gmk if over else rmk))
+        shafts.append((route.segments(model.arrow_points(ln)), over))
+        if over:
+            out.append(at[:2])
+    for i in range(len(lines)):                     # a label belongs to the arrow whose straight stretch runs through its centre (on the shaft)
+        lab = draw.label_at(lines, i)
+        if not lab or lab[5] != 'blocked by':
+            continue
+        cx, cy = lab[0] + lab[2] / 2, lab[1] + lab[3] / 2
+        over = next((o for segs, o in shafts if any((d == 'h' and abs(c - cy) < 1 and lo - 1 <= cx <= hi + 1) or
+                                                    (d == 'v' and abs(c - cx) < 1 and lo - 1 <= cy <= hi + 1) for d, c, lo, hi in segs)), None)
+        if over is None:
+            continue
+        lines[i] = _restyle(lines[i], over, 'stroke', r'stroke-width="[\d.]+"')
+        for k in range(i + 1, i + 1 + lab[4]):
+            lines[k] = _restyle(lines[k], over, 'fill', LABEL_FILL.pattern)
+    if out and not any('<marker id="%s"' % gmk in ln for ln in lines):
+        at = next((k + 1 for k, ln in enumerate(lines) if '<marker id="%s"' % rmk in ln), None) or \
+            next((k + 1 for k, ln in enumerate(lines) if ln.strip() == '<defs>'), None)
+        if at is not None:
+            lines.insert(at, draw.marker_def(gmk, grey))
+    return _legend_row('\n'.join(lines), bool(out)), out
+
+
+def _legend_row(svg, want):
+    """Add (want) or take out the legend row of a block that is over, right under the `blocked by` row; the rows below it and the
+    legend's bottom move by one row. Only in a legend that has the `blocked by` row."""
+    import collapse, draw
+    lines = svg.split('\n')
+    try:
+        a, b = lines.index('<!--legend-->'), lines.index('<!--/legend-->')
+    except ValueError:
+        return svg
+    have = [k for k in range(a, b) if LEG_ATTR in lines[k]]
+    row = next((k for k in range(a, b) if lines[k].startswith('<text class="lgb"') and lines[k].endswith('>blocked by</text>')), None)
+    if row is None or bool(have) == want:
+        return svg
+    if want:
+        grey, gmk = draw.RESOLVED
+        new = [COLOR.sub('stroke="%s"' % grey, lines[row - 1], count=1).replace('url(#%s)' % draw.EDGE['blocked by'][2], 'url(#%s)' % gmk),
+               lines[row].replace('style="font-size:12.5px"', 'style="font-size:12.5px;fill:%s;text-decoration:line-through"' % grey),
+               re.sub(r'>[^<]*</text>$', '>B is closed or merged: the block is over</text>', lines[row + 1])]
+        new = [collapse.shift_line(re.sub(r'(/?>)', LEG_ATTR + r'\1', ln, count=1), 0, LEG_STEP) for ln in new]
+        lines[row + 2:row + 2] = new
+        below, dy = range(row + 2 + len(new), b + len(new)), LEG_STEP
+    else:
+        lines = [ln for k, ln in enumerate(lines) if k not in have]
+        below, dy = range(have[0], b - len(have)), -LEG_STEP
+    for k in below:
+        lines[k] = collapse.shift_line(lines[k], 0, dy)
+    for k in range(a, len(lines)):                  # the legend's frame: its height grows or shrinks by one row
+        m = re.match(r'(<rect [^>]*height=")([\d.]+)(" rx="14" fill="#fbfaf6")', lines[k])
+        if m:
+            lines[k] = lines[k].replace(m.group(0), m.group(1) + fmt(float(m.group(2)) + dy) + m.group(3), 1)
+            break
+    return '\n'.join(lines)
+
+
 def apply(svg, live, repo, boxes_live=None):
     """Two passes. The boxes as drawn (a collapsed box gets only what its compact form shows: colour, pill, assignee), then the
     pop-ups of the collapsed boxes, which are full copies that float over the picture: they get every edit and need no room."""

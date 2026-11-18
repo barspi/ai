@@ -61,8 +61,22 @@ PULL = {3: 1.0, 2: 0.6, 1: 0.2}                     # tier -> how hard the arrow
 
 def pull(kind):
     return PULL[IMPORTANCE.get(kind, 2)]
+# A `blocked by` arrow whose blocker is closed or merged: the block is over. Grey path, grey arrowhead, grey label struck through
+# (svg_state.grey_resolved sets and clears it; data-resolved="1" marks it). The grey is the closed box's border grey.
+RESOLVED = ('#9a968f', 'h-resolved')
 MARKERS = (('h-child', '#1c2430'), ('h-closed', '#1d4e89'), ('h-work', '#1d4e89'), ('h-led', '#8a4b12'), ('h-blocked', '#8a3030'),
-           ('h-ref', '#6e6a64'), ('h-evid', '#9a6700'), ('h-dup', '#b02a2a'))
+           ('h-ref', '#6e6a64'), ('h-evid', '#9a6700'), ('h-dup', '#b02a2a'), RESOLVED[::-1])
+
+
+def base_marker(mk):
+    """The arrowhead an arrow word owns (EDGE): the grey head of a resolved block is still the `blocked by` head."""
+    return EDGE['blocked by'][2] if mk == RESOLVED[1] else mk
+
+
+def marker_def(mk, col):
+    """One filled triangle arrowhead, as every arrow word but `supersedes` has."""
+    return ('<marker id="%s" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" '
+            'orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="%s"/></marker>' % (mk, col))
 
 
 def fmt(v):
@@ -344,8 +358,7 @@ def legend(lx, ly, kinds, states):
 
 
 def defs():
-    markers = ''.join('<marker id="%s" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="%s"/></marker>\n' % (mk, col)
-                      for mk, col in MARKERS)
+    markers = ''.join(marker_def(mk, col) + '\n' for mk, col in MARKERS)
     markers += ('<marker id="h-cross" overflow="visible" viewBox="0 0 16 16" refX="8" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">'
                 '<path d="M2.5,2.5 L13.5,13.5 M13.5,2.5 L2.5,13.5" stroke="#ff2a2a" stroke-width="3" stroke-linecap="round" fill="none"/></marker>\n')
     css = ('.kind{font-size:13.5px;font-weight:700;letter-spacing:.3px}.ttl{font-size:12.5px;fill:%s}.meta{font-size:11px;fill:%s}.mono{font-size:11px;font-family:Menlo,Consolas,monospace;fill:%s}'

@@ -360,6 +360,10 @@ def main():
         text = svgmeta.write(text, meta)
     else:
         print('NOTE: %s has no metadata block, so lastRun is not kept: run svgmeta.py migrate on the next revision' % svg)
+    if opts.apply:              # with the states written: a `blocked by` arrow whose blocker closed or merged goes grey (and back)
+        import svg_state
+        text, grey = svg_state.grey_resolved(text)
+        print('blocked by arrows greyed (blocker closed or merged): %d%s' % (len(grey), ''.join(' #%d->#%d' % ab for ab in grey)))
     open(svg, 'w').write(text)
     if opts.snapshot_out:
         out_snap = {str(n): live[n] for n in nums}

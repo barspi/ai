@@ -235,7 +235,7 @@ def drawn_arrows(text):
 
 def kinds_of_marker(marker):
     import draw
-    return [k for k, v in draw.EDGE.items() if v[2] == marker]
+    return [k for k, v in draw.EDGE.items() if v[2] == draw.base_marker(marker)]
 
 
 # ---------------------------------------------------------------- checks
@@ -274,7 +274,7 @@ def problems(text):
             continue
         if (a, b) != (fa, fb):
             out.append(('error', 'arrow data says #%d -> #%d, but it is drawn from %s to %s' % (fa, fb, '#%s' % a if a else 'no box', '#%s' % b if b else 'no box')))
-        if draw.EDGE[kind][2] != marker:
+        if draw.EDGE[kind][2] != draw.base_marker(marker):
             out.append(('error', 'arrow #%d %s #%d: data-kind %r, but its arrowhead is %s' % (fa, kind, fb, kind, marker)))
         if word and word != kind:
             out.append(('error', 'arrow #%d -> #%d: data-kind %r, but its label says %r' % (fa, fb, kind, word)))
@@ -430,7 +430,7 @@ def main():
         if len(hit) != 1:
             sys.exit('%d drawn arrows #%d -> #%d with data-from/data-to' % (len(hit), fa, fb))
         mk = re.search(r'marker-end="url\(#([\w-]+)\)"', lines[hit[0]]).group(1)
-        if draw.EDGE[kind][2] != mk:
+        if draw.EDGE[kind][2] != draw.base_marker(mk):
             sys.exit('#%d -> #%d has the arrowhead %s; %r needs %s: draw the arrow again' % (fa, fb, mk, kind, draw.EDGE[kind][2]))
         lab = [w for i, a, b, w, m in drawn_arrows(text) if i == hit[0]]
         if lab and lab[0] and lab[0] != kind:

@@ -25,6 +25,8 @@ usage: selftest.py [--no-static]
    a full frame puts the box inside it, beside `near`; route_labelled takes the next cheapest path when the cheapest has no room for
    the label, and no label goes where a jump arc will be; the spatial index answers like a full scan; collapse.py and move.py leave
    no invalid arrow; a short label shaft is a WARN, two boxes on top of each other a FAIL.
+5. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
+   once the blocker reopens; the checker accepts it.
 The in-process runs call each script's main() with sys.argv set, so a crash shows its traceback here.
 """
 import contextlib, io, os, re, shutil, subprocess, sys, tempfile, traceback
@@ -365,6 +367,54 @@ def room_cases(tmp):
     check(_quiet(push.selftest), 'B, D. push.selftest(): the cascade and reattach')
 
 
+def resolved_cases(tmp):
+    """svg_state.grey_resolved: a `blocked by` arrow whose blocker is closed or merged is grey, its label struck; one whose blocker is
+    open keeps the normal style; idempotent; the blocker reopened gives the normal style back; check_diag.py sees no new FAIL or WARN."""
+    import svg_state
+    red, grey = route.draw.EDGE['blocked by'][0], route.draw.RESOLVED[0]
+
+    def box(n, x, word):
+        return ('<g id="n%d">\n<rect x="%d" y="200" width="260" height="80" rx="10" fill="#f8e8e4" stroke="%s" stroke-width="1.6"/>\n'
+                '<text class="pill" x="%d" y="227" text-anchor="middle" style="fill:#f8e8e4">%s</text>\n</g>' % (n, x, red, x + 220, word))
+
+    def tiny(word2):                                    # #1 blocked by #2 (word2) and by #3 (open)
+        lines = ['<svg>', '<defs>', route.draw.marker_def('h-blocked', red), '</defs>', box(1, 100, 'open'), box(2, 440, word2), box(3, 900, 'open'),
+                 route.draw.arrow([(200, 280), (200, 360), (570, 360), (570, 280)], 'blocked by', 1, 2),
+                 route.draw.arrow([(300, 280), (300, 420), (1030, 420), (1030, 280)], 'blocked by', 1, 3)]
+        lines += route.draw.label('blocked by', 385, 360) + route.draw.label('blocked by', 665, 420)
+        lines += ['<!--legend-->', '<rect x="1300" y="190" width="500" height="100" rx="14" fill="#fbfaf6" stroke="#b9b3a8" stroke-width="1.2"/>',
+                  '<line x1="1316" y1="226" x2="1362" y2="226" stroke="%s" stroke-width="1.9" marker-end="url(#h-blocked)"/>' % red,
+                  '<text class="lgb" x="1374" y="230" style="font-size:12.5px">blocked by</text>',
+                  '<text class="lg" x="1500" y="230" style="font-size:12px">A cannot finish until B is done</text>',
+                  '<line x1="1316" y1="254" x2="1362" y2="254" stroke="#6e6a64" stroke-width="1.9" marker-end="url(#h-ref)"/>',
+                  '<!--/legend-->', '</svg>']
+        return '\n'.join(lines)
+    t = tiny('merged')
+    g, out = svg_state.grey_resolved(t)
+    gl = g.split('\n')
+    p12 = next(ln for ln in gl if 'data-to="2"' in ln)
+    p13 = next(ln for ln in gl if 'data-to="3"' in ln)
+    labs = [gl[i:i + 2] for i in range(len(gl)) if route.draw.label_at(gl, i)]
+    check(out == [(1, 2)] and 'stroke="%s"' % grey in p12 and 'url(#h-resolved)' in p12 and 'data-resolved="1"' in p12
+          and 'stroke="%s"' % red in p13 and 'url(#h-blocked)' in p13 and 'data-resolved' not in p13
+          and 'line-through' in labs[0][1] and 'stroke="%s"' % grey in labs[0][0] and 'line-through' not in labs[1][1]
+          and '<marker id="h-resolved"' in g and g.count('data-legend="resolved"') == 3 and 'height="128"' in g
+          and 'y1="282"' in g,                          # the legend row under it moved down one row
+          'G. blocked by a merged #2: grey path, grey head, struck label; blocked by an open #3: normal; one legend row (%s)' % (out,))
+    check(svg_state.grey_resolved(g)[0] == g, 'G. grey_resolved is idempotent')
+    back, out = svg_state.grey_resolved(g.replace('>merged<', '>open<'))
+    check(out == [] and back.replace(route.draw.marker_def('h-resolved', grey) + '\n', '') == tiny('open'),
+          'G. #2 reopened: every arrow, label and the legend as before (the grey arrowhead def stays)')
+    ex = open(EXAMPLE, encoding='utf-8').read()          # the checker on a real picture: #121 blocked by #120, then #120 closed
+    a, b = svg_state.blocks(ex)[120]
+    closed = ex[:a] + ex[a:b].replace('>open<', '>closed<') + ex[b:]
+    f0, w0, _ = checked(closed, tmp, 'res0.svg')
+    grey_ex, out = svg_state.grey_resolved(closed)
+    f1, w1, rep = checked(grey_ex, tmp, 'res1.svg')
+    check(out == [(121, 120)] and (f1, w1) == (f0, w0), 'G. check_diag.py: the grey arrow adds no FAIL or WARN (%s -> %s)' % ((f0, w0), (f1, w1))
+          + ('' if (f1, w1) == (f0, w0) else ':\n' + rep))
+
+
 def _inflate_ok(before, after, frame):
     """The invariants of frames.inflate between two texts: every arrow orthogonal; the same pairs of arrows cross, among the arrows
     that do not cross the frame border (one that does may take a corridor step); every box keeps its size; the boxes outside the
@@ -435,6 +485,7 @@ def main():
         failure_paths(tmp)
         by_construction(tmp)
         room_cases(tmp)
+        resolved_cases(tmp)
     print('selftest: %s' % ('OK' if not fails else '%d FAILED: %s' % (len(fails), '; '.join(f.split(':')[0] for f in fails))))
     sys.exit(1 if fails else 0)
 
