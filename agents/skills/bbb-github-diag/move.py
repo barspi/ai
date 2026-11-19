@@ -181,6 +181,7 @@ def move(text, moves, grows=(), extra=(), sides=None, keep_out=()):
     where += more
     kept = {(p.a, p.b) for p in pend if p.keep}
     failed = [(a, b, why + (': its old path stays (a frame push cut it)' if (a, b) in kept else '')) for a, b, _, why in res.failed]
+    failed += [(a, b, why) for a, b, _, why in res.noted]           # not drawn, in "nopath" already (model.route_arrows)
     if failed:
         meta = svgmeta.read(text)
         for a, b, kind, _ in (f for f in res.failed if f[:2] not in kept):

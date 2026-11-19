@@ -363,6 +363,7 @@ def main():
             continue
         nopath.append((a_, b_, kind))
     problems += ['frame "%s" inflated (%s) to make room for an arrow' % g for g in res.grown]
+    problems += ['NOT DRAWN #%s %s #%s: %s' % (a_, kind, b_, why) for a_, b_, kind, why in res.noted]
     problems += ['WARN: #%s -> #%s: no path of the cheapest had room for the full label' % (a_, b_) for a_, b_, _, room in res.routed if not room]
     problems += [model.no_label(x) for x in res.unlabelled]
     drawn |= {(a_, b_) for a_, b_, _, _ in res.routed}

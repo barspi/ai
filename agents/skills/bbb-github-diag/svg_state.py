@@ -420,6 +420,40 @@ def apply(svg, live, repo, boxes_live=None):
     return svg, log, sorted(set(report))
 
 
+def _append_note(blk, markup):
+    """The box markup with one note line (markup: its content) under its last note, or under its date line or merge line when it
+    has no note yet, the box NOTE_STEP px taller; None when it has no line of text to put it under."""
+    notes = (list(re.finditer(r'<text class="note" x="([\d.]+)" y="([\d.]+)"', blk)) or
+             sorted(re.finditer(r'<text class="(?:meta|mono)" x="([\d.]+)" y="([\d.]+)"', blk), key=lambda m: float(m.group(2))))
+    if not notes:
+        return None
+    last = notes[-1]
+    end = blk.index('</text>', last.start()) + len('</text>')
+    line = '\n<text class="note" x="%s" y="%s">%s</text>' % (last.group(1), fmt(float(last.group(2)) + NOTE_STEP), markup)
+    return grow(blk[:end] + line + blk[end:], NOTE_STEP)
+
+
+def add_note(svg, num, text):
+    """Box num gets one more note line, `text` (each #N a link, its tooltip the title of box N), and grows NOTE_STEP px; the arrows
+    that end on its bottom follow it. Only where room_below() allows, and not on a collapsed box (its small form has no notes).
+    Returns (svg, None), or (svg unchanged, why)."""
+    bl = blocks(svg)
+    if num not in bl:
+        return svg, 'not a box'
+    a, b = bl[num]
+    blk = svg[a:b]
+    if 'data-collapsed="1"' in blk:
+        return svg, 'a collapsed box has no notes'
+    if not room_below(svg, bl, num, NOTE_STEP):
+        return svg, 'no %dpx of room below the box' % NOTE_STEP
+    meta = svgmeta.read(svg) or {}
+    live = {n: (v.get('github') or {}) for n, v in svgmeta.boxes(svg).items()}
+    new = _append_note(blk, _rich(text, meta.get('repo', ''), live))
+    if new is None:
+        return svg, 'no line of text to put the note under'
+    return follow_bottom(svg[:a] + new + svg[b:], rect_of(blk), NOTE_STEP), None
+
+
 def make_room(svg, num, more, log, report):
     """A band of `more` px of free space (band.py) just under box num: below its bottom, above the next box under it in its column and
     inside its own frame, at the first y that cuts no box, label or jump arc. The box can then grow; nothing else changes shape."""
@@ -518,19 +552,14 @@ def _apply(svg, live, repo, log, report, pop, bands=None):
         if not compact and kind == 'ISSUE' and l['state'] == 'closed' and 'Closed by' not in re.sub(r'<[^>]+>', '', blk):
             prs = [p for p in l.get('rel', {}).get('closedBy', []) if p in live and p != num]
             # under the last note; a box with no note yet: under its date line or merge line (the lowest line of text)
-            notes = (list(re.finditer(r'<text class="note" x="([\d.]+)" y="([\d.]+)"', blk)) or
-                     sorted(re.finditer(r'<text class="(?:meta|mono)" x="([\d.]+)" y="([\d.]+)"', blk), key=lambda m: float(m.group(2))))
             if prs:
+                new = _append_note(blk, 'Closed by PR %s.' % ' and '.join(link(repo, p, True, live[p]['title']) for p in prs[:2]))
                 if not room_below_(svg, bl, num, 14):
                     report.append('#%d: closed by PR #%s: note line needs 14px more room below the box' % (num, prs[0]))
-                elif not notes:
+                elif new is None:
                     report.append('#%d: closed by PR #%s: no line of text to put the note under' % (num, prs[0]))
                 else:
-                    last = notes[-1]
-                    end = blk.index('</text>', last.start()) + len('</text>')
-                    line = '\n<text class="note" x="%s" y="%s">Closed by PR %s.</text>' % (
-                        last.group(1), fmt(float(last.group(2)) + 14), ' and '.join(link(repo, p, True, live[p]['title']) for p in prs[:2]))
-                    blk = grow(blk[:end] + line + blk[end:], 14)
+                    blk = new
                     log.append('%s: note "Closed by PR #%s." added, box 14px taller' % (tag, prs[0]))
         # the red cross on a closed issue: closed by hand, the work not done (rules.close_verdict decides, refresh_meta.py stores it)
         if kind == 'ISSUE' and l['state'] == 'closed' and l.get('closeVerdict'):

@@ -177,12 +177,11 @@ def main():
                 n['notes'] = [x for x in n['notes'] if 'was not merged' not in x] + ['Closed by PR #%d.' % b]
     if o.low_as_notes:
         import draw
-        word_of = {'related': 'Related:', 'mentioned': 'Mentions'}
         by_n = {n['num']: n for n in nodes}
         for a, b, k in sorted(edges):
             if draw.IMPORTANCE.get(k, 2) == 1 and by_n[a].get('frame') != by_n[b].get('frame'):
                 edges.discard((a, b, k))
-                by_n[a]['notes'].append('%s #%d.' % (word_of.get(k, 'See'), b))
+                by_n[a]['notes'].append('%s #%d.' % (draw.LOW_NOTE.get(k, 'See'), b))
                 nopath.append({'from': a, 'to': b, 'kind': k, 'reason': 'low importance across frames: a note on #%d instead' % a})
     # The notes the agent wrote from the text, then "Blocked by": bold while the issue and a blocker named on the line are both open
     # (the block is live), plain once either is closed. An arrow `blocked by` with no line about it gets a plain "Blocked by #N." line.

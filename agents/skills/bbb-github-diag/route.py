@@ -14,10 +14,11 @@ never closer than 22px (HARD_H: their 18px labels then fit one above the other w
 14px (HARD_V), and closer than 42px (LABEL_ROOM, room for a label between them) only at a cost per step; a frame border keeps 30px; a
 line is crossed only at a right angle, 30px or more from either of its ends (END_CLEAR); never turns within 40px of a box edge (so it
 leaves and enters straight). Costs: a step 1, a bend 30, a crossing 35, a side other than the facing one 20, a border of a frame that
-holds neither end 60, of a frame that holds an end 75 (so leaving such a frame and coming back costs 150). An arrow whose two boxes are
-in the same frame is searched inside that frame and nowhere else (None: model.route_arrows grows the frame, frames.grow). An arrow
-between two frames is searched in the box round the two frames and the corridor between them (frames_window), then on the whole
-canvas. It picks the exit and entry points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
+holds neither end 60, of a frame that holds an end 75 (so leaving such a frame and coming back costs 150); a step outside every
+frame costs OUTSIDE_COST (5) instead of 1, per 5px of length. An arrow whose two boxes are in the same frame is searched inside
+that frame and nowhere else (None: model.route_arrows grows the frame, frames.grow). An arrow between two frames is searched in the
+box round the two frames and the corridor between them (frames_window), then on the whole canvas. It picks the exit and entry
+points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
 The search runs on a 5px lattice. Two searches give the same costs: `vis` (ovg.py, the default), A* on an orthogonal visibility graph
 whose nodes are only where a path may need to turn, with dissimilar alternatives for route(accept=...), and `grid` (_route_grid
 below), A* over every lattice cell (the cheapest path only), kept to compare. The environment variable BBB_ROUTER=grid|vis picks one.
@@ -43,6 +44,8 @@ TURN_COST, CROSS_COST, SIDE_COST = 30, 35, 20
 FRAME_COST = 60     # per border crossed of a frame that holds neither end: going through it costs 120
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
+OUTSIDE_COST = 5    # a step outside every frame costs this, a step inside one 1: crossing the narrow gap between two frames stays
+                    # cheap (it is short), a long trip round a frame does not. The heuristics (Manhattan steps at 1) stay a lower bound
 LAST_COST = None    # the cost of the last path _route() found
 ALT_BENDS = 2       # an alternative has at most this many bends more than the cheapest path, or it is not taken
 K_PATHS = 6         # route(accept=...) tries at most this many paths (the cheapest, then alternatives) for one that passes
@@ -304,7 +307,7 @@ def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fal
     ra, rb = sc.boxes[a], sc.boxes[b]
     x0, y0, x1, y1, NX, NY = _window(sc, ra, rb, pad, inside)
     size = NX * NY
-    blk, noh, nov, nt, crh, crv, sv, frh, frv = (bytearray(size) for _ in range(9))
+    blk, noh, nov, nt, crh, crv, sv, frh, frv, inf = (bytearray(size) for _ in range(10))
 
     def rng(lo, hi, o, n):                       # grid indices with lo < coordinate < hi
         i1 = max(0, int(math.floor((lo - o) / G)) + 1)
@@ -371,6 +374,7 @@ def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fal
             line(frh if o == 'h' else frv, o, c, lo, hi, fc)
         for cx, cy in ((x, y), (x + w, y), (x, y + h), (x + w, y + h)):
             mark(blk, cx - FPROX, cy - FPROX, cx + FPROX, cy + FPROX)
+        mark(inf, x, y, x + w, y + h)                            # inside a frame: a step costs 1; elsewhere OUTSIDE_COST
     if inside:                                                   # stay in the common frame: everything outside it is blocked
         fx, fy, fw, fh = inside
         mark(blk, x0 - G, y0 - G, fx + FRAME_WALL, y1 + G)
@@ -440,7 +444,7 @@ def _route_grid(sc, a, b, sa, sb, pad, natural=None, inside=None, prove_none=Fal
             k = nj * NX + ni
             if blk[k] and k not in goal_cells:
                 continue
-            c2 = cst + 1
+            c2 = cst + (1 if inf[k] else OUTSIDE_COST)
             if nd & 1:                                           # a vertical step (south, north)
                 if nov[k]:
                     continue
@@ -779,12 +783,64 @@ def _crossings(segs, other):
     return n
 
 
+def outside_length(pts, frames):
+    """px of the path that lie outside every frame (strictly inside one counts as inside, as the searches have it)."""
+    out = 0.0
+    for o, c, lo, hi in segments(straight([tuple(x) for x in pts])):
+        cover = []
+        for x, y, w, h in frames:
+            (a0, a1, b0, b1) = (y, y + h, x, x + w) if o == 'h' else (x, x + w, y, y + h)
+            if a0 < c < a1 and b1 > lo and b0 < hi:
+                cover.append((max(lo, b0), min(hi, b1)))
+        inside, end = 0.0, lo
+        for s0, s1 in sorted(cover):
+            if s1 > end:
+                inside += s1 - max(s0, end)
+                end = s1
+        out += hi - lo - inside
+    return out
+
+
+# A crazy path: it goes far round to come back near where it started, or it is twisted and crooked (crazy(), is_crazy()). Outside
+# travel is not part of it: OUTSIDE_COST weighs that in the search.
+CRAZY_WASTE = 0.5      # it wastes (length less the Manhattan distance of its ends) more than this share of that distance ...
+CRAZY_SLACK = 300      # ... plus this many px (a short arrow that steps round one box wastes little and is not crazy),
+CRAZY_WASTE_PX = 1000  # or more than this many px whatever the distance,
+CRAZY_BENDS = 6        # or it has more than this many bends beyond the fewest its two ends need. A long arrow that runs a staircase
+                       # inside a frame and comes straight at its end (6 more than its 3) is not crazy
+
+
+def crazy(pts):
+    """(waste, extra_bends) of a path: its length less the Manhattan distance of its two ends (a monotone path wastes 0), and its
+    bends less the fewest a path needs that leaves its tail and enters its tip the way this one does (0 straight, 1 an L, 2 a Z)."""
+    import ovg                                   # here: ovg imports this module
+    p = straight([tuple(x) for x in pts])
+    if len(p) < 2:
+        return 0.0, 0
+    way = lambda u, v: 0 if v[0] > u[0] else 2 if v[0] < u[0] else 1 if v[1] > u[1] else 3     # east, south, west, north
+    dx, dy = p[-1][0] - p[0][0], p[-1][1] - p[0][1]
+    length = sum(abs(v[0] - u[0]) + abs(v[1] - u[1]) for u, v in zip(p, p[1:]))
+    sign = lambda v: (v > .5) - (v < -.5)
+    return length - abs(dx) - abs(dy), len(p) - 2 - ovg._bends(sign(dx), sign(dy), way(p[0], p[1]), way(p[-2], p[-1]))
+
+
+def is_crazy(pts):
+    """Is the path crazy (CRAZY_WASTE, CRAZY_SLACK, CRAZY_WASTE_PX, CRAZY_BENDS)? push.straighten opens a short way for such an arrow;
+    model.route_arrows does not draw a low-importance arrow it routes now whose path is one (a note on its tail box instead)."""
+    waste, extra = crazy(pts)
+    p = straight([tuple(x) for x in pts])
+    m = abs(p[-1][0] - p[0][0]) + abs(p[-1][1] - p[0][1])
+    return waste > CRAZY_WASTE * m + CRAZY_SLACK or waste > CRAZY_WASTE_PX or extra > CRAZY_BENDS
+
+
 def path_cost(sc, pts, a, b):
-    """What the search charges for a drawn path, without the per-step closeness and side costs: 1 per 5px, TURN_COST per bend,
-    CROSS_COST per crossing with another arrow of sc, and the frame border costs; and JOG_COST per jog shorter than 30px. Used to compare an old path with a new one."""
+    """What the search charges for a drawn path, without the per-step closeness and side costs: 1 per 5px inside a frame and
+    OUTSIDE_COST outside every frame, TURN_COST per bend, CROSS_COST per crossing with another arrow of sc, and the frame border
+    costs; and JOG_COST per jog shorter than 30px. Used to compare an old path with a new one."""
     p = straight([tuple(x) for x in pts])
     segs = segments(p)
     cost = sum(hi - lo for _, _, lo, hi in segs) / G + TURN_COST * (len(p) - 2)
+    cost += (OUTSIDE_COST - 1) * outside_length(p, sc.frames) / G
     cost += JOG_COST * sum(1 for _, _, lo, hi in segs[1:-1] if hi - lo < 30)      # a jog shorter than 30px (SKILL.md: never leave one)
     for q in sc.arrows:
         if straight([tuple(x) for x in q]) != p:
@@ -821,9 +877,11 @@ def selftest():
     check('a frame that holds neither end costs 2 x FRAME_COST to go through', p is not None and LAST_COST >= 2 * FRAME_COST + 100,
           'cost %s' % LAST_COST)
     base = LAST_COST
-    p = _route(Sc({1: A, 2: B}, [wall, (-100, 100, 450, 200)]), 1, 2, 'R', 'L', 260)
-    check('a frame that holds one end costs FRAME_OWN_COST to leave', p is not None and abs(LAST_COST - base - FRAME_OWN_COST) < 10,
-          'cost %s, without that frame %s' % (LAST_COST, base))
+    own = (-100, 100, 450, 200)
+    p = _route(Sc({1: A, 2: B}, [wall, own]), 1, 2, 'R', 'L', 260)
+    cheaper = (OUTSIDE_COST - 1) * (outside_length(p or [], [wall]) - outside_length(p or [], [wall, own])) / G   # its steps inside it
+    check('a frame that holds one end costs FRAME_OWN_COST to leave', p is not None and abs(LAST_COST - base - FRAME_OWN_COST + cheaper) < 10,
+          'cost %s, without that frame %s, %s cheaper inside it' % (LAST_COST, base, cheaper))
     # 2. two horizontal arrows keep HARD_H apart
     A2, B2 = (0, 0, 100, 60), (800, 400, 100, 60)
     other = [(150, 200), (750, 200)]
@@ -857,7 +915,8 @@ def selftest():
     # 7. path_cost: a jog shorter than 30px costs JOG_COST
     c1 = path_cost(Sc({1: A, 2: B}), [(100, 230), (400, 230), (400, 245), (800, 245)], 1, 2)
     c2 = path_cost(Sc({1: A, 2: B}), [(100, 230), (400, 230), (400, 275), (800, 275)], 1, 2)
-    check('a short jog costs JOG_COST', abs((c1 - c2) - (JOG_COST - 30 / G)) < .01, '%s vs %s' % (c1, c2))   # 15px jog vs 45px
+    check('a short jog costs JOG_COST', abs((c1 - c2) - (JOG_COST - OUTSIDE_COST * 30 / G)) < .01, '%s vs %s' % (c1, c2))   # 15px jog
+    # vs 45px, outside every frame
     # 8. a short vertical arrow (38px between two boxes): no place on its shaft, its label is drawn beside it; a long one never is
     up = [(50, 238), (50, 200)]
     s8 = Sc({1: (0, 100, 100, 100), 2: (0, 238, 100, 60)}, arrows=[up])
@@ -872,6 +931,34 @@ def selftest():
     sp = straight(p or [(0, 0)])
     check('an arrow down its own column leaves and enters the same side with 2 bends', p is not None and len(sp) == 4
           and abs(sp[0][0] - sp[-1][0]) < .01, 'path %s' % (p,))
+    # 10. OUTSIDE_COST: two frames side by side, five lines down the 100px gap between them. Through the gap the arrow crosses the
+    #     five (5 x CROSS_COST); round under the frames it crosses none and is short enough to win at a step cost of 1 everywhere.
+    #     Outside the frames a step costs OUTSIDE_COST: the arrow takes the gap (the only stretch outside a frame: the gap's width).
+    f1, f2 = (0, 0, 400, 400), (500, 0, 400, 400)
+    lines = [[(x, 20), (x, 380)] for x in (420, 435, 450, 465, 480)]
+    s10 = {1: (250, 300, 100, 60), 2: (550, 300, 100, 60)}
+    import route as me                                           # the searches read the module's constant (selftest runs as route)
+    keep, me.OUTSIDE_COST = me.OUTSIDE_COST, 1
+    try:
+        round_ = route(Sc(s10, [f1, f2], arrows=lines), 1, 2, '*', '*')
+    finally:
+        me.OUTSIDE_COST = keep
+    p = route(Sc(s10, [f1, f2], arrows=lines), 1, 2, '*', '*')
+    check('a step outside every frame costs OUTSIDE_COST: the arrow takes the gap between two frames, not the way round them',
+          round_ is not None and max(q[1] for q in round_) > 400 and p is not None and max(q[1] for q in p) < 400
+          and outside_length(p, [f1, f2]) <= 100, 'at cost 1: %s; at %d: %s' % (round_, OUTSIDE_COST, p))
+    # 11. crazy(): far round and back, or twisted; a long staircase that comes straight at its end is not
+    long_ok = [(0, 0), (400, 0), (400, 300), (800, 300), (800, 600), (1200, 600), (1200, 900), (1600, 900), (1600, 1200),
+               (2000, 1200)]                                                # 8 bends, 2 needed (east to east, lower): 6 more
+    round_ = [(0, 0), (-300, 0), (-300, -1200), (900, -1200), (900, 40), (700, 40)]   # out, up and over, back down
+    twist = [(0, 0)] + [(100 * k + 100 * (k % 2), 50 * (k // 2 + 1)) for k in range(9)] + [(1000, 300)]
+    step = [(0, 0), (60, 0), (60, -80), (240, -80), (240, 0), (300, 0)]    # a short arrow that steps round one box
+    check('crazy(): a long staircase that comes straight at its end is not crazy', crazy(long_ok) == (0, 6) and not is_crazy(long_ok),
+          str(crazy(long_ok)))
+    check('crazy(): a path that goes far round to come back near its start is', crazy(round_)[0] > CRAZY_WASTE_PX and is_crazy(round_),
+          str(crazy(round_)))
+    check('crazy(): a twisted path (many bends more than its ends need) is', crazy(twist)[1] > CRAZY_BENDS and is_crazy(twist), str(crazy(twist)))
+    check('crazy(): a short arrow that steps round one box is not', crazy(step) == (160, 4) and not is_crazy(step), str(crazy(step)))
     print('route self-test %s' % ('OK' if not bad else 'FAILED: %d' % len(bad)))
     if bad:
         sys.exit(1)

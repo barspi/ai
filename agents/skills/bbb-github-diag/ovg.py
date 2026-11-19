@@ -25,7 +25,8 @@ wherever a band forbids running along a line (the features below always come in 
 Structures. The features of the scene's labels, pills and arrows, in canvas px, live in the scene's spatial index (spatial.py, one per
 Scene, kept in step with it); a call asks only for those that fall in its window. Per call, _Lattice: the
 window, the features on its lattice (with the call's own: its two boxes, which keep OWN_BOXM instead of BOXM, the frames, whose border
-cost depends on whether they hold an end, the no-turn zones round the two boxes, the outside of the frame for an `inside` search),
+cost depends on whether they hold an end and whose inside makes a step cost 1 instead of OUTSIDE_COST, the no-turn zones round the
+two boxes, the outside of the frame for an `inside` search),
 and, built when the search first reaches them, per row and per column: the cells a step may not enter, the crossing and frame costs,
 the NEAR cells, the cells where no turn is allowed, and the candidate runs. The lattice moves with the window, as the grid search's
 does, so that the two can be compared: that is why nothing below the spatial index outlives a call.
@@ -41,10 +42,12 @@ import route as R
 
 G = R.G
 assert min(R.HARD_H, R.HARD_V, R.FPROX) > 1.5 * G and R.END_CLEAR >= G, 'the candidate lines (module docstring) need these'
-BLK, NOH, NOV, NT, NEAR, CRH, CRV, FRH, FRV = range(9)
+BLK, NOH, NOV, NT, NEAR, CRH, CRV, FRH, FRV, INF = range(10)
 # BLK: no step may enter the cell; NOH, NOV: no horizontal, no vertical step may enter; NT: no turn there; NEAR: a vertical step into
 # it costs NEAR_COST; CRH, CRV: a vertical (horizontal) step into it crosses a line, CROSS_COST; FRH, FRV: a vertical (horizontal)
-# step into it crosses a frame border, at the border's cost.
+# step into it crosses a frame border, at the border's cost; INF: inside a frame, a step into it costs 1 (outside every frame
+# route.OUTSIDE_COST). The cost per step changes only at a frame border, where no stretch may run or turn (FPROX bands): no new
+# candidate lines.
 RECT, HLINE, VLINE = range(3)
 # A feature in canvas px is (kind, shape, p, q, r, s, value): a RECT (x0, y0, x1, y1) covers the lattice points strictly inside it;
 # an HLINE (y, x0, x1, -) the points of the lattice row nearest y strictly between x0 and x1; a VLINE (x, y0, y1, -) likewise.
@@ -54,7 +57,8 @@ RECT, HLINE, VLINE = range(3)
 STOP, CROSS, FRAME, PER_STEP = (NOH, NOV), (CRV, CRH), (FRV, FRH), (None, NEAR)
 BUCKET = 16                                      # lattice lines per bucket of the per-call feature lists
 MAX_ALTERNATIVES = 12                            # search_paths: at most this many searches (the first and the alternatives)
-PEN_STEP = 2                                     # a step along a stretch of a path found before costs this much more
+PEN_STEP = 2                                     # a step along a stretch of a path found before costs this many times its own
+                                                 # step cost more (1 inside a frame, route.OUTSIDE_COST outside)
 PEN_BAND = 4                                     # lattice lines (20px) each side of such a stretch: about a label's half height and gap
 
 
@@ -123,6 +127,7 @@ def _call_features(sc, a, b, inside, window):
             out += [(NOV, RECT, c - f, y - f, c + f, y + h + f, 1), (NT, RECT, c - f, y - f, c + f, y + h + f, 1),
                     (FRV, VLINE, c, y, y + h, 0, fc)]
         out += [(BLK, RECT, cx - f, cy - f, cx + f, cy + f, 1) for cx in (x, x + w) for cy in (y, y + h)]
+        out.append((INF, RECT, x, y, x + w, y + h, 1))
     if inside:                                   # stay in the common frame: everything outside it is blocked
         x0, y0, x1, y1 = window
         fx, fy, fw, fh = inside
@@ -158,12 +163,12 @@ def _holds_at(ivs, p):
 
 class _Line:
     """One lattice row (axis 0) or column (axis 1) of a call, seen by a step along it: positions are columns on a row, rows on a column.
-    stop, turnless, near, runs: (starts, ends) of disjoint intervals; cross: sorted positions; frame_at: sorted positions of frame
-    border cells and frame_sum the running sum of their costs."""
-    __slots__ = ('stop', 'turnless', 'cross', 'frame_at', 'frame_sum', 'near', 'runs')
+    stop, turnless, near, inf, runs: (starts, ends) of disjoint intervals; cross: sorted positions; frame_at: sorted positions of
+    frame border cells and frame_sum the running sum of their costs."""
+    __slots__ = ('stop', 'turnless', 'cross', 'frame_at', 'frame_sum', 'near', 'inf', 'runs')
 
-    def __init__(self, stop, turnless, cross, frame_at, frame_sum, near, runs):
-        self.stop, self.turnless, self.cross, self.near, self.runs = stop, turnless, cross, near, runs
+    def __init__(self, stop, turnless, cross, frame_at, frame_sum, near, inf, runs):
+        self.stop, self.turnless, self.cross, self.near, self.inf, self.runs = stop, turnless, cross, near, inf, runs
         self.frame_at, self.frame_sum = frame_at, frame_sum
 
     def reach(self, p, step, n):
@@ -175,9 +180,16 @@ class _Line:
         k = bisect_right(s, p - 1) - 1
         return p if k >= 0 and e[k] >= p - 1 else (e[k] + 1 if k >= 0 else 0)
 
+    def steps(self, lo, hi):
+        """The step cost of entering the cells lo..hi: 1 each inside a frame, route.OUTSIDE_COST each outside every frame."""
+        s, e = self.inf
+        within = sum(max(0, min(e[k], hi) - max(s[k], lo) + 1) for k in range(max(0, bisect_right(s, lo) - 1), bisect_right(s, hi)))
+        return within + R.OUTSIDE_COST * (hi - lo + 1 - within)
+
     def cost(self, lo, hi):
-        """The cost of entering the cells lo..hi: a step each, the crossings, the frame borders and the NEAR cells."""
-        c = hi - lo + 1 + R.CROSS_COST * (bisect_right(self.cross, hi) - bisect_left(self.cross, lo))
+        """The cost of entering the cells lo..hi: a step each (OUTSIDE_COST outside every frame), the crossings, the frame borders
+        and the NEAR cells."""
+        c = self.steps(lo, hi) + R.CROSS_COST * (bisect_right(self.cross, hi) - bisect_left(self.cross, lo))
         c += self.frame_sum[bisect_right(self.frame_at, hi)] - self.frame_sum[bisect_left(self.frame_at, lo)]
         s, e = self.near
         for k in range(max(0, bisect_right(s, lo) - 1), bisect_right(s, hi)):
@@ -309,6 +321,7 @@ class _Lattice:
                      sorted({s for kind, s, _, _ in feats if kind == CROSS[axis]}),
                      frame_at, list(itertools.accumulate((border[p] for p in frame_at), initial=0)),
                      _merge([(s, e) for kind, s, e, _ in feats if kind == PER_STEP[axis]]),
+                     _merge([(s, e) for kind, s, e, _ in feats if kind == INF]),
                      self._runs(stop, self.n[axis], self.gen[axis].get(k, ())))
 
     @staticmethod
@@ -487,10 +500,12 @@ def _decode(states, NY):
     return [((st >> 2) // NY, (st >> 2) % NY, st & 3) for st in states]
 
 
-def _penalty(penalised, axis, line, lo, hi):
-    """What a stretch on `line` of `axis` from position lo to hi pays for running along the stretches of the paths found before."""
-    near = penalised[axis]
-    return PEN_STEP * sum(max(0, min(hi, h2) - max(lo, l2)) for k in range(line - PEN_BAND, line + PEN_BAND + 1) for l2, h2 in near.get(k, ()))
+def _penalty(lat, penalised, axis, line, lo, hi):
+    """What a stretch on `line` of `axis` from position lo to hi pays for running along the stretches of the paths found before:
+    PEN_STEP times the step cost of each step that runs along one (_Line.steps)."""
+    near, ln = penalised[axis], lat.line(axis, line)
+    return PEN_STEP * sum(ln.steps(max(lo, l2) + 1, min(hi, h2)) for k in range(line - PEN_BAND, line + PEN_BAND + 1)
+                          for l2, h2 in near.get(k, ()) if min(hi, h2) > max(lo, l2))
 
 
 def _astar(lat, sources, goal_cost, h, walk=None, penalised=({}, {})):
@@ -533,7 +548,7 @@ def _astar(lat, sources, goal_cost, h, walk=None, penalised=({}, {})):
             i2, j2, c = nxt
             s2 = (i2 * NY + j2) * 4 + nd
             step = c + (R.TURN_COST if nd != d else 0) + goal_cost.get(s2, 0)
-            pen = _penalty(penalised, nd & 1, *((j, min(i, i2), max(i, i2)) if nd & 1 == 0 else (i, min(j, j2), max(j, j2)))) \
+            pen = _penalty(lat, penalised, nd & 1, *((j, min(i, i2), max(i, i2)) if nd & 1 == 0 else (i, min(j, j2), max(j, j2)))) \
                 if penalised[nd & 1] else 0
             c2 = cost + step + pen
             # s2 ^ 1 and s2 ^ 3 are the same node going the two perpendicular ways; a turn is allowed at every stop but a goal. When one

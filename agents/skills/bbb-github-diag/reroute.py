@@ -103,6 +103,7 @@ def reroute(text, pairs, improve=False):
         t, pend = model.take_out(text, [i for _, i in one])
         res = model.route_arrows(t, pend, keep_old=True)
         failed += [(a, b, why + ': the old one stays') for a, b, _, why in res.failed]
+        failed += [(a, b, why) for a, b, _, why in res.noted]       # not drawn, in "nopath" already (model.route_arrows)
         for g in res.grown:
             print('frame "%s" inflated (%s) to make room for an arrow' % g)
         return res.text, [(a, b, bends, not room, bends0.get((a, b), 0)) for a, b, bends, room in res.routed], failed
@@ -181,7 +182,8 @@ def main():
     if after > before and '--force' not in sys.argv:
         print('REFUSED: %d arrows invalid after, %d before. Nothing written.' % (after, before))
         sys.exit(1)
-    want, got = model.count_arrows(text), model.count_arrows(res)       # a failed arrow keeps its old path: none may go or come
+    noted = sum(1 for f in failed if f[2].startswith(model.NOTED))
+    want, got = model.count_arrows(text) - noted, model.count_arrows(res)   # a failed arrow keeps its old path; only a noted one goes
     if got != want:
         print('REFUSED: %d arrows after, %d before. Nothing written.' % (got, want))
         sys.exit(1)

@@ -25,7 +25,12 @@ usage: selftest.py [--no-static]
    a full frame puts the box inside it, beside `near`; route_labelled takes the next cheapest path when the cheapest has no room for
    the label, and no label goes where a jump arc will be; the spatial index answers like a full scan; collapse.py and move.py leave
    no invalid arrow; a short label shaft is a WARN, two boxes on top of each other a FAIL.
-5. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
+   room_cases() E: a detour round two frames whose gap holds no lane is opened by moving one frame rigidly (push.blockers with
+   frames, push_box on a frame). route.selftest() has the crazy() shapes and OUTSIDE_COST (the gap between two frames, not the way
+   round them).
+5. low_note_cases(): a low-importance arrow routed now whose path is crazy becomes a note on its tail box and a "nopath" record;
+   a stronger kind, or one a push cut, is drawn.
+6. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
    once the blocker reopens; the checker accepts it.
 The in-process runs call each script's main() with sys.argv set, so a crash shows its traceback here.
 """
@@ -364,7 +369,79 @@ def room_cases(tmp):
         near = route.route(sc2, 1, 2, 'R', 'L')
         ok = near is not None and push._length(near) <= push.DETOUR_GAIN * push._length(far)
     check(ok, 'D. a gap too narrow: pushing the lower box down by the whole need opens a short path (%s; %s)' % (sets, far))
+    # E. a detour round two frames whose gap holds no lane (20px: the router keeps route.FPROX from each border), each frame full of
+    #    a box to 5px from its border (no lane inside either, even for the probe): the probe (PROBE_FPROX) runs down the gap; both
+    #    frames are blockers (their boxes are not: they move with them); one frame moved away rigidly by the whole need opens a
+    #    short path through the gap
+    f1, f2 = (0, 0, 400, 500), (0, 520, 400, 500)
+    fb = {1: (-300, 480, 100, 60), 2: (700, 480, 100, 60), 3: (20, 20, 360, 475), 4: (20, 525, 360, 475)}
+    sc = route.Scene(dict(fb), [f1, f2], bounds=(-600, -600, 3000, 3000))
+    far = route.route(sc, 1, 2, 'R', 'L')
+    keep = route.BOXM, route.FPROX
+    route.BOXM, route.FPROX = 0, push.PROBE_FPROX
+    probe = route.route(sc, 1, 2, 'R', 'L')
+    route.BOXM, route.FPROX = keep
+    keys = [('f', 0), ('f', 1)]
+    bl = push.blockers(sc, probe, 1, 2, keys)
+    sets = push.detour_pushes(bl)
+    one = [c for c in sets if len(c) == 1 and c[0][0] == ('f', 1) and c[0][1] == 'bottom']
+    ok = False
+    if one and far:
+        d = one[0][0][2]
+        sc2 = route.Scene({**fb, 4: (20, 525 + d, 360, 475)}, [f1, (0, 520 + d, 400, 500)], bounds=(-600, -600, 3000, 3000))
+        near = route.route(sc2, 1, 2, 'R', 'L')
+        ok = route.is_crazy(far) and near is not None and not route.is_crazy(near) and push._length(near) <= push.DETOUR_GAIN * push._length(far)
+    check(ok, 'E. two frames whose gap holds no lane: both are blockers, one moved away by the whole need opens a short path (%s; %s)'
+          % (bl, far))
+    # E. push_box moves a frame rigidly: its boxes by the same vector, the frame and its title, and says so
+    text, _ = two_frames()
+    _, box0, _, frs = collapse.parse(text)
+    inside = [n for n, b in box0.items() if route.holds(collapse_rect(frs[0]), collapse_rect(b))]
+    p = push.push_box(text, ('f', 0), 'right', 40)
+    _, box1, _, frs1 = collapse.parse(p.text)
+    check(inside and all(p.moved.get(n) == (40.0, 0.0) and box1[n]['x'] == box0[n]['x'] + 40 for n in inside)
+          and frs1[0]['x'] == frs[0]['x'] + 40 and p.frames_moved and p.frames_moved[0][1:] == (40.0, 0.0),
+          'E. push_box on a frame: the frame, its title and its boxes move 40px right together (%s)' % (p.frames_moved,))
     check(_quiet(push.selftest), 'B, D. push.selftest(): the cascade and reattach')
+
+
+def collapse_rect(d):
+    return d['x'], d['y'], d['w'], d['h']
+
+
+def low_note_cases(tmp):
+    """Rule of model.route_arrows: a low-importance arrow routed now whose path is crazy is not drawn: a note on its tail box and
+    a "nopath" record; one a push cut (Pending.keep) and a stronger kind are drawn as always. route.CRAZY_BENDS -1 makes every
+    path crazy, so the case does not hang on one picture's geometry."""
+    ex = open(EXAMPLE, encoding='utf-8').read()
+    n0 = model.count_arrows(ex)
+    keep = route.CRAZY_BENDS
+    route.CRAZY_BENDS = -1
+    try:
+        t, p = model.new_arrow(ex, 122, 100, 'related')
+        res = model.route_arrows(t, [p])
+        t2, q = model.new_arrow(ex, 122, 100, 'led to')
+        res2 = model.route_arrows(t2, [q])
+        lines = ex.split('\n')
+        i = next(i for i, ln in enumerate(lines) if (model.svgmeta_arrow(ln) or ())[:2] == (111, 112))
+        t3, pend = model.take_out(ex, [i], keep={i})
+        res3 = model.route_arrows(t3, pend)
+    finally:
+        route.CRAZY_BENDS = keep
+    bl = svg_state_blocks(res.text)
+    nb = res.text[bl[122][0]:bl[122][1]]
+    meta = svgmeta.read(res.text) or {}
+    check(res.noted and res.noted[0][:3] == (122, 100, 'related') and model.count_arrows(res.text) == n0
+          and re.search(r'<text class="note"[^>]*>Related: <a [^>]*>.*?#100</tspan></a>\.</text>', nb) is not None
+          and any((x['from'], x['to']) == (122, 100) and x['reason'].startswith(model.NOTED) for x in meta.get('nopath', [])),
+          'H. a new related arrow with a crazy path: not drawn, "Related: #100." on #122, in nopath (%s)' % (res.noted,))
+    check(not res2.noted and model.count_arrows(res2.text) == n0 + 1, 'H. a new led to arrow with the same path is drawn')
+    check(not res3.noted and model.count_arrows(res3.text) == n0, 'H. a related arrow a push cut is routed again and drawn, never a note')
+
+
+def svg_state_blocks(text):
+    import svg_state
+    return svg_state.blocks(text)
 
 
 def resolved_cases(tmp):
@@ -485,6 +562,7 @@ def main():
         failure_paths(tmp)
         by_construction(tmp)
         room_cases(tmp)
+        low_note_cases(tmp)
         resolved_cases(tmp)
     print('selftest: %s' % ('OK' if not fails else '%d FAILED: %s' % (len(fails), '; '.join(f.split(':')[0] for f in fails))))
     sys.exit(1 if fails else 0)

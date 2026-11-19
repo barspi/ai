@@ -56,6 +56,7 @@ IMPORTANCE = {'child': 3, 'closed by': 3, 'blocked by': 3, 'depends on': 3,
               'follow-up': 2, 'led to': 2, 'spawned': 2, 'revised by': 2, 'work done by': 2, 'evidence, does not close': 2,
               'supersedes': 2, 'duplicate of': 2, 'references': 2,
               'related': 1, 'mentioned': 1}
+LOW_NOTE = {'related': 'Related:', 'mentioned': 'Mentions'}   # an IMPORTANCE 1 arrow not drawn: the tail box's note "<word> #N."
 PULL = {3: 1.0, 2: 0.6, 1: 0.2}                     # tier -> how hard the arrow pulls its two frames together
 
 

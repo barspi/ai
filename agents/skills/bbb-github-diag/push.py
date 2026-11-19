@@ -24,11 +24,14 @@ end stretch (a tip box along the arrow, a tail box against it; a straight arrow 
 label plus PUSH_STEPS. Candidates are tried cheapest first by total displacement (every box moved, by how much, frames grown);
 the first whose arrow then has a place for its label, with no arrow invalid that was valid, is kept.
 
-straighten, a detour: a path longer than DETOUR_RATIO times the Manhattan distance of its ends and DETOUR_MIN px more than it. A
-probe route with no clearance round the other boxes (route.BOXM 0) shows where a short path would go; the boxes nearer to it than
-route.BOXM + route.G are the blockers. Pushing them away from the probe path (both sides of a gap, or one side by the whole need)
-opens it; the cheapest push after which the arrow, routed again, is at most DETOUR_GAIN of its old length and has a label is kept.
-Pinned arrows are never touched.
+straighten, a crazy path (route.is_crazy: much longer than the Manhattan distance of its ends, or many more bends than its ends
+need). A probe route with no clearance round the
+other boxes (route.BOXM 0) and little round the frame borders (PROBE_FPROX) shows where a short path would go; the boxes nearer to
+it than route.BOXM + route.G, and the frames whose border a stretch runs beside, outside them, nearer than route.FPROX + route.G
+(two frames whose gap holds no lane), are the blockers. Pushing them away from the probe path (both sides of a gap, or one side by
+the whole need; a frame moves rigidly with all it holds, by the same cascade as a box) opens it; the cheapest push after which the
+arrow, routed again, is no longer crazy (or at most DETOUR_GAIN of its old length) and has a label is kept. Pinned arrows are never
+touched.
 
 usage: push.py selftest
 """
@@ -41,10 +44,9 @@ import collapse, draw, frames, route
 GAP = 28.0                  # px a pushed box keeps from the next one when no arrow runs between them (move.GAP)
 PUSH_STEPS = (5, 20, 40)    # px over the label's shortfall: the pushes tried at one end
 PUSH_MAX = 160              # px: no box is pushed further than this for one arrow
-DETOUR_RATIO = 2.0          # a path this many times longer than the Manhattan distance of its two ends ...
-DETOUR_MIN = 400            # ... and this many px longer is a detour
 DETOUR_GAIN = 0.6           # a straightened path is kept only when it is at most this share of the old one
 DETOUR_BENDS = 4            # the probe path may have at most this many bends (a short route, not another detour)
+PROBE_FPROX = 2 * route.G   # px the probe keeps from a frame border (route.FPROX in the real search): it runs in a gap with no lane
 SIDE_OF = {(1, 0): 'right', (-1, 0): 'left', (0, 1): 'bottom', (0, -1): 'top'}
 LOG = []                    # one line per push kept: what moved, by how much, which frames grew (the scripts print it)
 STATS = {'tried': 0, 'kept': 0, 'secs': 0.0}
@@ -53,10 +55,11 @@ DEPTH = {'n': 0}            # > 0 while a push routes what it cut: model.finish 
 
 class Pushed(NamedTuple):
     text: str
-    moved: dict             # box -> (dx, dy)
+    moved: dict             # box -> (dx, dy); a pushed frame moves with all it holds, its boxes are here
     grown: list             # (frame title, side, px) of every frame grown
     cut: set                # (a, b, kind) of the arrows to route again
     disp: float             # total displacement: px moved summed over the boxes, plus the px every grown frame grew
+    frames_moved: tuple = ()  # (frame title, dx, dy) of every frame moved
 
 
 def _turn_pt(side, p):
@@ -126,13 +129,15 @@ def _path_line(line, pts):
 
 
 def push_box(text, n, side, d):
-    """Box n moves d px towards `side`; what it would hit moves too (module docstring). Returns a Pushed."""
+    """Box n, or the frame n = ('f', k) (k: its place among the frames of collapse.parse), moves d px towards `side`; what it would
+    hit moves too (module docstring). Returns a Pushed."""
     import model
     lines, box, pop, fr = collapse.parse(text)
     rects = [frames._rect(f) for f in fr]
     boxes = {m: frames._rect(b) for m, b in box.items()}
-    home = _innermost(rects, boxes[n])
     parent = {k: _innermost(rects, rects[k], skip=k) for k in range(len(rects))}
+    start = n if isinstance(n, tuple) else ('b', n)
+    home = parent[n[1]] if isinstance(n, tuple) else _innermost(rects, boxes[n])
     turn = frames._TURN[side]
     blocks = {('b', m): turn(r) for m, r in boxes.items() if _innermost(rects, r) == home}
     blocks.update({('f', k): turn(rects[k]) for k in range(len(rects)) if parent[k] == home})
@@ -141,7 +146,7 @@ def push_box(text, n, side, d):
         if ln.startswith('<path d="M') and 'marker-end' in ln:
             tp = [_turn_pt(side, p) for p in route.straight(model.arrow_points(ln))]
             lanes += [(p[1], min(p[0], q[0]), max(p[0], q[0])) for p, q in zip(tp, tp[1:]) if abs(p[1] - q[1]) < .01]
-    shift = cascade(blocks, ('b', n), d, lanes)
+    shift = cascade(blocks, start, d, lanes)
     way = frames._WAY[side]
     moves, fmoves = {}, {}
     for (kind, key), s in shift.items():
@@ -161,6 +166,7 @@ def push_box(text, n, side, d):
             pad = min(c[1] + c[3] - (q[1] + q[3]), frames.BOTTOM_PAD)
             need = max(need, q[1] + q[3] + s + pad - (c[1] + c[3]))
     disp = sum(abs(v[0]) + abs(v[1]) for v in moves.values())
+    fnames = tuple((frames.name_of(text, rects[k]), v[0], v[1]) for k, v in sorted(fmoves.items()))
     if need > .01:
         need = math.ceil(need)
         name = frames.name_of(text, rects[home])
@@ -232,7 +238,7 @@ def push_box(text, n, side, d):
     nb = [frames._rect(b) for b in collapse.parse(res)[1].values()]
     res = frames.set_canvas_height(res, max(r[1] + r[3] for r in nb) + frames.CANVAS_BOTTOM)
     res = frames.set_canvas_width(res, max(r[0] + r[2] for r in nb) + frames.CANVAS_BOTTOM)
-    return Pushed(res, moves, grown, {tuple(c) for c in cut if c}, disp)
+    return Pushed(res, moves, grown, {tuple(c) for c in cut if c}, disp, fnames)
 
 
 def settle(before, pushed):
@@ -343,9 +349,10 @@ def _end_pushes(text, key):
 
 def _apply(text, pushes):
     """push_box for each (box, side, d) in turn. Returns a Pushed for all of them, or None when a box is not in the picture."""
-    moved, grown, cut, disp = {}, [], set(), 0.0
+    moved, grown, cut, disp, fmoved = {}, [], set(), 0.0, ()
     for n, side, d in pushes:
-        if n not in collapse.parse(text)[1]:
+        _, box, _, fr = collapse.parse(text)
+        if (n[1] >= len(fr)) if isinstance(n, tuple) else n not in box:
             return None
         p = push_box(text, n, side, d)
         text = p.text
@@ -355,14 +362,16 @@ def _apply(text, pushes):
         grown += p.grown
         cut |= p.cut
         disp += p.disp
-    return Pushed(text, moved, grown, cut, disp)
+        fmoved += p.frames_moved
+    return Pushed(text, moved, grown, cut, disp, fmoved)
 
 
 def _describe(why, key, p):
     mv = ', '.join('#%d %s' % (m, '(%+g, %+g)' % v if v[0] and v[1] else ('%+gx' % v[0] if v[0] else '%+gy' % v[1]))
                    for m, v in sorted(p.moved.items()))
     gr = '; frames grown: ' + ', '.join('"%s" %s %dpx' % g for g in p.grown) if p.grown else ''
-    return '%s #%d %s #%d: moved %s%s' % (why, key[0], key[2], key[1], mv, gr)
+    fm = '; frames moved: ' + ', '.join('"%s" (%+g, %+g)' % f for f in p.frames_moved) if p.frames_moved else ''
+    return '%s #%d %s #%d: moved %s%s%s' % (why, key[0], key[2], key[1], mv, gr, fm)
 
 
 def lengths(text):
@@ -433,7 +442,7 @@ def _length(pts):
 
 
 def detours(text):
-    """(key, length, Manhattan distance) of every arrow that makes a detour (DETOUR_RATIO, DETOUR_MIN) and is not pinned."""
+    """(key, length, Manhattan distance) of every arrow whose path is crazy (route.is_crazy) and is not pinned."""
     import model, svgmeta
     out = []
     for ln in text.split('\n'):
@@ -441,29 +450,48 @@ def detours(text):
             continue
         key = model.svgmeta_arrow(ln)
         pts = route.straight(model.arrow_points(ln))
-        L, M = _length(pts), abs(pts[0][0] - pts[-1][0]) + abs(pts[0][1] - pts[-1][1])
-        if key and L > DETOUR_RATIO * M and L - M > DETOUR_MIN:
-            out.append((key, L, M))
+        if key and route.is_crazy(pts):
+            out.append((key, _length(pts), abs(pts[0][0] - pts[-1][0]) + abs(pts[0][1] - pts[-1][1])))
     return out
 
 
-def blockers(sc, pts, a, b):
+def _better(pts, L):
+    """Does the path cure a crazy one of length L: not crazy itself, or at most DETOUR_GAIN of L?"""
+    return not route.is_crazy(pts) or _length(route.straight([tuple(p) for p in pts])) <= DETOUR_GAIN * L
+
+
+def _away(o, c, lo, hi, r):
+    """(gap, side) of rectangle r from a stretch that runs beside it (o 'h' at y c, or 'v' at x c, from lo to hi), with the way
+    away from the stretch; None when the stretch does not run beside it."""
+    x, y, w, h = r
+    if o == 'h' and lo < x + w and hi > x:
+        return (y - c, 'bottom') if y + h / 2 > c else (c - (y + h), 'top')
+    if o == 'v' and lo < y + h and hi > y:
+        return (x - c, 'right') if x + w / 2 > c else (c - (x + w), 'left')
+    return None
+
+
+def blockers(sc, pts, a, b, frame_keys=None):
     """[(stretch index, box, side, px)]: each box nearer to a stretch of the path pts than route.BOXM + route.G (its own two aside),
-    with the way away from that stretch and the px it must go so that the stretch keeps route.BOXM."""
+    with the way away from that stretch and the px it must go so that the stretch keeps route.BOXM. With frame_keys (the key of each
+    frame of sc.frames for push_box, ('f', k)): also each frame that a stretch runs beside, outside it, nearer than route.FPROX +
+    route.G, as (stretch index, its key, side, px) so that the stretch keeps route.FPROX. A box that such a frame holds is not a
+    blocker of its own: the frame moves with it."""
     out = []
-    m = route.BOXM + route.G
+    m, mf = route.BOXM + route.G, route.FPROX + route.G
     for k, (o, c, lo, hi) in enumerate(route.segments(route.straight([tuple(p) for p in pts]))):
-        for n, (x, y, w, h) in sc.boxes.items():
-            if n in (a, b) or n < 0:
+        walls = []
+        for key, r in zip(frame_keys or (), sc.frames):
+            got = _away(o, c, lo, hi, r)
+            if got and 0 <= got[0] < mf:              # beside it, outside: a stretch inside a frame is no matter for a push
+                out.append((k, key, got[1], _ceil5(mf - got[0])))
+                walls.append(r)
+        for n, r in sc.boxes.items():
+            if n in (a, b) or n < 0 or any(route.holds(f, r) for f in walls):
                 continue
-            if o == 'h' and lo < x + w and hi > x:
-                gap, side = (y - c, 'bottom') if y + h / 2 > c else (c - (y + h), 'top')
-            elif o == 'v' and lo < y + h and hi > y:
-                gap, side = (x - c, 'right') if x + w / 2 > c else (c - (x + w), 'left')
-            else:
-                continue
-            if gap < m:
-                out.append((k, n, side, _ceil5(m - gap)))
+            got = _away(o, c, lo, hi, r)
+            if got and got[0] < m:
+                out.append((k, n, got[1], _ceil5(m - got[0])))
     return out
 
 
@@ -486,7 +514,7 @@ def detour_pushes(bl):
         for _, n, sd, d in bl:
             if n not in least or d < least[n][1]:
                 least[n] = (sd, d)
-        return [sorted((n, sd, d) for n, (sd, d) in least.items())] if least else []
+        return [sorted(((n, sd, d) for n, (sd, d) in least.items()), key=str)] if least else []
     options = []
     for v in gaps:
         sides = sorted({sd for _, sd, _ in v})
@@ -509,23 +537,24 @@ def detour_pushes(bl):
                 break
             merged[n] = (sd, max(d, merged.get(n, (sd, 0))[1]))
         if ok:
-            out.append(sorted((n, sd, d) for n, (sd, d) in merged.items()))
+            out.append(sorted(((n, sd, d) for n, (sd, d) in merged.items()), key=str))
     return [c for k, c in enumerate(out) if c not in out[:k]]
 
 
 def _probe(text, key):
-    """The path the arrow would take with no clearance round the other boxes (route.BOXM 0), in the picture without it."""
+    """The path the arrow would take with no clearance round the other boxes (route.BOXM 0) and PROBE_FPROX round the frame
+    borders, in the picture without it."""
     import model
     lines = text.split('\n')
     i = next(i for i, ln in enumerate(lines) if model.svgmeta_arrow(ln) == key)
     t, _ = model.take_out(text, [i])
     sc = model.scene(t)
-    keep = route.BOXM
-    route.BOXM = 0
+    keep = route.BOXM, route.FPROX
+    route.BOXM, route.FPROX = 0, PROBE_FPROX
     try:
         pts = route.route(sc, key[0], key[1], '*', '*')
     finally:
-        route.BOXM = keep
+        route.BOXM, route.FPROX = keep
     return sc, pts
 
 
@@ -538,9 +567,10 @@ def straighten(text):
     t0 = time.time()
     for key, L, M in detours(text):
         sc, probe = _probe(text, key)
-        if not probe or _length(probe) > DETOUR_GAIN * L or len(route.straight(probe)) - 2 > DETOUR_BENDS:
+        if not probe or not _better(probe, L) or len(route.straight(probe)) - 2 > DETOUR_BENDS:
             continue
-        cands = [c for c in detour_pushes(blockers(sc, probe, key[0], key[1])) if c and max(d for _, _, d in c) <= PUSH_MAX]
+        fkeys = [('f', k) for k in range(len(sc.frames))]            # model.read keeps collapse.parse's order of the frames
+        cands = [c for c in detour_pushes(blockers(sc, probe, key[0], key[1], fkeys)) if c and max(d for _, _, d in c) <= PUSH_MAX]
         pushed = [p for p in (_apply(text, c) for c in cands) if p is not None]
 
         def judge(t, key=key, L=L):
@@ -551,7 +581,7 @@ def straighten(text):
             t2, pend = model.take_out(t, [i], keep={i})
             r = model.route_arrows(t2, pend, keep_old=True).text
             line = _arrow_line(r, key)
-            ok = line is not None and _length(route.straight(model.arrow_points(line))) <= DETOUR_GAIN * L and _labelled(r, key)
+            ok = line is not None and _better(model.arrow_points(line), L) and _labelled(r, key)
             return r if ok else None
 
         text, p = _best(text, key, pushed, judge)

@@ -78,6 +78,10 @@ class Routed(NamedTuple):
     failed: list                # (a, b, kind, why)
     grown: list                 # (frame title, px) of every frame grown to make room
     unlabelled: list            # [Arrow] still with no label after finish()
+    noted: list = []            # (a, b, kind, why): low-importance arrows routed now whose path was crazy: a note on box a instead
+
+
+NOTED = 'low importance and a crazy path (route.is_crazy): not drawn'   # the start of the `why` of a Routed.noted arrow
 
 
 def arrow_at(line, boxes=None):
@@ -245,15 +249,20 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
     that ran through it; _grow_for routes them in the same step, and takes the growth only when all of them find a path).
     An arrow with no path is left out. keep_old: the arrows are routed one at a time with the others still drawn as they were, and
     one with no path keeps the markup it had (so an old path is never put back into channels that others took while it was out).
+    A new path is made only where it is worth it: a low-importance arrow (draw.IMPORTANCE 1: related, mentioned) that the caller asked
+    to route (new, or routed again now; not one a push cut, Pending.keep) and whose best path is crazy (route.is_crazy) is not drawn.
+    It becomes a note on its tail box ("Related: #N.", draw.LOW_NOTE; svg_state.add_note, where there is room) and goes into the
+    metadata's "nopath" with the reason (Routed.noted). An arrow that is drawn and not routed now is never touched by this.
     Then the arrows that had no room for their label are tried once more in the finished picture (retry_short), and finish():
     jump arcs, labels. Returns a Routed. The text holds no slot afterwards."""
+    import draw
     sc = scene(text, keep_out)
     queue = _by_importance(pending, sc)
     if keep_old:                                          # everything back as it was; each arrow is taken out on its turn
         for p in queue:
             text = text.replace(p.slot, p.old, 1)
         sc = scene(text, keep_out)
-    results, failed, grown = {}, [], []
+    results, failed, grown, noted = {}, [], [], []
     while queue:
         p = queue.pop(0)
         key = (p.a, p.b, p.kind)
@@ -265,9 +274,13 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
             if i is None:
                 continue
             text, got = take_out(text, [i])
-            p = got[0]._replace(sides=p.sides, pin=p.pin)
+            p = got[0]._replace(sides=p.sides, pin=p.pin, keep=p.keep)
             sc = scene(text, keep_out)
         res = _route_one(sc, p)
+        if res and not p.keep and draw.IMPORTANCE.get(p.kind, 2) == 1 and route.is_crazy(res[0]):
+            noted.append((p.a, p.b, p.kind))              # not worth a crazy path: a note instead (docstring)
+            text = text.replace(p.slot, '', 1)
+            continue
         drawn = [(p, res)] if res else []
         fr = route.common_frame(sc, p.a, p.b) if res is None and p.a in sc.boxes and p.b in sc.boxes else None
         if fr:
@@ -289,6 +302,7 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
             text = _fill(text, sc, p, res)
         for q, r in drawn:
             results[(q.a, q.b, q.kind)] = (len(r[0]) - 2, r[2])
+    text, noted = _note_instead(text, noted)
     own = {p.slot for p in pending}                       # only this call's slots: a caller may still hold others (add_nodes, settle)
     text = '\n'.join(l for l in text.split('\n') if l not in own)
     routed = [(a, b, bends, room) for (a, b, _), (bends, room) in results.items()]
@@ -296,7 +310,23 @@ def route_arrows(text, pending, keep_out=(), keep_old=False):
     text, unlabelled = finish(text, list(kinds), room=False)
     routed, again = retry_short(text, routed, keep_out, kinds)
     text, unlabelled = finish(again, list(kinds))         # with room: no arrow is left without a label
-    return Routed(text, routed, failed, grown, unlabelled)
+    return Routed(text, routed, failed, grown, unlabelled, noted)
+
+
+def _note_instead(text, noted):
+    """route_arrows' low-importance arrows with a crazy path: a note on the tail box and a "nopath" record each. Returns (text,
+    [(a, b, kind, why)])."""
+    import draw, svg_state, svgmeta
+    out = []
+    for a, b, kind in noted:
+        text, why = svg_state.add_note(text, a, '%s #%d.' % (draw.LOW_NOTE.get(kind, 'See'), b))
+        reason = NOTED + ('; a note on #%d instead' % a if why is None else '; no note on #%d (%s): name it there by hand' % (a, why))
+        meta = svgmeta.read(text)
+        if meta is not None:
+            svgmeta.add_nopath(meta, a, b, kind, reason)
+            text = svgmeta.write(text, meta)
+        out.append((a, b, kind, reason))
+    return text, out
 
 
 def svgmeta_arrow(line):
@@ -451,7 +481,7 @@ def repair(text, count_only=False, only=None):
     known = {i for i in bad if arrow_at(lines[i])}        # an arrow off its box is still known by its data-from and data-to
     problems = ['an arrow near (%d,%d) ends on no box and carries no data-from/data-to: draw it again with add_nodes.py'
                 % arrow_points(lines[i])[0] for i in set(bad) - known]
-    text, pend = take_out(text, sorted(known))
+    text, pend = take_out(text, sorted(known), keep=known)    # an operation broke them; nobody asked to route them (no note)
     res = route_arrows(text, pend, keep_old=True)
     problems += ['NO PATH for the arrow #%s -> #%s (%s): it stays as it was' % (a, b, why) for a, b, _, why in res.failed]
     problems += ['frame "%s" inflated (%s) to make room' % g for g in res.grown]
