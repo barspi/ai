@@ -31,7 +31,8 @@ usage: selftest.py [--no-static]
 5. low_note_cases(): a low-importance arrow routed now whose path is crazy becomes a note on its tail box and a "nopath" record;
    a stronger kind, or one a push cut, is drawn.
 6. next_to_cases(): add_nodes.py puts a box joined by a strong arrow (a closing pull request) next to its `near` after a small push.
-7. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
+7. finish_scope_cases(): model.finish's room and straighten passes take only the arrows the call routed.
+8. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
    once the blocker reopens; the checker accepts it.
 The in-process runs call each script's main() with sys.argv set, so a crash shows its traceback here.
 """
@@ -429,6 +430,34 @@ def next_to_cases(tmp):
           + ('' if f == 0 and code == 0 else ':\n' + out + rep_))
 
 
+def finish_scope_cases(tmp):
+    """model.finish makes room and straightens only for the arrows the call routed: #122 moved 70px from #121 with the push pass off
+    (BBB_NO_PUSH), so #121 -> #122 has no room for its label (a whole-chart pass would push the boxes apart, case B); add_nodes.py
+    then adds a box beside #100 and leaves #121, #122 and every old arrow as they were."""
+    import push
+    ex = open(EXAMPLE, encoding='utf-8').read()
+    src, tight, dst, spec = (os.path.join(tmp, n) for n in ('fs.svg', 'fs1.svg', 'fs2.svg', 'fs.json'))
+    open(src, 'w', encoding='utf-8').write(ex)
+    os.environ['BBB_NO_PUSH'] = '1'
+    try:
+        call(move, [src, tight, '122@1774,='])
+    finally:
+        del os.environ['BBB_NO_PUSH']
+    t0 = open(tight, encoding='utf-8').read() if os.path.exists(tight) else ''
+    open(spec, 'w').write('{"repo": "acme/shop", "boxes": [{"num": 170, "state": "open", "title": "a follow-up far from the rest", '
+                          '"meta": "opened 2026-01-07 · still open", "near": 100, "frame": ""}], '
+                          '"arrows": [{"from": 100, "to": 170, "kind": "follow-up"}]}')
+    code, out = call(add_nodes, [tight, dst, spec])
+    t = open(dst, encoding='utf-8').read() if code == 0 and os.path.exists(dst) else ''
+    before = {model.svgmeta_arrow(ln): ln for ln in t0.split('\n') if svgmeta.is_arrow(ln)}
+    after = {model.svgmeta_arrow(ln): ln for ln in t.split('\n') if svgmeta.is_arrow(ln)}
+    b0, b1 = model.scene(t0).boxes if t0 else {}, model.scene(t).boxes if t else {}
+    check(t0 and (121, 122, 'closed by') in push.needing_room(t0) and t and (100, 170, 'follow-up') in after
+          and all(b1.get(n) == r for n, r in b0.items()) and after.get((121, 122, 'closed by')) == before.get((121, 122, 'closed by')),
+          'J. add_nodes.py leaves an old arrow with no room for its label, and its boxes, as they were'
+          + ('' if code == 0 else ':\n' + out))
+
+
 def collapse_rect(d):
     return d['x'], d['y'], d['w'], d['h']
 
@@ -591,6 +620,7 @@ def main():
         room_cases(tmp)
         low_note_cases(tmp)
         next_to_cases(tmp)
+        finish_scope_cases(tmp)
         resolved_cases(tmp)
     print('selftest: %s' % ('OK' if not fails else '%d FAILED: %s' % (len(fails), '; '.join(f.split(':')[0] for f in fails))))
     sys.exit(1 if fails else 0)

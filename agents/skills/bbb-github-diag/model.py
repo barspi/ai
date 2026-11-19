@@ -383,10 +383,12 @@ def _frame_title(text, rect):
 def finish(text, pairs, room=True):
     """What every script does after it routed arrows, so that nothing is left for a later step: the jump arcs of the whole diagram
     (hops.py) and the red crosses, every label that now sits badly placed again (relabel, with the checker's 20px of shaft from a
-    jump), and a label for every arrow that still has none (label_missing; `pairs`, the arrows the caller routed, are kept for the
-    callers and no longer limit it: no arrow is left without a label). Then, with room (the default; never inside a push's own
-    routing): push.make_room for each arrow that still has no label, or whose label still covers something (its end boxes move
-    apart, push.py), and push.straighten for each arrow that makes a long detour a small push can save. Then labels_on_top: every
+    jump), and a label for every arrow that still has none (label_missing: no arrow is left without a label). Then, with room (the
+    default; never inside a push's own routing), for the arrows the caller routed in this call (`pairs`, (a, b) each: new arrows,
+    arrows routed on request, arrows a push or a repair routed again; None: every arrow, only for an explicit whole-chart run,
+    tidy()): push.make_room for each that still has no label, or whose label still covers something (its end boxes move apart,
+    push.py), and push.straighten for each that is crazy where a small push can save it. An old arrow the call did not route is
+    never straightened or pushed for. Then labels_on_top: every
     label after every path. Last, svg_state.grey_resolved: a `blocked by` arrow whose blocker is closed or merged is grey again after
     it was drawn anew (and normal again once the blocker reopens). Returns (text, [Arrow] with no label)."""
     import hops
@@ -397,8 +399,9 @@ def finish(text, pairs, room=True):
     if room and not push.DEPTH['n'] and os.environ.get('BBB_NO_PUSH') != '1':
         push.DEPTH['n'] += 1                              # finish() inside a push's own routing makes no room again
         try:
-            text = push.make_room(text)
-            text = push.straighten(text)
+            only = None if pairs is None else {tuple(p[:2]) for p in pairs}
+            text = push.make_room(text, only)
+            text = push.straighten(text, only)
         finally:
             push.DEPTH['n'] -= 1
         text, _, _ = hops.add_hops(text)

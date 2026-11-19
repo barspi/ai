@@ -3,8 +3,9 @@
 arrow which makes a long detour round a narrow gap. A box moves; it never stretches.
 
     t = push_box(text, n, side, d)       box n moves d px towards `side` (right, left, bottom, top): a Pushed
-    text = make_room(text)               every arrow with no label (or a label that covers something) gets room for one
-    text = straighten(text)              every long detour that a small push saves is routed short
+    text = make_room(text, only)         every arrow with no label (or a label that covers something) gets room for one
+    text = straighten(text, only)        every crazy arrow that a small push saves is routed short
+    only: a set of (a, b), the arrows the script routed in this call (model.finish); None: every arrow (model.py tidy)
 
 push_box, the cascade. The picture is turned so that `side` is the bottom (frames._TURN), so one rule serves the four sides. The
 blocks are the boxes and the frames that sit directly in the pushed box's frame (its container; the whole page when it has none);
@@ -414,13 +415,13 @@ def _best(text, key, pushed, judge):
     return best[1], best[2]
 
 
-def make_room(text):
+def make_room(text, only=None):
     """Give a place for its label to every arrow that has none, or whose label covers something (needing_room), by pushing its end
-    boxes apart (module docstring). Returns the text; LOG says what moved."""
+    boxes apart (module docstring); with only (a set of (a, b)), to those arrows alone. Returns the text; LOG says what moved."""
     t0 = time.time()
     tried = set()
     while True:
-        todo = [k for k in needing_room(text) if k not in tried]
+        todo = [k for k in needing_room(text) if k not in tried and (only is None or k[:2] in only)]
         if not todo:
             break
         key = todo[0]
@@ -557,14 +558,16 @@ def _probe(text, key):
     return sc, pts
 
 
-def straighten(text):
-    """Route short every detour (detours()) that pushing the boxes next to its probe path opens (module docstring): the push sets
-    (detour_pushes) are tried the least total displacement first; the first after which the arrow, routed again, is at most
-    DETOUR_GAIN of its old length, with a label and no arrow invalid that was valid, is kept. Returns the text; LOG says what
-    moved."""
+def straighten(text, only=None):
+    """Route short every crazy arrow (detours()), or with only (a set of (a, b)) those arrows alone, that pushing the boxes and
+    frames next to its probe path opens (module docstring): the push sets (detour_pushes) are scored by push._best; one is kept
+    when the arrow, routed again, is no longer crazy or at most DETOUR_GAIN of its old length, with a label and no arrow invalid
+    that was valid. Returns the text; LOG says what moved."""
     import model
     t0 = time.time()
     for key, L, M in detours(text):
+        if only is not None and key[:2] not in only:
+            continue
         sc, probe = _probe(text, key)
         if not probe or not _better(probe, L) or len(route.straight(probe)) - 2 > DETOUR_BENDS:
             continue
