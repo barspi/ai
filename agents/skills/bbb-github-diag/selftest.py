@@ -30,7 +30,8 @@ usage: selftest.py [--no-static]
    round them).
 5. low_note_cases(): a low-importance arrow routed now whose path is crazy becomes a note on its tail box and a "nopath" record;
    a stronger kind, or one a push cut, is drawn.
-6. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
+6. next_to_cases(): add_nodes.py puts a box joined by a strong arrow (a closing pull request) next to its `near` after a small push.
+7. resolved_cases(): a `blocked by` arrow whose blocker is closed or merged is grey (svg_state.grey_resolved), and normal again
    once the blocker reopens; the checker accepts it.
 The in-process runs call each script's main() with sys.argv set, so a crash shows its traceback here.
 """
@@ -405,6 +406,29 @@ def room_cases(tmp):
     check(_quiet(push.selftest), 'B, D. push.selftest(): the cascade and reattach')
 
 
+def next_to_cases(tmp):
+    """add_nodes.py, a closing pull request for #103 in a frame whose column next to #103 is full (#112, #113) and whose spot under
+    #103 is a little short (#104 too close): it lands next to #103 after a small push (no free spot elsewhere is taken), with no
+    PROBLEM, every arrow kept, FAILS 0."""
+    ex = open(EXAMPLE, encoding='utf-8').read().replace('height="451.5"', 'height="560"', 1)   # the frame with room at its bottom
+    src, dst, spec = (os.path.join(tmp, n) for n in ('nt.svg', 'nt2.svg', 'nt.json'))
+    open(src, 'w', encoding='utf-8').write(ex)
+    open(spec, 'w').write('{"repo": "acme/shop", "boxes": [{"num": 160, "state": "waiting", "title": "the fix for the checkout issue and '
+                          'its tests", "meta": "opened 2026-01-06 · still open", "author": "dev", "near": 103, "frame": "guest checkout"}], '
+                          '"arrows": [{"from": 103, "to": 160, "kind": "closed by"}]}')
+    sc0 = model.scene(ex)
+    code, out = call(add_nodes, [src, dst, spec])
+    t = open(dst, encoding='utf-8').read() if code == 0 and os.path.exists(dst) else ''
+    sc = model.scene(t) if t else None
+    b = sc and sc.boxes.get(160)
+    moved = sc and {n: round(sc.boxes[n][1] - r[1]) for n, r in sc0.boxes.items() if n in sc.boxes and sc.boxes[n] != r}
+    f, w, rep_ = checked(t, tmp, 'nt3.svg') if t else (-1, -1, '')
+    check(b is not None and add_nodes.next_to(b[:2], b[2], b[3], sc.boxes[103]) and 'PUSH room next to #103 for #160' in out
+          and 'PROBLEM' not in out and moved and max(abs(v) for v in moved.values()) <= 100 and model.count_arrows(t) == model.count_arrows(ex) + 1
+          and f == 0, 'I. a closing PR lands next to its issue after a small push (%s; moved %s)' % (b, moved)
+          + ('' if f == 0 and code == 0 else ':\n' + out + rep_))
+
+
 def collapse_rect(d):
     return d['x'], d['y'], d['w'], d['h']
 
@@ -566,6 +590,7 @@ def main():
         by_construction(tmp)
         room_cases(tmp)
         low_note_cases(tmp)
+        next_to_cases(tmp)
         resolved_cases(tmp)
     print('selftest: %s' % ('OK' if not fails else '%d FAILED: %s' % (len(fails), '; '.join(f.split(':')[0] for f in fails))))
     sys.exit(1 if fails else 0)

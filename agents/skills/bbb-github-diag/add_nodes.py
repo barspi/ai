@@ -7,8 +7,12 @@ usage: add_nodes.py IN.svg OUT.svg SPEC.json [--snapshot snap.json]
 The file is the source of truth: a revision starts from the previous file (new_revision.py), is refreshed (refresh_meta.py --apply), gets
 its new boxes and arrows from this script, then check_diag.py. The script finds free space for a box and routes every arrow in the
 diagram as it is now (route.py reads the current boxes, frames, labels and arrows), then redoes the jump arcs (hops.py).
-A box goes in free space beside `near` (rules.near_for when the spec has none). When its frame has no free spot, it goes at the
-frame's bottom, beside `near` where it can (bottom_spot), and the frame grows to hold it: frames.grow pushes down every frame and box
+A box goes in free space beside `near` (rules.near_for when the spec has none). A box joined to `near` by a strong arrow
+(ADJACENT_KINDS: a closing pull request and its issue above all) lands next to it (next_to_near): a free spot on its right, right
+above or right under it; else the few boxes in the best such spot move a little along their column (push.push_box, the cascade in
+the frame; the least displacement, push._best), first with no frame growth, then letting the frame grow from that row; landing
+anywhere else is a PROBLEM. When its frame has no free spot, it goes at the frame's bottom, beside `near` where it can (bottom_spot;
+a PROBLEM when that is not next to `near`), and the frame grows to hold it: frames.grow pushes down every frame and box
 below that overlaps it horizontally, so the box never lands on the frame below. Arrows go through model.route_arrows: an arrow between
 two boxes of one frame never leaves it (the frame grows when it has no room), and each path leaves room for its label where one of
 the cheapest paths can.
@@ -43,6 +47,11 @@ import draw, hops, model, route, rules, svgmeta
 
 STEP = 10
 GAP_X = 205
+ADJACENT_KINDS = ('closed by', 'work done by', 'child', 'revised by')   # a new box joined to `near` by one of these lands next to it
+ROW_GAP = 30          # px between two boxes of a column (is_free keeps it)
+NEXT_TO_ROWS = 2      # next to `near` on its right: its top within near's height plus this many ROW_GAPs of near's top
+COLUMN_GAP = 80       # px between `near` and a new box right above or under it: a vertical arrow with its label fits between them
+                      # (an 18px label, route.LABEL_SHAFT on each side, an 11px head); next to it in its column: no more than this
 
 
 def intersects(a, b, pad=0):
@@ -59,13 +68,90 @@ def is_free(sc, r, frame=None):
                (o == 'v' and r[0] - 14 < c < r[0] + r[2] + 14 and lo < r[1] + r[3] + 14 and hi > r[1] - 14):
                 return False
     for f in sc.frames:
-        inside = f[0] + 20 <= r[0] and r[0] + r[2] <= f[0] + f[2] - 20 and f[1] + 40 <= r[1] and r[1] + r[3] <= f[1] + f[3] - 20
         if frame is not None and f == frame:
-            if not inside:
+            if not inside_frame(r, f):
                 return False
         elif intersects(r, f, 10):
             return False
     return True
+
+
+def inside_frame(r, f):
+    """Does rectangle r sit inside frame f with the margins a box keeps (20px from the sides and the bottom, 40px under the title)?"""
+    return f[0] + 20 <= r[0] and r[0] + r[2] <= f[0] + f[2] - 20 and f[1] + 40 <= r[1] and r[1] + r[3] <= f[1] + f[3] - 20
+
+
+def next_to(spot, w, h, nr):
+    """Is a w x h box at spot (x, y) next to the box nr (NEXT_TO_ROWS)?"""
+    x, y = spot
+    nx, ny, nw, nh = nr
+    reach = NEXT_TO_ROWS * ROW_GAP
+    right = 0 <= x - (nx + nw) <= GAP_X + ROW_GAP and abs(y - ny) <= nh + reach
+    gap = max(ny - (y + h), y - (ny + nh))                     # between the two in one column (negative: they overlap)
+    return right or (abs(x - nx) <= ROW_GAP and 0 <= gap <= COLUMN_GAP)
+
+
+def _next_spots(sc, w, h, near, frame):
+    """The spots next to `near`, as offsets from its top-left corner: on its right (on a column the frame has within ROW_GAP) from
+    level with it outwards, then right under it, then right above it."""
+    nx, ny, nw, nh = sc.boxes[near]
+    xr = nx + nw + GAP_X
+    if frame is not None:
+        xr = next((b[0] for b in sc.boxes.values() if route.holds(frame, b) and abs(b[0] - xr) <= ROW_GAP), xr)
+    out = [(xr - nx, s * k * STEP) for k in range(int((nh + NEXT_TO_ROWS * ROW_GAP) // STEP) + 1) for s in ((1, -1) if k else (1,))]
+    return out + [(0, nh + COLUMN_GAP), (0, -h - COLUMN_GAP)]
+
+
+def next_to_near(text, w, h, near, frame, fname, num):
+    """A spot next to `near` (next_to) for a new w x h box in `frame` (found again by its title fname after a push), and the text:
+    a free spot (is_free), else room made by pushing the boxes that sit in a spot (beside near level with it, right under it, right
+    above it) along their column, away from near (beside it: those above the spot's middle up, the others down), each by what it
+    lacks of ROW_GAP (push.push_box: what
+    they would hit moves too, inside the frame). Each spot's push is settled (its cut arrows routed again) and scored by push._best:
+    total displacement plus the growth of the arrows it cut, the least wins. First no push may grow the frame; then one may (the
+    frame grows from the pushed boxes' row). Returns (text, (x, y) or None, description of the push or '')."""
+    import frames, push
+    sc, _ = model.read(text)
+    nx, ny = sc.boxes[near][:2]
+    for dx, dy in _next_spots(sc, w, h, near, frame):
+        if is_free(sc, (nx + dx, ny + dy, w, h), frame):
+            return text, (nx + dx, ny + dy), ''
+    nh = sc.boxes[near][3]
+    offsets = [(*_next_spots(sc, w, h, near, frame)[0], None), (0, nh + COLUMN_GAP, 'bottom'), (0, -h - COLUMN_GAP, 'top')]
+
+    def spot_of(t):                                            # the frame and near as they are in t
+        s2, _ = model.read(t)
+        return s2, (frames.by_name(t, fname) if fname else None), s2.boxes[near][:2]
+    for grow in (False, True):
+        sets, where = [], {}
+        for dx, dy, way in offsets:
+            s = (nx + dx, ny + dy, w, h)
+            if frame is not None and not inside_frame(s, frame):
+                continue
+            mine = {n: r for n, r in sc.boxes.items() if n != near and n >= 0 and (frame is None or route.holds(frame, r))}
+            ways = {n: way or ('top' if r[1] + r[3] / 2 < s[1] + h / 2 else 'bottom') for n, r in mine.items() if intersects(s, r, ROW_GAP)}
+            moves = [(n, sd, math.ceil(mine[n][1] + mine[n][3] + ROW_GAP - s[1] if sd == 'top' else s[1] + h + ROW_GAP - mine[n][1]))
+                     for n, sd in ways.items()]
+            if not moves or max(d for _, _, d in moves) > push.PUSH_MAX:
+                continue
+            p = push._apply(text, moves)
+            if p is None or (p.grown and not grow):
+                continue
+            sets.append(p)
+            where[id(p)] = (dx, dy)
+
+        def judge(t, p):
+            s2, fr2, (x2, y2) = spot_of(t)
+            dx, dy = where[id(p)]
+            r = (x2 + dx, y2 + dy, w, h)
+            ok = not any(intersects(r, b, ROW_GAP) for n, b in s2.boxes.items()) and (fr2 is None or inside_frame(r, fr2))
+            return t if ok else None
+        t, p = push._best(text, None, sets, judge)
+        if p:
+            _, _, (x2, y2) = spot_of(t)
+            dx, dy = where[id(p)]
+            return t, (x2 + dx, y2 + dy), push._describe('room next to', (near, num, 'for'), p)
+    return text, None, ''
 
 
 def place(sc, w, h, near, going_right, frame, partners=()):
@@ -294,7 +380,17 @@ def main():
                 if a.get('from') == b['num'] and a.get('to') == near:
                     going_right = False
             partners = [a.get('to') if a.get('from') == b['num'] else a.get('from') for a in spec.get('arrows', []) if b['num'] in (a.get('from'), a.get('to'))]
-            spot = place(sc, draw.BOX_W, h, near, going_right, fr, partners)
+            strong = near in sc.boxes and (fr is None or route.holds(fr, sc.boxes[near])) and any(
+                {a.get('from'), a.get('to')} == {b['num'], near} and a.get('kind') in ADJACENT_KINDS for a in spec.get('arrows', []))
+            spot, at_bottom = None, False
+            if strong:                                                # next to `near`, making room there when it must
+                text, spot, how = next_to_near(text, draw.BOX_W, h, near, fr, fname if fobj else None, b['num'])
+                if how:
+                    print('PUSH', how)
+                sc, _ = model.read(text)
+                fr = frames.by_name(text, fname) if fobj else None
+            if spot is None:
+                spot = place(sc, draw.BOX_W, h, near, going_right, fr, partners)
             if spot is None and fr is not None:                       # the frame is full: its bottom, beside `near`; the frame grows
                 bs = bottom_spot(sc, draw.BOX_W, h, near, fr)
                 if bs:
@@ -302,6 +398,10 @@ def main():
                     print('frame "%s" grown %spx; what lies below moved down' % (fobj['name'], draw.fmt(px)))
                     problems += lost
                     sc, _ = model.read(text)
+                    at_bottom = True
+            if spot is not None and near in sc.boxes and (strong or at_bottom) and not next_to(spot, draw.BOX_W, h, sc.boxes[near]):
+                problems.append('#%s landed at (%s, %s), not next to #%s: decide a place yourself ("x", "y" in the spec), or move boxes'
+                                % (b['num'], draw.fmt(spot[0]), draw.fmt(spot[1]), near))
             if spot is None:
                 problems.append('NO FREE SPACE for #%s: decide a place yourself ("x", "y" in the spec)' % b['num'])
                 continue

@@ -393,7 +393,7 @@ def growth(before, after, skip):
 def _best(text, key, pushed, judge):
     """Of the pushes (Pushed, each applied to text), the one with the least score: its displacement plus growth() of the other
     arrows, among those that judge() passes after settle(). Tried the least displacement first, and only while that alone is
-    less than the best score so far (branch and bound). judge(settled text) -> the final text, or None. Returns (text, Pushed)
+    less than the best score so far (branch and bound). judge(settled text, Pushed) -> the final text, or None. Returns (text, Pushed)
     of the best, or (text, None)."""
     import model
     bad0, n0 = len(model.invalid(text)), model.count_arrows(text)
@@ -402,7 +402,7 @@ def _best(text, key, pushed, judge):
         if best is not None and p.disp >= best[0]:
             break
         STATS['tried'] += 1
-        t = judge(settle(text, p))
+        t = judge(settle(text, p), p)
         if t is None or len(model.invalid(t)) > bad0 or model.count_arrows(t) != n0:
             continue
         score = p.disp + growth(text, t, key)
@@ -429,7 +429,7 @@ def make_room(text):
         if line is None or 'data-pinned="1"' in line or key[0] == key[1]:
             continue
         pushed = [p for p in (_apply(text, c) for c in _end_pushes(text, key)) if p is not None and _labelled(p.text, key, 'place')]
-        text, p = _best(text, key, pushed, lambda t, key=key: t if _labelled(t, key) else None)
+        text, p = _best(text, key, pushed, lambda t, _p, key=key: t if _labelled(t, key) else None)
         if p:
             LOG.append(_describe('room for the label of', key, p))
     STATS['secs'] += time.time() - t0
@@ -572,7 +572,7 @@ def straighten(text):
         cands = [c for c in detour_pushes(blockers(sc, probe, key[0], key[1], fkeys)) if c and max(d for _, _, d in c) <= PUSH_MAX]
         pushed = [p for p in (_apply(text, c) for c in cands) if p is not None]
 
-        def judge(t, key=key, L=L):
+        def judge(t, _p, key=key, L=L):
             line = _arrow_line(t, key)
             if line is None:
                 return None
