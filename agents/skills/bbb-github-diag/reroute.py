@@ -7,7 +7,7 @@ usage: reroute.py IN.svg OUT.svg (A>B ...|--frame-leavers|--in-frame WORDS|--imp
 than one such frame is an error). Use it after a frame was compacted, to route its inner arrows again. With --improve, only the
 arrows named (A>B, --in-frame, --frame-leavers) are tried, so the rest of the picture keeps its routes.
 --improve [N] takes every drawn arrow (or only the named ones), the most costly first (route.path_cost: steps, bends, crossings, frame borders, in the picture
-with the other arrows), and keeps a new path only when it costs less than the old one; N passes (default 2: an arrow that improved can
+with the other arrows), and keeps a new path only when it costs less than the old one and is not crazier (route.crazy); N passes (default 2: an arrow that improved can
 free a channel for one tried before it). Use it after the routing rules change, or after boxes moved, to let every arrow take the
 routes that opened up. It never makes an arrow worse by that measure, and it never touches a pinned arrow.
 --pin A>B ... / --unpin A>B ...: mark (or unmark) arrows whose route the user chose (`data-pinned="1"` on the path, svgmeta.pin);
@@ -90,11 +90,20 @@ def _lines_of(text, pairs):
     return out
 
 
+def crazier(new, old):
+    """Is the new path crazy (route.is_crazy) and crazier than the old one on either of route.crazy's numbers? An arrow routed
+    again to improve it is never made crazier, however much the search's cost drops."""
+    if not route.is_crazy(new):
+        return False
+    return any(n > o for n, o in zip(route.crazy(new), route.crazy(old)))
+
+
 def reroute(text, pairs, improve=False):
     """Returns (text, done [(a, b, bends, short label, old bends)], failed [(a, b, why)]).
     Without improve: the arrows are taken out with their labels and model.route_arrows routes them again (an arrow inside one frame
     never leaves it; the frame grows when it has no room); an arrow with no path keeps its old markup.
-    improve: one arrow at a time, a new path is kept only when route.path_cost says it costs less than the old one; frames never grow."""
+    improve: one arrow at a time, a new path is kept only when route.path_cost says it costs less than the old one and it is not
+    crazier (crazier()); frames never grow."""
     found = _lines_of(text, pairs)
     failed = [(a, b, '%d drawn arrows with these ends' % len(v)) for (a, b), v in found.items() if len(v) != 1]
     one = [(p, v[0]) for p, v in found.items() if len(v) == 1]
@@ -117,7 +126,7 @@ def reroute(text, pairs, improve=False):
         t, (p,) = model.take_out(text, [i])
         sc = model.scene(t)
         res = route.route_labelled(sc, a, b, p.kind, *p.sides)
-        if not res or route.path_cost(sc, res[0], a, b) >= route.path_cost(sc, old_pts, a, b) - 1:
+        if not res or route.path_cost(sc, res[0], a, b) >= route.path_cost(sc, old_pts, a, b) - 1 or crazier(res[0], old_pts):
             continue
         pts, lab, room = res
         line = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), p.line, count=1)

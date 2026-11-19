@@ -556,6 +556,9 @@ def main():
     with contextlib.redirect_stdout(io.StringIO()) as buf:
         passed = ovg.selftest()
     check(passed, 'ovg.selftest(): ' + buf.getvalue().strip())
+    twist = [(0, 0)] + [(100 * k + 100 * (k % 2), 50 * (k // 2 + 1)) for k in range(9)] + [(1000, 300)]
+    check(reroute.crazier(twist, [(0, 0), (500, 0), (500, 300), (1000, 300)]) and not reroute.crazier([(0, 0), (1000, 0)], twist),
+          'reroute.crazier: --improve never keeps a path that is crazy and crazier than the old one')
     check(model.no_label(model.Arrow(10, 11, 'closed by')) == '#10 closed by #11 has no label: no place on it or beside it',
           'model.no_label wording')
     with tempfile.TemporaryDirectory() as tmp:
