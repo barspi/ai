@@ -15,7 +15,7 @@ never closer than 22px (HARD_H: their 18px labels then fit one above the other w
 line is crossed only at a right angle, 30px or more from either of its ends (END_CLEAR); never turns within 40px of a box edge (so it
 leaves and enters straight). Costs: a step 1, a bend 30, a crossing 35, a side other than the facing one 20, a border of a frame that
 holds neither end 60, of a frame that holds an end 75 (so leaving such a frame and coming back costs 150); a step outside every
-frame costs OUTSIDE_COST (5) instead of 1, per 5px of length. An arrow whose two boxes are in the same frame is searched inside
+frame costs OUTSIDE_COST instead of 1, per 5px of length (1 now: off). An arrow whose two boxes are in the same frame is searched inside
 that frame and nowhere else (None: model.route_arrows grows the frame, frames.grow). An arrow between two frames is searched in the
 box round the two frames and the corridor between them (frames_window), then on the whole canvas. It picks the exit and entry
 points along the two sides itself, so full sides are avoided. hops.py draws the jump arcs.
@@ -44,8 +44,9 @@ TURN_COST, CROSS_COST, SIDE_COST = 30, 35, 20
 FRAME_COST = 60     # per border crossed of a frame that holds neither end: going through it costs 120
 JOG_COST = 60       # path_cost() only: a middle stretch shorter than 30px (the search cannot see stretch lengths)
 FRAME_OWN_COST = 75 # per border crossed of a frame that holds one end or both: leaving it and coming back costs 150
-OUTSIDE_COST = 5    # a step outside every frame costs this, a step inside one 1: crossing the narrow gap between two frames stays
-                    # cheap (it is short), a long trip round a frame does not. The heuristics (Manhattan steps at 1) stay a lower bound
+OUTSIDE_COST = 1    # a step outside every frame costs this, a step inside one 1. At 5, crossing the narrow gap between two frames
+                    # stays cheap (it is short) and a long trip round a frame does not; OFF (1) while the user weighs it: a long
+                    # run outside the frames can be the cleaner path. The heuristics (Manhattan steps at 1) stay a lower bound
 LAST_COST = None    # the cost of the last path _route() found
 ALT_BENDS = 2       # an alternative has at most this many bends more than the cheapest path, or it is not taken
 K_PATHS = 6         # route(accept=...) tries at most this many paths (the cheapest, then alternatives) for one that passes
@@ -933,20 +934,22 @@ def selftest():
           and abs(sp[0][0] - sp[-1][0]) < .01, 'path %s' % (p,))
     # 10. OUTSIDE_COST: two frames side by side, five lines down the 100px gap between them. Through the gap the arrow crosses the
     #     five (5 x CROSS_COST); round under the frames it crosses none and is short enough to win at a step cost of 1 everywhere.
-    #     Outside the frames a step costs OUTSIDE_COST: the arrow takes the gap (the only stretch outside a frame: the gap's width).
+    #     With a step outside the frames at 5 (OUTSIDE_COST when on), the arrow takes the gap (its only stretch outside a frame).
     f1, f2 = (0, 0, 400, 400), (500, 0, 400, 400)
     lines = [[(x, 20), (x, 380)] for x in (420, 435, 450, 465, 480)]
     s10 = {1: (250, 300, 100, 60), 2: (550, 300, 100, 60)}
     import route as me                                           # the searches read the module's constant (selftest runs as route)
-    keep, me.OUTSIDE_COST = me.OUTSIDE_COST, 1
+    keep = me.OUTSIDE_COST
     try:
+        me.OUTSIDE_COST = 1
         round_ = route(Sc(s10, [f1, f2], arrows=lines), 1, 2, '*', '*')
+        me.OUTSIDE_COST = 5
+        p = route(Sc(s10, [f1, f2], arrows=lines), 1, 2, '*', '*')
     finally:
         me.OUTSIDE_COST = keep
-    p = route(Sc(s10, [f1, f2], arrows=lines), 1, 2, '*', '*')
-    check('a step outside every frame costs OUTSIDE_COST: the arrow takes the gap between two frames, not the way round them',
+    check('a step outside every frame at OUTSIDE_COST 5: the arrow takes the gap between two frames, not the way round them',
           round_ is not None and max(q[1] for q in round_) > 400 and p is not None and max(q[1] for q in p) < 400
-          and outside_length(p, [f1, f2]) <= 100, 'at cost 1: %s; at %d: %s' % (round_, OUTSIDE_COST, p))
+          and outside_length(p, [f1, f2]) <= 100, 'at cost 1: %s; at 5: %s' % (round_, p))
     # 11. crazy(): far round and back, or twisted; a long staircase that comes straight at its end is not
     long_ok = [(0, 0), (400, 0), (400, 300), (800, 300), (800, 600), (1200, 600), (1200, 900), (1600, 900), (1600, 1200),
                (2000, 1200)]                                                # 8 bends, 2 needed (east to east, lower): 6 more
