@@ -802,36 +802,41 @@ def outside_length(pts, frames):
     return out
 
 
-# A crazy path: it goes far round to come back near where it started, or it is twisted and crooked (crazy(), is_crazy()). Outside
-# travel is not part of it: OUTSIDE_COST weighs that in the search.
-CRAZY_WASTE = 0.5      # it wastes (length less the Manhattan distance of its ends) more than this share of that distance ...
-CRAZY_SLACK = 300      # ... plus this many px (a short arrow that steps round one box wastes little and is not crazy),
-CRAZY_WASTE_PX = 1000  # or more than this many px whatever the distance,
-CRAZY_BENDS = 6        # or it has more than this many bends beyond the fewest its two ends need. A long arrow that runs a staircase
-                       # inside a frame and comes straight at its end (6 more than its 3) is not crazy
+# A crazy path goes round the world to come back near where it started (crazy(), is_crazy()). Length alone is not crazy: a long
+# path that stays in the rectangle of its two ends goes where it has to. Outside travel is not part of it (OUTSIDE_COST, the search).
+CRAZY_OVERSHOOT = 300        # px beyond the rectangle of its ends: past this the eye sees a loop round something, whatever else
+CRAZY_OVERSHOOT_MULTI = 100  # px beyond it that is crazy already when the path also turns back twice or more (square curves)
+CRAZY_REVERSALS = 2          # that many turns back (on one axis) or more make the smaller overshoot crazy
+CRAZY_RUN_MIN = 30           # px: a run shorter than this (a port jog, a step round a box corner) is no turn back
 
 
 def crazy(pts):
-    """(waste, extra_bends) of a path: its length less the Manhattan distance of its two ends (a monotone path wastes 0), and its
-    bends less the fewest a path needs that leaves its tail and enters its tip the way this one does (0 straight, 1 an L, 2 a Z)."""
-    import ovg                                   # here: ovg imports this module
+    """(overshoot, reversals) of a path. overshoot: the px it goes beyond the rectangle spanned by its two end points, the largest of
+    the four sides (a monotone path: 0). reversals: how many times it turns back on one axis (a run right, later a run left; down,
+    later up), runs shorter than CRAZY_RUN_MIN not counted."""
     p = straight([tuple(x) for x in pts])
     if len(p) < 2:
         return 0.0, 0
-    way = lambda u, v: 0 if v[0] > u[0] else 2 if v[0] < u[0] else 1 if v[1] > u[1] else 3     # east, south, west, north
-    dx, dy = p[-1][0] - p[0][0], p[-1][1] - p[0][1]
-    length = sum(abs(v[0] - u[0]) + abs(v[1] - u[1]) for u, v in zip(p, p[1:]))
-    sign = lambda v: (v > .5) - (v < -.5)
-    return length - abs(dx) - abs(dy), len(p) - 2 - ovg._bends(sign(dx), sign(dy), way(p[0], p[1]), way(p[-2], p[-1]))
+    (x0, y0), (x1, y1) = p[0], p[-1]
+    lo_x, hi_x, lo_y, hi_y = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
+    over = max([0.0] + [max(lo_x - x, x - hi_x, lo_y - y, y - hi_y) for x, y in p])
+    turns, last = 0, [0, 0]                      # per axis (x, y): the sign of the last run that counted
+    for u, v in zip(p, p[1:]):
+        for k in (0, 1):
+            d = v[k] - u[k]
+            if abs(d) >= CRAZY_RUN_MIN:
+                sg = 1 if d > 0 else -1
+                turns += last[k] == -sg
+                last[k] = sg
+    return over, turns
 
 
 def is_crazy(pts):
-    """Is the path crazy (CRAZY_WASTE, CRAZY_SLACK, CRAZY_WASTE_PX, CRAZY_BENDS)? push.straighten opens a short way for such an arrow;
-    model.route_arrows does not draw a low-importance arrow it routes now whose path is one (a note on its tail box instead)."""
-    waste, extra = crazy(pts)
-    p = straight([tuple(x) for x in pts])
-    m = abs(p[-1][0] - p[0][0]) + abs(p[-1][1] - p[0][1])
-    return waste > CRAZY_WASTE * m + CRAZY_SLACK or waste > CRAZY_WASTE_PX or extra > CRAZY_BENDS
+    """Is the path crazy: overshoot over CRAZY_OVERSHOOT, or CRAZY_REVERSALS turns back or more with overshoot over
+    CRAZY_OVERSHOOT_MULTI? push.straighten opens a short way for such an arrow; model.route_arrows does not draw a low-importance
+    arrow it routes now whose path is one (a note on its tail box instead)."""
+    over, turns = crazy(pts)
+    return over > CRAZY_OVERSHOOT or (turns >= CRAZY_REVERSALS and over > CRAZY_OVERSHOOT_MULTI)
 
 
 def path_cost(sc, pts, a, b):
@@ -950,18 +955,20 @@ def selftest():
     check('a step outside every frame at OUTSIDE_COST 5: the arrow takes the gap between two frames, not the way round them',
           round_ is not None and max(q[1] for q in round_) > 400 and p is not None and max(q[1] for q in p) < 400
           and outside_length(p, [f1, f2]) <= 100, 'at cost 1: %s; at 5: %s' % (round_, p))
-    # 11. crazy(): far round and back, or twisted; a long staircase that comes straight at its end is not
-    long_ok = [(0, 0), (400, 0), (400, 300), (800, 300), (800, 600), (1200, 600), (1200, 900), (1600, 900), (1600, 1200),
-               (2000, 1200)]                                                # 8 bends, 2 needed (east to east, lower): 6 more
-    round_ = [(0, 0), (-300, 0), (-300, -1200), (900, -1200), (900, 40), (700, 40)]   # out, up and over, back down
-    twist = [(0, 0)] + [(100 * k + 100 * (k % 2), 50 * (k // 2 + 1)) for k in range(9)] + [(1000, 300)]
-    step = [(0, 0), (60, 0), (60, -80), (240, -80), (240, 0), (300, 0)]    # a short arrow that steps round one box
-    check('crazy(): a long staircase that comes straight at its end is not crazy', crazy(long_ok) == (0, 6) and not is_crazy(long_ok),
-          str(crazy(long_ok)))
-    check('crazy(): a path that goes far round to come back near its start is', crazy(round_)[0] > CRAZY_WASTE_PX and is_crazy(round_),
-          str(crazy(round_)))
-    check('crazy(): a twisted path (many bends more than its ends need) is', crazy(twist)[1] > CRAZY_BENDS and is_crazy(twist), str(crazy(twist)))
-    check('crazy(): a short arrow that steps round one box is not', crazy(step) == (160, 4) and not is_crazy(step), str(crazy(step)))
+    # 11. crazy(): overshoot past the rectangle of the two ends, and turns back on one axis
+    stair = [(0, 0), (400, 0), (400, 300), (800, 300), (800, 600), (1200, 600), (1200, 900), (2000, 900)]
+    bulge = [(0, 0), (0, -250), (600, -250), (600, 0)]                         # out 250 above both ends, and back down
+    loop = [(0, 0), (-400, 0), (-400, 500), (300, 500)]                        # 400 left of both ends before it heads right
+    zigzag = [(0, 0), (300, 0), (300, 60), (-150, 60), (-150, 120), (300, 120), (300, 180), (200, 180)]
+    jog = [(0, 0), (100, 0), (100, 20), (80, 20), (80, 200)]                   # a 20px step back: a jog, not a turn back
+    check('crazy(): a monotone staircase has no overshoot and no turn back', crazy(stair) == (0, 0) and not is_crazy(stair),
+          str(crazy(stair)))
+    check('crazy(): one bulge: the overshoot is its depth, one turn back (down after up); not crazy under %dpx' % CRAZY_OVERSHOOT,
+          crazy(bulge) == (250, 1) and not is_crazy(bulge), str(crazy(bulge)))
+    check('crazy(): a loop round the far side is crazy', crazy(loop) == (400, 1) and is_crazy(loop), str(crazy(loop)))
+    check('crazy(): a zigzag back and forth turns back twice or more and is crazy past %dpx' % CRAZY_OVERSHOOT_MULTI,
+          crazy(zigzag)[1] >= CRAZY_REVERSALS and crazy(zigzag)[0] > CRAZY_OVERSHOOT_MULTI and is_crazy(zigzag), str(crazy(zigzag)))
+    check('crazy(): a run shorter than CRAZY_RUN_MIN is no turn back', crazy(jog)[1] == 0, str(crazy(jog)))
     print('route self-test %s' % ('OK' if not bad else 'FAILED: %d' % len(bad)))
     if bad:
         sys.exit(1)

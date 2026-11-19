@@ -24,11 +24,10 @@ end stretch (a tip box along the arrow, a tail box against it; a straight arrow 
 label plus PUSH_STEPS. Candidates are tried cheapest first by total displacement (every box moved, by how much, frames grown);
 the first whose arrow then has a place for its label, with no arrow invalid that was valid, is kept.
 
-straighten, a crazy path (route.is_crazy: much longer than the Manhattan distance of its ends, or many more bends than its ends
-need). A probe route with no clearance round the
-other boxes (route.BOXM 0) and little round the frame borders (PROBE_FPROX) shows where a short path would go; the boxes nearer to
-it than route.BOXM + route.G, and the frames whose border a stretch runs beside, outside them, nearer than route.FPROX + route.G
-(two frames whose gap holds no lane), are the blockers. Pushing them away from the probe path (both sides of a gap, or one side by
+straighten, a crazy path (route.is_crazy: it goes far beyond the rectangle of its two ends, or less far with square curves). A
+probe route with no clearance round the other boxes (route.BOXM 0) and little round the frame borders (PROBE_FPROX) shows where a
+short path would go; the boxes nearer to it than route.BOXM + route.G, and the frames whose border a stretch runs beside, outside
+them, nearer than route.FPROX + route.G (two frames whose gap holds no lane), are the blockers. Pushing them away from the probe path (both sides of a gap, or one side by
 the whole need; a frame moves rigidly with all it holds, by the same cascade as a box) opens it; the cheapest push after which the
 arrow, routed again, is no longer crazy (or at most DETOUR_GAIN of its old length) and has a label is kept. Pinned arrows are never
 touched.

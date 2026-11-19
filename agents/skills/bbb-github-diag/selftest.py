@@ -411,12 +411,12 @@ def collapse_rect(d):
 
 def low_note_cases(tmp):
     """Rule of model.route_arrows: a low-importance arrow routed now whose path is crazy is not drawn: a note on its tail box and
-    a "nopath" record; one a push cut (Pending.keep) and a stronger kind are drawn as always. route.CRAZY_BENDS -1 makes every
+    a "nopath" record; one a push cut (Pending.keep) and a stronger kind are drawn as always. route.CRAZY_OVERSHOOT -1 makes every
     path crazy, so the case does not hang on one picture's geometry."""
     ex = open(EXAMPLE, encoding='utf-8').read()
     n0 = model.count_arrows(ex)
-    keep = route.CRAZY_BENDS
-    route.CRAZY_BENDS = -1
+    keep = route.CRAZY_OVERSHOOT
+    route.CRAZY_OVERSHOOT = -1
     try:
         t, p = model.new_arrow(ex, 122, 100, 'related')
         res = model.route_arrows(t, [p])
@@ -427,7 +427,7 @@ def low_note_cases(tmp):
         t3, pend = model.take_out(ex, [i], keep={i})
         res3 = model.route_arrows(t3, pend)
     finally:
-        route.CRAZY_BENDS = keep
+        route.CRAZY_OVERSHOOT = keep
     bl = svg_state_blocks(res.text)
     nb = res.text[bl[122][0]:bl[122][1]]
     meta = svgmeta.read(res.text) or {}
@@ -556,8 +556,8 @@ def main():
     with contextlib.redirect_stdout(io.StringIO()) as buf:
         passed = ovg.selftest()
     check(passed, 'ovg.selftest(): ' + buf.getvalue().strip())
-    twist = [(0, 0)] + [(100 * k + 100 * (k % 2), 50 * (k // 2 + 1)) for k in range(9)] + [(1000, 300)]
-    check(reroute.crazier(twist, [(0, 0), (500, 0), (500, 300), (1000, 300)]) and not reroute.crazier([(0, 0), (1000, 0)], twist),
+    loop = [(0, 0), (-400, 0), (-400, 500), (300, 500)]
+    check(reroute.crazier(loop, [(0, 0), (150, 0), (150, 500), (300, 500)]) and not reroute.crazier([(0, 0), (0, 500), (300, 500)], loop),
           'reroute.crazier: --improve never keeps a path that is crazy and crazier than the old one')
     check(model.no_label(model.Arrow(10, 11, 'closed by')) == '#10 closed by #11 has no label: no place on it or beside it',
           'model.no_label wording')
