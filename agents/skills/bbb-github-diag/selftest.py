@@ -204,8 +204,9 @@ def by_construction(tmp):
     grown = sc2.frames[0][3] - tight[3]
     check(res.routed and grown > 0 and not reroute.leaves_frame(res.text) and 'bottom' in str(res.grown),
           '2. an arrow walled in at the bottom edge: the frame grew %dpx on that side and the arrow stays inside it (%s)' % (grown, res.grown))
-    check(sc2.frames[1][1] == 1100 + grown and sc2.frames[0][3] == tight[3] + grown,
-          '2. the frame below moved down by as much (%s)' % (sc2.frames,))
+    gap0, gap1 = 1100 - tight[1] - tight[3], sc2.frames[1][1] - sc2.frames[0][1] - sc2.frames[0][3]
+    check(1100 <= sc2.frames[1][1] <= 1100 + grown and gap1 >= min(gap0, frames.KEEP['ff']) - .5 and sc2.frames[0][3] == tight[3] + grown,
+          '2. the frame below moved down only by what the gap did not absorb (frames.cascade_gap): gap %d -> %d (%s)' % (gap0, gap1, sc2.frames))
     f, w, out = checked(res.text, tmp, 'grown.svg')
     check(f == 0, '2. check_diag.py after the push: FAILS 0' + ('' if f == 0 else ':\n' + out))
     # 2. frames.inflate, each profile: the inflated frame keeps its crossings and orthogonality, no box changes size, a frame

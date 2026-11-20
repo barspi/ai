@@ -90,12 +90,7 @@ def _lines_of(text, pairs):
     return out
 
 
-def crazier(new, old):
-    """Is the new path crazy (route.is_crazy) and crazier than the old one on either of route.crazy's numbers? An arrow routed
-    again to improve it is never made crazier, however much the search's cost drops."""
-    if not route.is_crazy(new):
-        return False
-    return any(n > o for n, o in zip(route.crazy(new), route.crazy(old)))
+crazier = route.crazier          # --improve never keeps a path that is crazy and crazier than the old one (route.crazier)
 
 
 def reroute(text, pairs, improve=False):

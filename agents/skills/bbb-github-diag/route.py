@@ -596,17 +596,27 @@ def route_soft(sc, a, b, frame, sa='*', sb='*'):
         _route(sc, a, b, *sides, 10 ** 6, natural, prove_none=True)
 
 
-def route_labelled(sc, a, b, kind, sa='*', sb='*', w=None, h=18.0, span_a=None, span_b=None):
+def route_labelled(sc, a, b, kind, sa='*', sb='*', w=None, h=18.0, span_a=None, span_b=None, old=None):
     """route() whose path must leave room for the arrow's label: one straight stretch with the label's length plus LABEL_SHAFT px of
     shaft on each side, where the label touches no box, label, pill or other arrow (place_label with shaft=LABEL_SHAFT), and no jog
     shorter than MIN_JOG. The candidates are the cheapest path, then its alternatives (ovg.search_paths, the penalty method). Returns
     (points, label, room): label as place_label_any gives it, (cx, cy, shift, short), at the place the test found; room is False when
     no path of the K_PATHS cheapest had room, so the cheapest was taken and its label placed as well as it goes (or None). None when
-    there is no path."""
+    there is no path.
+    old: the path the arrow had (one routed again, not a new one). A candidate must also not be crazier than it (crazier()); when
+    none passes every test, the cheapest candidate with no jog that is not crazier wins over room for the label, and only when no
+    candidate is that calm is the cheapest kept (model._fill reports it as a PROBLEM)."""
     room = lambda pts: place_label(sc, pts, kind, w, h, shaft=LABEL_SHAFT)
-    pts = route(sc, a, b, sa, sb, span_a=span_a, span_b=span_b, accept=lambda p: not has_jog(p) and room(p) is not None)
+    seen = []
+
+    def accept(p):
+        seen.append(p)
+        return not has_jog(p) and room(p) is not None and (old is None or not crazier(p, old))
+    pts = route(sc, a, b, sa, sb, span_a=span_a, span_b=span_b, accept=accept)
     if pts is None:
         return None
+    if old is not None and crazier(pts, old):
+        pts = next((p for p in seen if not has_jog(p) and not crazier(p, old)), pts)
     lab = room(pts)
     if lab:
         return pts, (lab[0], lab[1], None, False), True
@@ -837,6 +847,14 @@ def is_crazy(pts):
     arrow it routes now whose path is one (a note on its tail box instead)."""
     over, turns = crazy(pts)
     return over > CRAZY_OVERSHOOT or (turns >= CRAZY_REVERSALS and over > CRAZY_OVERSHOOT_MULTI)
+
+
+def crazier(new, old):
+    """Is the new path crazy (is_crazy) and crazier than the old one on either of crazy()'s numbers? An arrow routed again (to improve
+    it, or because a push or a repair cut it) is never made crazier while a calmer path exists (route_labelled's old)."""
+    if not is_crazy(new):
+        return False
+    return any(n > o for n, o in zip(crazy(new), crazy(old)))
 
 
 def path_cost(sc, pts, a, b):

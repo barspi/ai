@@ -122,6 +122,43 @@ def cascade(frames, boxes, grown_frame, members=()):
     return grow, move_f, move_b - keep
 
 
+# What a push keeps between two blocks it brings closer (cascade_gap), by their kinds: f frame, b box, a arrow stretch (in a corridor),
+# l label. A gap already smaller than this is kept as it is.
+KEEP = {'ff': 34,        # layout.BAND_GAP: two frames of one column
+        'bb': 28, 'bf': 28,  # push.GAP: a box and the next box, or a frame border
+        'ab': 26,        # route.BOXM: an arrow and a box
+        'aa': 22,        # route.HARD_H: two parallel arrows (and their labels)
+        'af': 10, 'fl': 10, 'bl': 10, 'al': 10, 'll': 10}   # an arrow or a label and a frame border (_step_free's 10px), labels
+
+
+def cascade_gap(frames, blocks, grown_frame, d, members=(), kind=lambda key: 'b'):
+    """cascade() with free space: the grown frame's bottom moves d, and a block below something that moved moves only by what the gap
+    between them does not absorb (the gap may shrink to KEEP[kinds], never below; a gap already smaller stays). So a frame far below
+    does not move at all, and one a little below moves a little. A block inside a frame that moved moves with it (rigidly).
+    blocks {key: rect}, kind(key) -> f, b, a or l (KEEP). Returns (indexes of the frames that grow, {frame index: px it moves},
+    {block key: px it moves}); only blocks that move are in the dicts."""
+    grow = {k for k, f in enumerate(frames) if _holds(f, grown_frame)}
+    keep = set(members_of(grown_frame, {n: r for n, r in blocks.items() if kind(n) == 'b'}, members))
+    pushers = [(frames[k], float(d), 'f') for k in grow]
+    move_f, move_b = {}, {}
+    todo = [(f[1], 0, ('f', k)) for k, f in enumerate(frames) if k not in grow] + \
+           [(r[1], 1, ('x', n)) for n, r in blocks.items() if n not in keep]
+    for _, _, (t, key) in sorted(todo, key=lambda u: (u[0], u[1])):        # top first: every pusher before what lies below it
+        r, kd = (frames[key], 'f') if t == 'f' else (blocks[key], kind(key))
+        amt = 0.0
+        for p, pa, pk in pushers:
+            if _below(r, p):
+                gap = r[1] - p[1] - p[3]
+                amt = max(amt, pa - max(0.0, gap - KEEP[''.join(sorted(kd + pk))]))
+        carried = [a for m, a in move_f.items() if m != key and _holds(frames[m], r)]
+        if carried:
+            amt = max(amt, max(carried))
+        if amt > 0:
+            (move_f if t == 'f' else move_b)[key] = amt
+            pushers.append((r, amt, kd))
+    return grow, move_f, move_b
+
+
 def _arrow_points(line):
     d = line.split('"')[1]
     return [(float(a), float(b)) for a, b in re.findall(r'(-?[\d.]+),(-?[\d.]+)', re.sub(r'A[^L]*', '', d))]
@@ -301,13 +338,16 @@ def inflate(text, frame, grow_by, profile='linear'):
     amounts. Inside it, one map per axis takes the old frame onto the new one (axis_map): profile linear (an anchored stretch, or
     a balloon), graded (the stretch grows toward the side that grows) or edge (no stretch: the content stays and the room opens at
     the border). Box centres and label centres follow the map, box sizes stay, every arrow point inside follows it.
-    Everything else moves rigidly: the cascade (module docstring) runs once per side that grows, with the picture turned so that the
-    side is the bottom, and every frame, box and arrow point in a corridor that it pushes moves by that side's amount; the rest
-    stays. So a neighbouring frame keeps its exact internal geometry: it is translated, or left alone.
+    Everything else moves rigidly: a cascade with free space (cascade_gap) runs once per side that grows, with the picture turned so
+    that the side is the bottom; each frame, box, corridor stretch and corridor label it reaches moves only by the part of that
+    side's amount that its gap does not absorb (KEEP), so what lies far away does not move. A corridor stretch across the push moves
+    whole, with its label (_corridor_groups), so it stays straight. So a neighbouring frame keeps its exact internal geometry: it is
+    translated, or left alone.
     An arrow end snaps back onto its box side (its last stretch changes length; when its place along the side would fall outside the
     box, it and the point before it move together). Where a stretch joins two parts that moved differently (an arrow between two
-    frames, or across the border), it takes one step (a jog) at a free point of the stretch that lies in a corridor: JOG_ROOM from
-    boxes and parallel arrows. Only an arrow whose step has no free place is cut (Push.cut), to be routed again.
+    frames, or across the border), it is slid square with no new bend when one of its ends can move along its neighbour stretch
+    (_slide), else it takes one step (a jog) at a free point of the stretch that lies in a corridor: JOG_ROOM from boxes and parallel
+    arrows. Only an arrow with neither is cut (Push.cut), to be routed again.
 
     Invariants: inside the frame the map is continuous and strictly increasing per axis, with a stretch of 1 or more, so every
     horizontal stretch stays horizontal and every vertical one vertical, the same pairs of stretches cross, and no gap shrinks;
@@ -334,22 +374,28 @@ def inflate(text, frame, grow_by, profile='linear'):
             if not in_any(centres[j]):
                 corridor[('label', j)] = centres[j] + (0.0, 0.0)
     # the pushes: one cascade per side that grows; frames, boxes and corridor points as blocks, each moved by that side's amount
+    # each block moves only by what its gap does not absorb (cascade_gap), and a corridor stretch across the push moves whole
     disp_f, disp_b, disp_p = {}, {}, {}
     grown = set()
-    blocks = dict(boxes)
-    blocks.update(corridor)
+    lab_rect = {j: draw.label_at(lines, j)[:4] for j in centres}
+    owner0 = {j: i for i, rng in labels.items() for j in rng}
+    add = lambda dic, key, a, way: dic.__setitem__(key, (dic.get(key, (0, 0))[0] + a * way[0], dic.get(key, (0, 0))[1] + a * way[1]))
     for side, d in g.items():
         if d <= 0:
             continue
         turn = _TURN[side]
-        gk, mf, mb = cascade([turn(r) for r in rects], {key: turn(r) for key, r in blocks.items()}, turn(frame), inside)
+        groups = _corridor_groups(paths, corridor, centres, lab_rect, owner0, side in ('top', 'bottom'))
+        blocks = dict(boxes)
+        blocks.update({('g', gi): rect for gi, (rect, _, _) in enumerate(groups)})
+        kinds = {('g', gi): kd for gi, (_, _, kd) in enumerate(groups)}
+        gk, mf, mb = cascade_gap([turn(r) for r in rects], {key: turn(r) for key, r in blocks.items()}, turn(frame), d, inside,
+                                 kind=lambda key: kinds.get(key, 'b'))
         grown |= {(kk, side) for kk in gk}
-        dx, dy = (d * v for v in _WAY[side])
-        for kk in mf:
-            disp_f[kk] = (disp_f.get(kk, (0, 0))[0] + dx, disp_f.get(kk, (0, 0))[1] + dy)
-        for key in mb:
-            target = disp_p if key in corridor else disp_b
-            target[key] = (target.get(key, (0, 0))[0] + dx, target.get(key, (0, 0))[1] + dy)
+        for kk, a in mf.items():
+            add(disp_f, kk, a, _WAY[side])
+        for key, a in mb.items():
+            for member in (groups[key[1]][1] if key in kinds else [key]):
+                add(disp_p if key in kinds else disp_b, member, a, _WAY[side])
     new_rects = []
     for kk, r in enumerate(rects):
         nr = r
@@ -459,6 +505,54 @@ def inflate(text, frame, grow_by, profile='linear'):
     return Push(res, frozenset(n for n in boxes if news[n] != boxes[n]), tuple(changes), tuple(cut))
 
 
+def _corridor_groups(paths, corridor, centres, lab_rect, owner, across_y):
+    """The corridor points and corridor labels of the arrows (inflate's `corridor` keys), in the groups a push moves as one block: the
+    two ends of a stretch that lies across the push (horizontal when the push is vertical: across_y) belong together, so the stretch
+    moves whole and stays straight (a stretch along the push may get longer or shorter), and a label on such a stretch goes with
+    it. Returns [(bounding rect, [keys], kind: a, or l for a label alone)]."""
+    parent = {k: k for k in corridor}
+
+    def find(k):
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+    ax = 1 if across_y else 0
+    across = lambda pts, s: abs(pts[s][ax] - pts[s + 1][ax]) < .01
+    for i, pts in paths.items():
+        for s in range(len(pts) - 1):
+            if (i, s) in corridor and (i, s + 1) in corridor and across(pts, s):
+                parent[find((i, s))] = find((i, s + 1))
+    for j, (cx, cy) in centres.items():
+        i = owner.get(j)
+        if ('label', j) not in corridor or i not in paths:
+            continue
+        pts = paths[i]
+        for s in range(len(pts) - 1):
+            (x0, y0), (x1, y1) = pts[s], pts[s + 1]
+            if (abs(y0 - y1) < .01 and abs(cy - y0) < 1 and min(x0, x1) - 1 <= cx <= max(x0, x1) + 1) or \
+                    (abs(x0 - x1) < .01 and abs(cx - x0) < 1 and min(y0, y1) - 1 <= cy <= max(y0, y1) + 1):
+                if (i, s) in corridor and (i, s + 1) in corridor and across(pts, s):
+                    parent[find(('label', j))] = find((i, s))
+                break
+    members = {}
+    for k in corridor:
+        members.setdefault(find(k), []).append(k)
+    out = []
+    for ks in members.values():
+        xs, ys = [], []
+        for k in ks:
+            if k[0] == 'label':
+                x, y, w, h = lab_rect[k[1]]
+                xs += [x, x + w]
+                ys += [y, y + h]
+            else:
+                xs.append(paths[k[0]][k[1]][0])
+                ys.append(paths[k[0]][k[1]][1])
+        out.append(((min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)), ks, 'l' if all(k[0] == 'label' for k in ks) else 'a'))
+    return out
+
+
 def _shift_legend(text, dx):
     lines = text.split('\n')
     a = next((i for i, l in enumerate(lines) if l == '<!--legend-->'), None)
@@ -474,9 +568,12 @@ MIN_JOG = 30             # px: no new stretch shorter than this (route.MIN_JOG)
 
 
 def _with_steps(pts, orig, boxes, frames_now, paths, me):
-    """The points of an arrow with one step (a jog) on each stretch that lost its right angle: on a stretch that was horizontal
-    and whose two ends moved to different heights, a vertical step at the first place along it where the three new stretches (the
-    two halves and the step) are free (_step_free); likewise across. None when a stretch has no such place."""
+    """The points of an arrow whose stretches the move left out of square, mended with the fewest new bends. A stretch that was
+    horizontal and whose two ends moved to different heights (likewise across) is first slid whole (_slide): one of its ends moves
+    along the stretch next to it, which only gets longer or shorter, so no bend is added. Only when neither slide is free does it
+    take one step (a jog), at the first place along it where the three new stretches (the two halves and the step) are free
+    (_step_free). None when a stretch has neither."""
+    pts = [tuple(p) for p in pts]
     out = [pts[0]]
     for j in range(1, len(pts)):
         p, q = out[-1], pts[j]
@@ -484,6 +581,11 @@ def _with_steps(pts, orig, boxes, frames_now, paths, me):
             out.append(q)
             continue
         horiz = abs(orig[j - 1][1] - orig[j][1]) < .01
+        slid = _slide(out, pts, j, horiz, boxes, paths, me)
+        if slid is not None:
+            out, pts = slid
+            out.append(pts[j])
+            continue
         lo, hi = sorted((p[0], q[0]) if horiz else (p[1], q[1]))
         step = next((c for c in _frange(lo + MIN_JOG, hi - MIN_JOG, 5) if _step_free(c, p, q, horiz, boxes, frames_now, paths, me)), None)
         if step is None:
@@ -491,6 +593,58 @@ def _with_steps(pts, orig, boxes, frames_now, paths, me):
         out += [(step, p[1]), (step, q[1])] if horiz else [(p[0], step), (q[0], step)]
         out.append(q)
     return _straight(out)
+
+
+def _slide(out, pts, j, horiz, boxes, paths, me):
+    """_with_steps' mend with no new bend for the stretch from out[-1] to pts[j]: put it back square by moving its first end along
+    the stretch before it (out[-2] to out[-1]), or its second end along the stretch after it (pts[j] to pts[j + 1]). An arrow end
+    (on its box) never moves; the stretch that changes keeps its direction (no turn back) and MIN_JOG of length; the two changed
+    stretches pass the room test of a step's halves (_segs_free): the slid one whole, of the neighbour only the part it gains (what it
+    kept was drawn before). The smaller move wins. Returns (out, pts) changed, or None."""
+    p, q = out[-1], pts[j]
+    tries = []
+    if len(out) >= 2:                                      # the first end moves along the stretch before it
+        o = out[-2]
+        np_ = (p[0], q[1]) if horiz else (q[0], p[1])
+        if _along(o, p, np_):
+            tries.append((abs(np_[0] - p[0]) + abs(np_[1] - p[1]), 'first', np_, _grown_part(o, p, np_) + [(np_, q)]))
+    if j + 1 < len(pts):                                   # the second end moves along the stretch after it
+        r = pts[j + 1]
+        nq = (q[0], p[1]) if horiz else (p[0], q[1])
+        if _along(r, q, nq):
+            tries.append((abs(nq[0] - q[0]) + abs(nq[1] - q[1]), 'second', nq, [(p, nq)] + _grown_part(r, q, nq)))
+    for _, which, new, segs in sorted(tries, key=lambda t: t[0]):
+        if not _segs_free([_seg(u, v) for u, v in segs], boxes, paths, me):
+            continue
+        if which == 'first':
+            return out[:-1] + [new], pts
+        return out, pts[:j] + [new] + pts[j + 1:]
+    return None
+
+
+def _grown_part(fixed, old, new):
+    """The part a stretch from `fixed` gains when its corner moves from `old` to `new` along it: [(old, new)], or [] when it gets
+    shorter."""
+    longer = abs(new[0] - fixed[0]) + abs(new[1] - fixed[1]) > abs(old[0] - fixed[0]) + abs(old[1] - fixed[1])
+    return [(old, new)] if longer else []
+
+
+def _along(fixed, old, new):
+    """May the corner `old` of the stretch from `fixed` move to `new`, along that stretch? It stays on the same line, on the same side
+    of `fixed` (no turn back), and the stretch keeps MIN_JOG of length."""
+    same_x, same_y = abs(fixed[0] - old[0]) < .01 and abs(fixed[0] - new[0]) < .01, abs(fixed[1] - old[1]) < .01 and abs(fixed[1] - new[1]) < .01
+    if not (same_x or same_y):
+        return False
+    ax = 1 if same_x else 0
+    before, after = old[ax] - fixed[ax], new[ax] - fixed[ax]
+    return before * after > 0 and abs(after) >= MIN_JOG
+
+
+def _seg(u, v):
+    """The orthogonal stretch from u to v as (o, c, lo, hi)."""
+    if abs(u[1] - v[1]) < .01:
+        return 'h', u[1], min(u[0], v[0]), max(u[0], v[0])
+    return 'v', u[0], min(u[1], v[1]), max(u[1], v[1])
 
 
 def _nearest(pts, x, y):
@@ -526,8 +680,16 @@ def _step_free(c, p, q, horiz, boxes, frames_now, paths, me):
         return False
     if any(_meets(step, (x - bm, y - bm, w + 2 * bm, h + 2 * bm)) for x, y, w, h in boxes):
         return False
-    new = [step] + halves
-    if any(_meets(sg, (x + 1, y + 1, w - 2, h - 2)) for sg in halves for x, y, w, h in boxes):
+    return _segs_free(halves, boxes, paths, me, extra=[step])
+
+
+def _segs_free(segs, boxes, paths, me, extra=()):
+    """The room test of new stretches (segs, and `extra` that already passed its own box test): none runs through a box, none keeps
+    less than JOG_ROOM[1] from a parallel stretch of another arrow, and none crosses another arrow closer than END_CLEAR to either
+    end of either stretch."""
+    vm = JOG_ROOM[1]
+    new = list(extra) + list(segs)
+    if any(_meets(sg, (x + 1, y + 1, w - 2, h - 2)) for sg in segs for x, y, w, h in boxes):
         return False
     for k, pts in paths.items():
         if k == me:
@@ -614,7 +776,8 @@ def set_canvas_width(text, need):
 
 def selftest():
     """The cascade on fixed frames: a frame below moves, then the one below that; one beside does not; two that touch both move;
-    a box under the grown frame moves, one inside it does not; nothing ends overlapping."""
+    a box under the grown frame moves, one inside it does not; nothing ends overlapping. cascade_gap: a frame far below stays.
+    _with_steps: a stretch out of square slides back with no new bend."""
     bad = []
     F = [(0, 0, 400, 300),          # 0: grows
          (0, 340, 300, 200),        # 1: below 0, overlaps: moves
@@ -639,6 +802,16 @@ def selftest():
         for m, s in enumerate(after[k + 1:], k + 1):
             if r[0] < s[0] + s[2] - TOUCH and s[0] < r[0] + r[2] - TOUCH and r[1] < s[1] + s[3] - TOUCH and s[1] < r[1] + r[3] - TOUCH:
                 bad.append('frames %d and %d overlap after the push' % (k, m))
+    # cascade_gap: a frame far below does not move, one close below moves only what its gap cannot absorb
+    G = [(0, 0, 400, 300), (0, 334, 400, 100), (500, 600, 100, 100), (0, 900, 400, 100)]
+    _, mf3, _ = cascade_gap(G, {}, G[0], 40)
+    if mf3 != {1: 40.0}:
+        bad.append('cascade_gap moved %s, want {1: 40} (frame 3 is 466px below 1: its gap absorbs the push)' % mf3)
+    # _with_steps: a stretch the move put out of square slides back with no new bend when its neighbour can get shorter
+    orig = [(0, 0), (100, 0), (100, 200), (300, 200)]
+    mended = _with_steps([(0, 0), (100, 0), (60, 200), (300, 200)], orig, [], [], {}, 0)
+    if mended != [(0, 0), (60, 0), (60, 200), (300, 200)]:
+        bad.append('_with_steps did not slide the stretch square: %s' % mended)
     print('frames self-test: %s' % ('OK' if not bad else 'FAILED: ' + '; '.join(bad)))
     return not bad
 

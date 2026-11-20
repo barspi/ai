@@ -138,11 +138,17 @@ def new_arrow(text, a, b, kind, sides=('*', '*')):
     return text[:k] + slot + '\n' + text[k:], Pending(a, b, kind, draw.arrow([(0, 0), (0, 0)], kind, a, b), slot, '', tuple(sides))
 
 
+def _old_path(p):
+    """The path a Pending arrow had before it was taken out (one routed again), or None for a new arrow."""
+    return arrow_points(p.line) if p.old else None
+
+
 def _route_one(sc, p):
-    """route.route_labelled for one Pending, or None (no path, or a box that is not drawn)."""
+    """route.route_labelled for one Pending, or None (no path, or a box that is not drawn). An arrow routed again is never made
+    crazier than its old path while a calmer candidate exists (route_labelled's old)."""
     if p.a not in sc.boxes or p.b not in sc.boxes:
         return None
-    return route.route_labelled(sc, p.a, p.b, p.kind, *p.sides)
+    return route.route_labelled(sc, p.a, p.b, p.kind, *p.sides, old=_old_path(p))
 
 
 def _by_importance(items, sc):
@@ -358,9 +364,14 @@ def retry_short(text, routed, keep_out=(), kinds=None):
 
 
 def _fill(text, sc, p, res):
-    """Write the path and label of a route_labelled result in p's slot, and add both to the scene."""
+    """Write the path and label of a route_labelled result in p's slot, and add both to the scene. An arrow routed again whose new
+    path is crazier than its old one (no calmer candidate existed) is reported on stderr as a PROBLEM."""
     import draw, svgmeta
     pts, lab, _ = res
+    old = _old_path(p)
+    if old and route.crazier(pts, old):
+        print('PROBLEM: #%d -> #%d (%s) routed again is crazier than before: overshoot %dpx, %d turns back (before: %dpx, %d)'
+              % ((p.a, p.b, p.kind) + tuple(round(v) for v in route.crazy(pts) + route.crazy(old))), file=sys.stderr)
     line = re.sub(r'd="[^"]*"', 'd="M%s"' % ' L'.join('%s,%s' % (draw.fmt(x), draw.fmt(y)) for x, y in pts), p.line, count=1)
     line = svgmeta.pin(line, True) if p.pin else line
     markup = [line] + (draw.label(p.kind, lab[0], lab[1], lab[2]) if lab else [])
